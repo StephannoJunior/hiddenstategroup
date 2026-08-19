@@ -64,14 +64,32 @@ export default function NewsArticle() {
           {a.headline}
         </p>
 
-        <figure className="m-0 mt-6">
-          <img src={a.photo} alt={a.headline} className="w-full block" style={{ background: theme.raised }} />
-          <figcaption className="pt-1.5 mt-1.5"
-            style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
-                     borderTop: "1px solid " + theme.rule }}>
-            {(a.caption || a.headline).toUpperCase()}
-          </figcaption>
-        </figure>
+        {(a.posters || (a.poster ? [a.poster] : [])).length > 0 && (
+          <figure className="m-0 mt-6">
+            <div className={(a.posters || []).length > 1 ? "grid grid-cols-2 gap-3" : ""}>
+              {(a.posters || [a.poster]).map((src) => (
+                <img key={src} src={src} alt={a.headline} className="w-full block"
+                     style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
+              ))}
+            </div>
+            <figcaption className="pt-1.5 mt-1.5"
+              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
+                       borderTop: "1px solid " + theme.rule }}>
+              {(a.posters || []).length > 1 ? "THE PRINTED ISSUES" : "THE PRINTED ISSUE"}
+            </figcaption>
+          </figure>
+        )}
+
+        {a.photo && (
+          <figure className="m-0 mt-6">
+            <img src={a.photo} alt={a.headline} className="w-full block" style={{ background: theme.raised }} />
+            <figcaption className="pt-1.5 mt-1.5"
+              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
+                       borderTop: "1px solid " + theme.rule }}>
+              {(a.caption || a.headline).toUpperCase()}
+            </figcaption>
+          </figure>
+        )}
 
         {a.kicker && (
           <p className="text-center mt-6 mb-0"
@@ -163,7 +181,7 @@ export default function NewsArticle() {
           {others.map((o) => (
             <Link key={o.slug} to={`/news/${o.slug}`} className="flex gap-4 py-4"
                   style={{ borderTop: "1px solid " + theme.rule }}>
-              <img src={o.photo} alt="" className="block" style={{ width: "84px", background: theme.raised }} />
+              <img src={o.photo || o.poster} alt="" className="block" style={{ width: "84px", background: theme.raised }} />
               <span>
                 <span className="block" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
                   {o.date}

@@ -7,6 +7,7 @@ import {
 } from "../components/Shared";
 import { ARTISTS } from "../lib/data";
 import { SOCIAL } from "../lib/social";
+import { MIX_ARTISTS } from "../lib/mixes";
 
 export default function ArtistProfile() {
   useGoogleFonts();
@@ -83,6 +84,18 @@ export default function ArtistProfile() {
           <p className="mt-0 mb-3.5 hs-drop">{a.bio}</p>
         </div>
 
+        {a.poster && (
+          <figure className="m-0 mt-8">
+            <img src={a.poster} alt={a.name} className="w-full block"
+                 style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
+            <figcaption className="pt-1.5 mt-1.5"
+              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
+                       borderTop: "1px solid " + theme.rule }}>
+              THE PRINTED ISSUE
+            </figcaption>
+          </figure>
+        )}
+
         {a.upcoming && a.upcoming.length > 0 && (
           <div className="mt-8 pt-5" style={{ borderTop: "1px solid " + theme.ink }}>
             <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
@@ -103,6 +116,16 @@ export default function ArtistProfile() {
               </div>
             ))}
           </div>
+        )}
+
+        {MIX_ARTISTS.some((m) => m.artistId === a.id) && (
+          <p className="text-center mt-8 m-0">
+            <Link to={`/mixes/${MIX_ARTISTS.find((m) => m.artistId === a.id).slug}`} className="pb-0.5"
+                  style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em", color: theme.ink,
+                           borderBottom: "1px solid " + theme.brass }}>
+              SESSIONS &amp; RADIO
+            </Link>
+          </p>
         )}
 
         <div className="text-center mt-9">

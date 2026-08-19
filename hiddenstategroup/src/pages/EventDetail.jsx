@@ -112,7 +112,7 @@ export default function EventDetail() {
           <div className="mt-8">
             <p className="text-center m-0 mb-3"
                style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.26em", color: theme.brass }}>
-              — HIDDEN STATE ON THE BILL —
+              {e.lineupLabel || "\u2014 HIDDEN STATE ON THE BILL \u2014"}
             </p>
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-1.5">
               {e.lineup.map((n) => (
@@ -136,6 +136,15 @@ export default function EventDetail() {
           {e.instagram && SOCIAL[e.instagram] && (
             <p className="mt-4 mb-0">
               <Instagram account={SOCIAL[e.instagram]} size="10.5px" />
+            </p>
+          )}
+          {e.article && (
+            <p className="mt-4 mb-0">
+              <Link to={`/news/${e.article}`} className="pb-0.5"
+                    style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em", color: theme.ink2,
+                             borderBottom: "1px solid " + theme.rule }}>
+                READ THE FULL STORY
+              </Link>
             </p>
           )}
           {e.website && (

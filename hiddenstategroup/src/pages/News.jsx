@@ -12,14 +12,14 @@ import { SOCIAL } from "../lib/social";
   Add articles in src/lib/news.js; nothing here needs changing.
 */
 
-const CATS = ["ALL", "MUSIC", "ARTISTS", "RECORDS", "EVENTS", "INTERVIEWS", "INDUSTRY"];
+const CATS = ["ALL", "NEWS", "ARTISTS", "MUSIC", "RECORDS", "EVENTS", "INTERVIEWS", "INDUSTRY"];
 
 function Issue({ a }) {
   return (
     <Link to={`/news/${a.slug}`} className="block group">
       <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
-        <img src={a.photo} alt="" className="w-full block"
+        <img src={a.photo || a.poster} alt="" className="w-full block"
              style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
         <div>
           <div className="flex flex-wrap gap-x-4 gap-y-1"
@@ -50,7 +50,9 @@ function Issue({ a }) {
 export default function News() {
   useGoogleFonts();
   const [active, setActive] = useState("ALL");
-  const shown = active === "ALL" ? ARTICLES : ARTICLES.filter((a) => a.category === active);
+  const inTab = (a, tab) =>
+    tab === "ALL" || (a.categories || [a.category]).includes(tab);
+  const shown = ARTICLES.filter((a) => inTab(a, active));
 
   return (
     <div style={{ background: theme.bg, minHeight: "100vh" }}>

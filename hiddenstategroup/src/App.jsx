@@ -11,6 +11,7 @@ import EventDetail from "./pages/EventDetail";
 import News from "./pages/News";
 import NewsArticle from "./pages/NewsArticle";
 import Mixes from "./pages/Mixes";
+import MixArtist from "./pages/MixArtist";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/news/:slug" element={<NewsArticle />} />
 
         <Route path="/mixes" element={<Mixes />} />
+        <Route path="/mixes/:slug" element={<MixArtist />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
 
