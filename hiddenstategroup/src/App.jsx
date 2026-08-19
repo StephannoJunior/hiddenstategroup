@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import Home from "./pages/Home";
 import Records from "./pages/Records";
-import ReleaseDetail from "./pages/ReleaseDetail";
 import Agency from "./pages/Agency";
 import Artists from "./pages/Artists";
 import ArtistProfile from "./pages/ArtistProfile";
@@ -34,7 +33,6 @@ export default function App() {
         <Route path="/" element={<Home />} />
 
         <Route path="/records" element={<Records />} />
-        <Route path="/records/:id" element={<ReleaseDetail />} />
 
         <Route path="/agency" element={<Agency />} />
 

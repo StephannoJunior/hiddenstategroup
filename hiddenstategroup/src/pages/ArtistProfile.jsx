@@ -1,45 +1,32 @@
 import React, { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { MapPin, ArrowLeft } from "lucide-react";
-import { Reveal, StampTag, GrainOverlay, Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, fontBody, BookingDrawer } from "../components/Shared";
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import {
+  Nav, Footer, useGoogleFonts, BookingDrawer, Instagram,
+  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+} from "../components/Shared";
 import { ARTISTS } from "../lib/data";
-
-function EventRow({ e }) {
-  return (
-    <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: "#2A2823" }}>
-      <div>
-        <p style={{ ...fontDisplay, fontSize: "15px", color: "#F4F1EA" }}>{e.name}</p>
-        <p style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.06em", color: "#8C887E" }}>{e.venue}</p>
-      </div>
-      <span style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.08em", color: "#8C887E" }}>{e.date}</span>
-    </div>
-  );
-}
+import { SOCIAL } from "../lib/social";
 
 export default function ArtistProfile() {
   useGoogleFonts();
   const { id } = useParams();
-  const navigate = useNavigate();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const artist = ARTISTS.find((a) => String(a.id) === id);
+  const [drawer, setDrawer] = useState(false);
+  const a = ARTISTS.find((x) => String(x.id) === id);
 
-  if (!artist) {
+  if (!a) {
     return (
-      <div style={{ background: "#0A0A09", minHeight: "100vh" }}>
-        <GrainOverlay />
+      <div style={{ background: theme.bg, minHeight: "100vh" }}>
         <Nav />
-        <section className="pt-40 md:pt-52 pb-24 px-6 md:px-10 max-w-[1600px] mx-auto text-center">
-          <StampTag>NOT FOUND</StampTag>
-          <h1 className="mt-6 text-[32px] md:text-[48px]" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>
+        <section className="max-w-[1180px] mx-auto px-[18px] pt-[140px] pb-24 text-center">
+          <h1 style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(28px,6vw,44px)" }}>
             We couldn't find that artist.
           </h1>
-          <button
-            onClick={() => navigate("/artists")}
-            className="inline-flex items-center gap-2 mt-8 text-[12px] tracking-[0.16em] pb-1 border-b"
-            style={{ ...fontUtility, color: "#B98A2E", borderColor: "#4A3B1C" }}
-          >
-            <ArrowLeft size={14} strokeWidth={1.5} /> BACK TO ARTISTS
-          </button>
+          <Link to="/artists" className="inline-flex items-center gap-2 mt-6 pb-1"
+                style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em", color: theme.brass,
+                         borderBottom: "1px solid " + theme.brass }}>
+            <ArrowLeft size={13} strokeWidth={1.5} /> BACK TO THE ROSTER
+          </Link>
         </section>
         <Footer />
       </div>
@@ -47,89 +34,93 @@ export default function ArtistProfile() {
   }
 
   return (
-    <div style={{ background: "#0A0A09", minHeight: "100vh" }}>
-      <GrainOverlay />
+    <div style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <section className="relative w-full h-[70vh] min-h-[440px] flex items-end overflow-hidden">
-        <img src={artist.photo} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: "grayscale(15%)" }} />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,10,9,0.1) 0%, rgba(10,10,9,0.4) 50%, rgba(10,10,9,0.96) 100%)" }} />
-        <div className="relative z-10 max-w-[1600px] mx-auto w-full px-6 md:px-10 pb-10 md:pb-14">
-          <button onClick={() => navigate("/artists")} className="mb-6 text-[11px] tracking-[0.14em]" style={{ ...fontUtility, color: "#8C887E" }}>
-            ← ALL ARTISTS
-          </button>
-          <StampTag>{artist.type.toUpperCase()}</StampTag>
-          <h1 className="mt-4 text-[42px] leading-[1.0] md:text-[76px]" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>
-            {artist.name}
-          </h1>
-          <p className="flex items-center gap-1.5 mt-3" style={{ ...fontUtility, fontSize: "12px", letterSpacing: "0.06em", color: "#C7C3B8" }}>
-            <MapPin size={13} strokeWidth={1.5} /> {artist.location} · {artist.genres.join(", ")}
+
+      <article className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-16">
+        <Link to="/artists" className="inline-flex items-center gap-2 mb-6"
+              style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.18em", color: theme.ink2 }}>
+          <ArrowLeft size={12} strokeWidth={1.5} /> THE ROSTER
+        </Link>
+
+        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,6.5vw,42px)" }}>
+          Hidden State
+        </h1>
+        <div className="flex justify-between py-1.5 mt-2"
+             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
+                      borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
+          <span>{a.type}</span>
+          <span>ROSTER</span>
+          {a.location && <span>{a.location.toUpperCase()}</span>}
+        </div>
+
+        <h2 className="text-center mt-6 mb-1"
+            style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(32px,8vw,58px)", lineHeight: 1.05 }}>
+          {a.name}
+        </h2>
+        {a.alias && (
+          <p className="text-center m-0" style={{ ...fontDisplay, fontStyle: "italic", fontSize: "22px", color: theme.brass }}>
+            {a.alias}
           </p>
-        </div>
-      </section>
+        )}
+        <p className="text-center py-2.5 mt-4 m-0"
+           style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2,
+                    borderTop: "2px solid " + theme.ink, borderBottom: "2px solid " + theme.ink }}>
+          {a.genres.join(" · ").toUpperCase()}
+        </p>
 
-      <section className="max-w-[1600px] mx-auto px-6 md:px-10 py-14 md:py-20 grid md:grid-cols-3 gap-12">
-        <div className="md:col-span-2">
-          <Reveal>
-            <h2 style={{ ...fontUtility, fontSize: "11px", letterSpacing: "0.16em", color: "#B98A2E" }}>BIOGRAPHY</h2>
-            <p className="mt-4 text-[15px] md:text-[16px] leading-relaxed max-w-2xl" style={{ ...fontBody, color: "#C7C3B8" }}>
-              {artist.bio}
+        <figure className="m-0 mt-6">
+          <img src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
+          <figcaption className="pt-1.5 mt-1.5"
+            style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
+                     borderTop: "1px solid " + theme.rule }}>
+            {a.name.toUpperCase()}{a.alias ? ` — ${a.alias.toUpperCase()}` : ""}
+          </figcaption>
+        </figure>
+
+        <div className="md:columns-2 md:gap-x-9 mt-6"
+             style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.64, color: theme.ink }}>
+          <p className="mt-0 mb-3.5 hs-drop">{a.bio}</p>
+        </div>
+
+        {a.upcoming && a.upcoming.length > 0 && (
+          <div className="mt-8 pt-5" style={{ borderTop: "1px solid " + theme.ink }}>
+            <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+              UPCOMING
             </p>
-          </Reveal>
-
-          {artist.releases.length > 0 && (
-            <Reveal delay={100}>
-              <div className="mt-14">
-                <h2 style={{ ...fontUtility, fontSize: "11px", letterSpacing: "0.16em", color: "#B98A2E" }}>RELEASES</h2>
-                <div className="mt-4">
-                  {artist.releases.map((r) => (
-                    <div key={r.cat} className="flex items-center justify-between py-3 border-b" style={{ borderColor: "#2A2823" }}>
-                      <p style={{ ...fontDisplay, fontSize: "16px", color: "#F4F1EA" }}>{r.title}</p>
-                      <span style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.08em", color: "#8C887E" }}>{r.cat}</span>
-                    </div>
-                  ))}
-                </div>
+            {a.upcoming.map((e, i) => (
+              <div key={i} className="flex justify-between items-baseline gap-4 py-2.5"
+                   style={{ borderTop: i ? "1px solid " + theme.rule : undefined }}>
+                <span>
+                  <span className="block" style={{ ...fontDisplay, fontSize: "19px", color: theme.ink }}>{e.name}</span>
+                  <span className="block" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2 }}>
+                    {e.venue}
+                  </span>
+                </span>
+                <span style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.14em", color: theme.ink2, whiteSpace: "nowrap" }}>
+                  {e.date}
+                </span>
               </div>
-            </Reveal>
-          )}
+            ))}
+          </div>
+        )}
 
-          {artist.upcoming.length > 0 && (
-            <Reveal delay={150}>
-              <div className="mt-14">
-                <h2 style={{ ...fontUtility, fontSize: "11px", letterSpacing: "0.16em", color: "#B98A2E" }}>UPCOMING EVENTS</h2>
-                <div className="mt-4">{artist.upcoming.map((e, i) => <EventRow key={i} e={e} />)}</div>
-              </div>
-            </Reveal>
-          )}
-
-          {artist.past.length > 0 && (
-            <Reveal delay={200}>
-              <div className="mt-14">
-                <h2 style={{ ...fontUtility, fontSize: "11px", letterSpacing: "0.16em", color: "#8C887E" }}>PAST EVENTS</h2>
-                <div className="mt-4">{artist.past.map((e, i) => <EventRow key={i} e={e} />)}</div>
-              </div>
-            </Reveal>
-          )}
+        <div className="text-center mt-9">
+          <button onClick={() => setDrawer(true)} className="inline-block px-10 py-3.5"
+                  style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em", background: theme.ink, color: theme.bg }}>
+            BOOK {a.name.toUpperCase()}
+          </button>
         </div>
 
-        <Reveal delay={100}>
-          <div className="border p-6 md:sticky md:top-32" style={{ borderColor: "#2A2823" }}>
-            <button
-              onClick={() => setDrawerOpen(true)}
-              className="w-full text-[12px] tracking-[0.16em] py-4"
-              style={{ ...fontUtility, color: "#0A0A09", background: "#F4F1EA" }}
-            >
-              BOOK THIS ARTIST
-            </button>
-            <div className="mt-6 space-y-2">
-              <p style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.1em", color: "#8C887E" }}>SOCIAL</p>
-              <p style={{ ...fontBody, fontSize: "13px", color: "#C7C3B8" }}>Instagram — {artist.instagram}</p>
-              <p style={{ ...fontBody, fontSize: "13px", color: "#C7C3B8" }}>SoundCloud — {artist.soundcloud}</p>
-            </div>
-          </div>
-        </Reveal>
-      </section>
+        {a.instagram && SOCIAL[a.instagram] && (
+          <p className="text-center mt-6 m-0">
+            <Instagram account={SOCIAL[a.instagram]} size="11px" />
+          </p>
+        )}
+      </article>
+
       <Footer />
-      <BookingDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} artist={artist} />
+      <BookingDrawer open={drawer} onClose={() => setDrawer(false)} artist={a} />
     </div>
   );
 }

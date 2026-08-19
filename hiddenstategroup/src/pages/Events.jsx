@@ -1,101 +1,110 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
-import { MapPin } from "lucide-react";
-import { Reveal, StampTag, GrainOverlay, Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, fontBody } from "../components/Shared";
-import { EVENTS } from "../lib/data";
+import { Link } from "react-router-dom";
+import {
+  Nav, Footer, useGoogleFonts,
+  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+} from "../components/Shared";
+import { EVENTS, EVENTS_NOTE } from "../lib/data";
 
-function EventsHero() {
+// Shown when an event has no artwork yet — set in type rather than a broken image.
+function EventPlate({ e, big = false }) {
   return (
-    <section className="pt-40 md:pt-52 pb-14 md:pb-20 px-6 md:px-10 max-w-[1600px] mx-auto">
-      <Reveal>
-        <StampTag>EVENTS</StampTag>
-        <h1 className="mt-6 text-[48px] leading-[1.02] md:text-[96px] md:leading-[0.98]" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>
-          Hidden State
-          <br />
-          <span style={{ fontStyle: "italic", color: "#B98A2E" }}>Events</span>
-        </h1>
-        <p className="mt-6 text-[15px] md:text-[18px] max-w-lg" style={{ ...fontBody, color: "#C7C3B8" }}>
-          The rooms where Hidden State lives.
-        </p>
-      </Reveal>
-    </section>
+    <div className="flex flex-col items-center justify-center text-center px-4"
+         style={{ background: theme.ink, color: theme.bg, aspectRatio: "1 / 1" }}>
+      <span style={{ ...fontUtility, fontSize: big ? "13px" : "10px", letterSpacing: "0.3em" }}>
+        {e.name.split(" ")[0].toUpperCase()}
+      </span>
+      <span className="mt-1" style={{ ...fontUtility, fontSize: big ? "10px" : "8px", letterSpacing: "0.42em", opacity: 0.75 }}>
+        {e.name.split(" ").slice(1).join(" ").toUpperCase()}
+      </span>
+      <span className="block my-3" style={{ width: "42%", borderTop: "1px solid " + theme.bg, opacity: 0.4 }} />
+      <span style={{ ...fontDisplay, fontStyle: "italic", fontSize: big ? "22px" : "16px" }}>{e.subtitle}</span>
+      <span className="mt-3" style={{ ...fontUtility, fontSize: big ? "10px" : "8.5px", letterSpacing: "0.2em", opacity: 0.8 }}>
+        {e.date}
+      </span>
+    </div>
   );
 }
 
-function EventCard({ event, index, onOpen }) {
-  const isPast = event.status === "past";
+function Card({ e }) {
+  const past = e.status === "past";
   return (
-    <Reveal delay={index * 60}>
-      <button onClick={() => onOpen(event)} className="group block w-full text-left">
-        <div className="relative overflow-hidden aspect-[16/10]">
-          <img
-            src={event.artwork}
-            alt=""
-            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.05]"
-            style={{ filter: isPast ? "grayscale(70%)" : "grayscale(10%)" }}
-          />
-          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,10,9,0) 55%, rgba(10,10,9,0.9) 100%)" }} />
-          <div className="absolute left-0 right-0 bottom-0 p-5">
-            <StampTag tone={isPast ? "plain" : "accent"}>{isPast ? "PAST" : event.date}</StampTag>
-            <h3 className="mt-3 text-[20px] md:text-[22px] leading-tight" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>
-              {event.name}
-            </h3>
-            <p className="flex items-center gap-1.5 mt-2" style={{ ...fontUtility, fontSize: "11px", letterSpacing: "0.06em", color: "#C7C3B8" }}>
-              <MapPin size={12} strokeWidth={1.5} /> {event.venue}, {event.city}, {event.country}
-            </p>
-            <p style={{ ...fontBody, fontSize: "12.5px", color: "#8C887E" }} className="mt-2">
-              {event.lineup.join(" · ")}
-            </p>
+    <Link to={`/events/${e.id}`} className="block">
+      <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
+               style={{ borderBottom: "1px solid " + theme.rule }}>
+        {e.artwork ? (
+          <img src={e.artwork} alt="" className="w-full block"
+               style={{ background: theme.raised, filter: past ? "grayscale(55%)" : "none" }} />
+        ) : (
+          <EventPlate e={e} />
+        )}
+        <div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1"
+               style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em" }}>
+            <span style={{ color: past ? theme.ink2 : theme.brass }}>{past ? "PAST EVENT" : "UPCOMING"}</span>
+            <span style={{ color: theme.ink2 }}>{e.date}</span>
+            {e.country && <span style={{ color: theme.ink2 }}>{e.country.toUpperCase()}</span>}
           </div>
+          <h2 className="mt-2.5 mb-1"
+              style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(24px,5vw,38px)", lineHeight: 1.1 }}>
+            {e.name}
+          </h2>
+          {e.subtitle && (
+            <p className="m-0" style={{ ...fontDisplay, fontStyle: "italic", fontSize: "19px", color: theme.brass }}>
+              {e.subtitle}
+            </p>
+          )}
+          <p className="mt-3 mb-0" style={{ ...fontText, fontSize: "17px", lineHeight: 1.6, color: theme.ink2 }}>
+            {e.description}
+          </p>
+          <span className="inline-block mt-4 pb-0.5"
+                style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em", color: theme.ink,
+                         borderBottom: "1px solid " + theme.brass }}>
+            FULL DETAILS
+          </span>
         </div>
-      </button>
-    </Reveal>
-  );
-}
-
-function EventSection({ title, events, onOpen }) {
-  return (
-    <section className="max-w-[1600px] mx-auto px-6 md:px-10 py-14 md:py-16 border-t" style={{ borderColor: "#2A2823" }}>
-      <Reveal>
-        <h2 className="mb-8 md:mb-10 text-[24px] md:text-[30px]" style={{ ...fontDisplay, fontStyle: "italic", fontWeight: 500, color: "#F4F1EA" }}>
-          {title}
-        </h2>
-      </Reveal>
-      {events.length === 0 ? (
-        <p style={{ ...fontUtility, letterSpacing: "0.14em", fontSize: "12px", color: "#8C887E" }} className="text-center py-16">
-          {title === "Upcoming Events" ? "NO UPCOMING EVENTS" : "NO PAST EVENTS"}
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
-          {events.map((e, i) => <EventCard key={e.id} event={e} index={i} onOpen={onOpen} />)}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function EventsList({ onOpen }) {
-  const upcoming = EVENTS.filter((e) => e.status === "upcoming");
-  const past = EVENTS.filter((e) => e.status === "past");
-  return (
-    <>
-      <EventsHero />
-      <EventSection title="Upcoming Events" events={upcoming} onOpen={onOpen} />
-      <EventSection title="Past Events" events={past} onOpen={onOpen} />
-    </>
+      </article>
+    </Link>
   );
 }
 
 export default function Events() {
   useGoogleFonts();
-  const navigate = useNavigate();
-  const openEvent = (event) => navigate(`/events/${event.id}`);
+  const upcoming = EVENTS.filter((e) => e.status !== "past");
+  const past = EVENTS.filter((e) => e.status === "past");
 
   return (
-    <div style={{ background: "#0A0A09", minHeight: "100vh" }}>
-      <GrainOverlay />
+    <div style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <EventsList onOpen={openEvent} />
+      <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
+        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
+          The Events
+        </h1>
+        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
+        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
+        <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
+          NIGHTS, FESTIVALS &amp; EXPERIENCES
+        </p>
+      </section>
+
+      <div className="max-w-[1180px] mx-auto px-[18px] pb-4">
+        {upcoming.map((e) => <Card key={e.id} e={e} />)}
+
+        {past.length > 0 && (
+          <>
+            <p className="mt-10 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+              PAST EVENTS
+            </p>
+            {past.map((e) => <Card key={e.id} e={e} />)}
+          </>
+        )}
+
+        <p className="text-center py-10 m-0"
+           style={{ ...fontDisplay, fontStyle: "italic", fontSize: "20px", color: theme.ink2 }}>
+          {EVENTS_NOTE}
+        </p>
+      </div>
+
       <Footer />
     </div>
   );

@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Menu, X, Search } from "lucide-react";
 import { MARK_SJ, MARK_SEAL, MARK_NOPROBLEM } from "../lib/marks";
 import { ARTISTS } from "../lib/data";
+import { SOCIAL } from "../lib/social";
 import { FORM_ENDPOINT, CONTACT_EMAIL } from "../lib/config";
 
 /*
@@ -240,6 +241,10 @@ export function Footer() {
           <p style={{ ...fontUtility, color: theme.ink2, fontSize: "9.5px", letterSpacing: "0.2em" }}>
             RECORDS · AGENCY · BOOKING · EVENTS · ARTISTS
           </p>
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
+            <Instagram account={SOCIAL.official} />
+            <Instagram account={SOCIAL.group} />
+          </div>
           <p style={{ ...fontUtility, color: theme.ink2, fontSize: "9.5px", letterSpacing: "0.2em" }}>
             © 2026 HIDDEN STATE — ALL RIGHTS RESERVED
           </p>
@@ -264,15 +269,15 @@ const initialForm = {
 export function Field({ label, children }) {
   return (
     <label className="block">
-      <span style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.1em", color: "#8C887E" }}>{label.toUpperCase()}</span>
+      <span style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.1em", color: theme.ink2 }}>{label.toUpperCase()}</span>
       <div className="mt-1.5">{children}</div>
     </label>
   );
 }
 
 export const inputStyle = {
-  ...fontBody, width: "100%", background: "transparent", border: "1px solid #2A2823",
-  color: "#F4F1EA", padding: "10px 12px", fontSize: "14px", outline: "none",
+  ...fontText, width: "100%", background: "transparent", border: "1px solid " + theme.rule,
+  color: theme.ink, padding: "10px 12px", fontSize: "14px", outline: "none",
 };
 
 export function BookingDrawer({ open, onClose, artist }) {
@@ -326,31 +331,31 @@ export function BookingDrawer({ open, onClose, artist }) {
       />
       <div
         className="absolute top-0 right-0 h-full w-full md:w-[520px] overflow-y-auto transition-transform duration-[400ms]"
-        style={{ background: "#0A0A09", borderLeft: "1px solid #2A2823", transform: open ? "translateX(0)" : "translateX(100%)" }}
+        style={{ background: theme.bg, borderLeft: "1px solid " + theme.ink, transform: open ? "translateX(0)" : "translateX(100%)" }}
       >
-        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: "#2A2823" }}>
+        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: theme.ink }}>
           <div>
-            <span style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em", color: "#B98A2E" }}>BOOK AN ARTIST</span>
-            <h2 className="mt-1 text-[22px]" style={{ ...fontDisplay, fontStyle: "italic", fontWeight: 500, color: "#F4F1EA" }}>
+            <span style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em", color: theme.brass }}>BOOK AN ARTIST</span>
+            <h2 className="mt-1 text-[22px]" style={{ ...fontDisplay, fontStyle: "italic", fontWeight: 500, color: theme.ink }}>
               {artist ? artist.name : "Hidden State Agency"}
             </h2>
           </div>
-          <button onClick={onClose} style={{ color: "#F4F1EA" }}><X size={22} strokeWidth={1.5} /></button>
+          <button onClick={onClose} style={{ color: theme.ink }}><X size={22} strokeWidth={1.5} /></button>
         </div>
 
         {submitted ? (
           <div className="p-8 md:p-10">
             <StampTag>REQUEST SENT</StampTag>
-            <h3 className="mt-5 text-[26px]" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>
+            <h3 className="mt-5 text-[26px]" style={{ ...fontDisplay, fontWeight: 500, color: theme.ink }}>
               Thank you.
             </h3>
-            <p className="mt-3 text-[14px] leading-relaxed max-w-sm" style={{ ...fontBody, color: "#C7C3B8" }}>
+            <p className="mt-3 text-[14px] leading-relaxed max-w-sm" style={{ ...fontText, color: theme.ink2 }}>
               Your booking request has been received. The Hidden State Agency team will be in touch within 48 hours to discuss availability and next steps.
             </p>
             <button
               onClick={onClose}
               className="mt-8 text-[12px] tracking-[0.16em] px-6 py-3 border"
-              style={{ ...fontUtility, color: "#F4F1EA", borderColor: "#2A2823" }}
+              style={{ ...fontUtility, color: theme.ink, borderColor: theme.ink }}
             >
               CLOSE
             </button>
@@ -409,7 +414,7 @@ export function BookingDrawer({ open, onClose, artist }) {
               type="submit"
               disabled={sending}
               className="w-full mt-2 text-[12px] tracking-[0.16em] py-4"
-              style={{ ...fontUtility, color: "#0A0A09", background: "#F4F1EA", opacity: sending ? 0.6 : 1, cursor: sending ? "wait" : "pointer" }}
+              style={{ ...fontUtility, color: theme.bg, background: theme.ink, opacity: sending ? 0.6 : 1, cursor: sending ? "wait" : "pointer" }}
             >
               {sending ? "SENDING…" : "SEND BOOKING REQUEST"}
             </button>
@@ -495,5 +500,28 @@ export function CategoryBar({ active, setActive }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---- Instagram ----
+// Renders "@handle" and links to the account. Pass an entry from SOCIAL.
+export function Instagram({ account, size = "10px", color = null }) {
+  if (!account) return null;
+  return (
+    <a
+      href={account.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-block pb-0.5"
+      style={{
+        ...fontUtility,
+        fontSize: size,
+        letterSpacing: "0.14em",
+        color: color || theme.ink,
+        borderBottom: "1px solid " + theme.brass,
+      }}
+    >
+      {account.handle}
+    </a>
   );
 }

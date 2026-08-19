@@ -1,132 +1,78 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { MapPin } from "lucide-react";
-import { Reveal, StampTag, GrainOverlay, Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, BookingDrawer } from "../components/Shared";
-import { ARTISTS } from "../lib/data";
+import React from "react";
+import { Link } from "react-router-dom";
+import {
+  Nav, Footer, useGoogleFonts, Instagram,
+  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+} from "../components/Shared";
+import { ARTISTS, ROSTER_NOTE } from "../lib/data";
+import { SOCIAL } from "../lib/social";
 
-const GENRES = ["ALL GENRES", "Afro House", "Afro Tech", "Deep House", "House", "Melodic House", "Tech House", "Organic House", "Electronic"];
-const COUNTRIES = ["ALL COUNTRIES", "Romania", "Portugal", "Germany", "Nigeria", "United Kingdom", "Spain", "Netherlands", "South Africa"];
-const TYPES = ["ALL TYPES", "DJ", "Producer", "Live Act"];
-
-const selectStyle = {
-  ...fontUtility,
-  fontSize: "11px",
-  letterSpacing: "0.08em",
-  background: "transparent",
-  border: "1px solid #2A2823",
-  color: "#F4F1EA",
-  padding: "9px 12px",
-  outline: "none",
-};
-
-function DirectoryHero() {
+function Card({ a }) {
   return (
-    <section className="pt-40 md:pt-52 pb-14 md:pb-20 px-6 md:px-10 max-w-[1600px] mx-auto">
-      <Reveal>
-        <StampTag>ARTISTS</StampTag>
-        <h1 className="mt-6 text-[48px] leading-[1.02] md:text-[96px] md:leading-[0.98]" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>
-          The Hidden State
-          <br />
-          <span style={{ fontStyle: "italic", color: "#B98A2E" }}>Roster</span>
-        </h1>
-      </Reveal>
-    </section>
-  );
-}
-
-function DirectoryFilters({ genre, setGenre, country, setCountry, type, setType }) {
-  return (
-    <div className="border-y sticky top-16 md:top-[112px] z-30" style={{ borderColor: "#2A2823", background: "#0A0A09" }}>
-      <div className="max-w-[1600px] mx-auto px-6 md:px-10 py-3 flex flex-wrap items-center gap-3">
-        <select style={selectStyle} value={genre} onChange={(e) => setGenre(e.target.value)}>
-          {GENRES.map((g) => <option key={g} value={g}>{g.toUpperCase()}</option>)}
-        </select>
-        <select style={selectStyle} value={country} onChange={(e) => setCountry(e.target.value)}>
-          {COUNTRIES.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
-        </select>
-        <select style={selectStyle} value={type} onChange={(e) => setType(e.target.value)}>
-          {TYPES.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
-        </select>
-      </div>
-    </div>
-  );
-}
-
-function DirectoryCard({ artist, index, onOpen }) {
-  return (
-    <Reveal delay={index * 50}>
-      <button onClick={() => onOpen(artist)} className="group block w-full text-left">
-        <div className="relative overflow-hidden aspect-[4/5]">
-          <img src={artist.photo} alt="" className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.05]" style={{ filter: "grayscale(20%)" }} />
-        </div>
-        <div className="mt-3">
-          <h3 className="text-[18px]" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>{artist.name}</h3>
-          <p style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.06em", color: "#8C887E" }} className="mt-1">
-            {artist.genres.join(", ")}
+    <Link to={`/artists/${a.id}`} className="block">
+      <article className="grid md:grid-cols-[260px_1fr] gap-5 md:gap-8 py-8"
+               style={{ borderBottom: "1px solid " + theme.rule }}>
+        <img src={a.photo} alt={a.name} className="w-full block"
+             style={{ background: theme.raised, aspectRatio: "3 / 4", objectFit: "cover" }} />
+        <div>
+          <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+            {a.type}
           </p>
-          <p className="flex items-center gap-1 mt-1" style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.06em", color: "#8C887E" }}>
-            <MapPin size={11} strokeWidth={1.5} /> {artist.location}
+          <h2 className="mt-2 mb-1" style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(24px,5vw,36px)", lineHeight: 1.12 }}>
+            {a.name}
+          </h2>
+          {a.alias && (
+            <p className="m-0" style={{ ...fontDisplay, fontStyle: "italic", fontSize: "19px", color: theme.brass }}>
+              {a.alias}
+            </p>
+          )}
+          <p className="mt-3 mb-0" style={{ ...fontText, fontSize: "17px", lineHeight: 1.6, color: theme.ink2 }}>
+            {a.desc}
           </p>
-        </div>
-      </button>
-    </Reveal>
-  );
-}
-
-function Directory({ onOpen }) {
-  const [genre, setGenre] = useState("ALL GENRES");
-  const [country, setCountry] = useState("ALL COUNTRIES");
-  const [type, setType] = useState("ALL TYPES");
-
-  const filtered = ARTISTS.filter((a) => {
-    if (genre !== "ALL GENRES" && !a.genres.includes(genre)) return false;
-    if (country !== "ALL COUNTRIES" && a.country !== country) return false;
-    if (type !== "ALL TYPES" && a.type !== type) return false;
-    return true;
-  });
-
-  return (
-    <>
-      <DirectoryHero />
-      <DirectoryFilters genre={genre} setGenre={setGenre} country={country} setCountry={setCountry} type={type} setType={setType} />
-      <section className="max-w-[1600px] mx-auto px-6 md:px-10 py-16 md:py-20">
-        {filtered.length === 0 ? (
-          <p style={{ ...fontUtility, letterSpacing: "0.14em", fontSize: "12px", color: "#8C887E" }} className="text-center py-16">
-            NOTHING FOUND
+          <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.14em", color: theme.ink2 }}>
+            {a.genres.join(" · ").toUpperCase()}
           </p>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {filtered.map((a, i) => (
-              <DirectoryCard key={a.id} artist={a} index={i} onOpen={onOpen} />
-            ))}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4">
+            <span className="inline-block pb-0.5"
+                  style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em", color: theme.ink,
+                           borderBottom: "1px solid " + theme.brass }}>
+              READ THE FULL PROFILE
+            </span>
+            {a.instagram && SOCIAL[a.instagram] && (
+              <Instagram account={SOCIAL[a.instagram]} color={theme.ink2} />
+            )}
           </div>
-        )}
-      </section>
-    </>
+        </div>
+      </article>
+    </Link>
   );
 }
 
 export default function Artists() {
   useGoogleFonts();
-  const navigate = useNavigate();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [bookingArtist, setBookingArtist] = useState(null);
-
-  const openProfile = (artist) => {
-    navigate(`/artists/${artist.id}`);
-  };
-  const handleBook = (artist) => {
-    setBookingArtist(artist);
-    setDrawerOpen(true);
-  };
-
   return (
-    <div style={{ background: "#0A0A09", minHeight: "100vh" }}>
-      <GrainOverlay />
+    <div style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <Directory onOpen={openProfile} />
+      <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
+        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
+          The Roster
+        </h1>
+        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
+        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
+        <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
+          ARTISTS REPRESENTED BY HIDDEN STATE
+        </p>
+      </section>
+
+      <div className="max-w-[1180px] mx-auto px-[18px] pb-4">
+        {ARTISTS.map((a) => <Card key={a.id} a={a} />)}
+        <p className="text-center py-10 m-0"
+           style={{ ...fontDisplay, fontStyle: "italic", fontSize: "20px", color: theme.ink2 }}>
+          {ROSTER_NOTE}
+        </p>
+      </div>
+
       <Footer />
-      <BookingDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} artist={bookingArtist} />
     </div>
   );
 }
