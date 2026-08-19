@@ -1,6 +1,6 @@
 {
   // Must match the Worker name in your Cloudflare dashboard.
-  "name": "hiddenstategroup",
+  "name": "hiddenstategroup1",
   "compatibility_date": "2026-08-16",
   "assets": {
     // Where `npm run build` puts the finished site.
