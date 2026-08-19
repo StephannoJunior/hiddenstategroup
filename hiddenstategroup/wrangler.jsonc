@@ -1,0 +1,12 @@
+{
+  // Must match the Worker name in your Cloudflare dashboard.
+  "name": "hiddenstategroup",
+  "compatibility_date": "2026-08-16",
+  "assets": {
+    // Where `npm run build` puts the finished site.
+    "directory": "./dist/",
+    // Serves index.html for any unmatched path, so React Router handles
+    // /records, /artists/1 etc. — this is what stops a refresh 404-ing.
+    "not_found_handling": "single-page-application"
+  }
+}

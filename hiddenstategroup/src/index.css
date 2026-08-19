@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  background: #F3EBD9;
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Used on horizontally-scrolling filter bars (category pills, roster filters)
+   so the scrollbar doesn't show on top of the hairline border. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Night-edition press details */
+.hs-drop::first-letter {
+  font-family: 'Fraunces', serif;
+  float: left;
+  font-size: 58px;
+  line-height: 0.84;
+  padding: 4px 9px 0 0;
+  color: #16130E;
+}
