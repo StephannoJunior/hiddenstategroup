@@ -25,11 +25,18 @@ export default function Img({
   className = "",
   style = {},
   eager = false,
+  transparent = false,
   sizes = "(min-width: 768px) 900px, 100vw",
   ...rest
 }) {
   const [loaded, setLoaded] = useState(false);
-  const placeholder = style["background"] || style["backgroundColor"] || "#E8DEC7";
+  // Logos are transparent PNGs. A placeholder tone behind one shows up as a
+  // visible rectangle, so only photographs get the paper-coloured backing
+  // while they decode. `transparent` also opts any image out by hand.
+  const isTransparent = transparent || (src || "").endsWith(".png") || (src || "").endsWith(".svg");
+  const placeholder = isTransparent
+    ? "transparent"
+    : style["background"] || style["backgroundColor"] || "#E8DEC7";
 
   // The small variant sits beside the original with a -sm suffix. If it was
   // never generated (small images, logos) we simply don't offer a srcset.

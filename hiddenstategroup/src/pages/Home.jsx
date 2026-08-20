@@ -35,7 +35,7 @@ function Nameplate() {
           FROM ANOTHER STATE OF MIND
         </p>
         <h1 className="my-6">
-          <Img src="/wordmark-black.png" alt="Hidden State"
+          <Img src="/wordmark-black.png" alt="Hidden State" eager transparent
                className="block mx-auto w-full" style={{ maxWidth: "440px" }} />
         </h1>
         <div style={{ borderTop: "2px solid " + theme.ink }} />

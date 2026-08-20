@@ -31,8 +31,8 @@ export function ReadingProgress() {
   return (
     <div
       aria-hidden="true"
-      className="fixed left-0 right-0 z-[41]"
-      style={{ top: "76px", height: "2px", background: "transparent", pointerEvents: "none" }}
+      style={{ height: "2px", background: "transparent", pointerEvents: "none" }}
+      className="fixed left-0 right-0 z-[41] top-[76px] lg:top-[136px]"
     >
       <div style={{ width: `${pct}%`, height: "100%", background: theme.brass, transition: "width 80ms linear" }} />
     </div>

@@ -119,3 +119,15 @@ button:focus-visible {
 main, [data-page] {
   animation: hs-page-enter 320ms cubic-bezier(.22,1,.36,1) both;
 }
+
+/* hs-header-clearance
+   The masthead is one row on phones (76px) and two on desktop (92 + 44).
+   Pages carry pt-[104px] for the phone case; this tops it up on desktop so
+   content never starts underneath the navigation row. */
+@media (min-width: 1024px) {
+  [data-page] > section:first-of-type,
+  [data-page] > article:first-of-type,
+  [data-page] > div:first-of-type > section:first-of-type {
+    padding-top: 168px;
+  }
+}

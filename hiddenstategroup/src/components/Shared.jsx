@@ -202,35 +202,30 @@ export function Nav() {
           WebkitTransform: "translateZ(0)",
         }}
       >
-        <div className="max-w-[1180px] mx-auto px-[18px] h-[76px] grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          {/* left — the dateline, on every size */}
-          <span className="justify-self-start min-w-0">
+        {/* Row one — the masthead.
+            The logo is absolutely centred rather than being a grid column.
+            As a grid column it could be squeezed to nothing when the dateline
+            and the language button both demanded their full width, which is
+            exactly what happened on narrow screens. Absolute centring means
+            the logo is always dead centre and can never be crushed. */}
+        <div className="max-w-[1180px] mx-auto px-[18px] h-[76px] lg:h-[92px] relative flex items-center justify-between">
+          {/* left — the dateline, capped so it can never reach the logo */}
+          <span className="min-w-0 overflow-hidden" style={{ maxWidth: "34%" }}>
             <LiveDateline />
           </span>
 
-          {/* centre — the logo, which now cannot be crowded by either side */}
-          <Link to="/" className="justify-self-center shrink-0">
-            <Wordmark size="h-[38px]" dark />
+          {/* centre — always exactly halfway across */}
+          <Link
+            to="/"
+            className="absolute left-1/2 top-1/2"
+            style={{ transform: "translate(-50%, -50%)" }}
+            aria-label="Hidden State — home"
+          >
+            <Wordmark size="h-[38px] lg:h-[46px]" dark />
           </Link>
 
-          {/* right — nav on desktop, language + burger on mobile */}
-          <div className="justify-self-end flex items-center gap-4 min-w-0">
-            <nav className="hidden lg:flex items-center gap-7">
-              {NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  className="text-[10.5px] pb-0.5 whitespace-nowrap"
-                  style={{
-                    ...fontUtility, letterSpacing: "0.16em",
-                    color: isActive(item.href) ? theme.brass : theme.ink2,
-                    borderBottom: `2px solid ${isActive(item.href) ? theme.brass : "transparent"}`,
-                  }}
-                >
-                  {navLabel(item)}
-                </Link>
-              ))}
-            </nav>
+          {/* right — language, plus the burger on phones */}
+          <div className="flex items-center gap-4 shrink-0">
             <LanguageSwitch />
             <button
               className="lg:hidden"
@@ -240,6 +235,27 @@ export function Nav() {
               {mobileOpen ? <X size={20} color={theme.ink} strokeWidth={1.5} /> : <Menu size={20} color={theme.ink} strokeWidth={1.5} />}
             </button>
           </div>
+        </div>
+
+        {/* Row two — the sections, on their own rule beneath the masthead.
+            Desktop only; phones use the drawer and the glass bar. */}
+        <div className="hidden lg:block" style={{ borderTop: `1px solid ${theme.rule}` }}>
+          <nav className="max-w-[1180px] mx-auto px-[18px] h-[44px] flex items-center justify-center gap-9">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.label}
+                to={item.href}
+                className="text-[10.5px] pb-0.5 whitespace-nowrap"
+                style={{
+                  ...fontUtility, letterSpacing: "0.16em",
+                  color: isActive(item.href) ? theme.brass : theme.ink2,
+                  borderBottom: `2px solid ${isActive(item.href) ? theme.brass : "transparent"}`,
+                }}
+              >
+                {navLabel(item)}
+              </Link>
+            ))}
+          </nav>
         </div>
       </header>
 

@@ -125,6 +125,7 @@ export default function Gallery({ photos = [], prefix = "hidden-state", title = 
                 background: "rgba(243,235,217,0.82)",
                 backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
                 border: "1px solid rgba(22,19,14,0.16)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
               }}
             >
               SAVE

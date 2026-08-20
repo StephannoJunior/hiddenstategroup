@@ -1,31 +1,47 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { NAV_ITEMS, fontUtility, theme } from "./Shared";
+import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info } from "lucide-react";
+import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 
 /*
-  GlassBar — floating navigation, phones only.
+  GlassBar — the floating navigation on phones.
 
-    One tap   → open / close the menu
+    One tap   → open / close
     Two taps  → home
-    Swipe     → the open menu scrolls sideways with snap
+    Swipe     → the open bar scrolls sideways
 
-  ON THE GLASS: this is a web approximation of a frosted-glass control, not
-  Apple's own material — that is rendered by the OS and isn't available to a
-  website. What produces the effect here:
+  Built to sit closer to an iOS tab bar: icon above a small label, a soft
+  rounded highlight behind the current section, and glass that gets its
+  separation from refraction rather than from a drop shadow.
 
-    backdrop-filter        blurs and saturates whatever is behind it
-    layered gradient       gives the pane depth rather than flat translucency
-    inset top highlight    the bright edge where light catches the rim
-    inset bottom shade     the darker underside, which reads as thickness
-    moving sheen           a soft highlight that follows your finger
-    spring press           slight squash on touch, with a little overshoot back
+  A note on the material. Apple's own is rendered by the OS and can't be used
+  by a website, so this is built from what a browser does give us:
 
-  Deliberately NOT mix-blend-mode — that property broke this site on iOS once.
+    backdrop-filter   blurs and saturates the page behind the panel
+    layered gradient  depth across the surface instead of flat translucency
+    rim highlight     the lit top edge where glass catches light
+    underside shade   the darker lower edge, which reads as thickness
+    sheen             a soft highlight that tracks your finger
+    spring            a slight squash on press that overshoots coming back
+
+  Deliberately NOT mix-blend-mode, which broke this site on iOS once.
 */
 
 const DOUBLE_TAP_MS = 260;
 const SPRING = "cubic-bezier(.34,1.56,.64,1)";
+
+// Only long-standing lucide icons, so this can't break on a version bump.
+const TABS = [
+  { href: "/", key: "home", Icon: Home },
+  { href: "/news", key: "news", Icon: Newspaper },
+  { href: "/records", key: "records", Icon: Disc },
+  { href: "/agency", key: "agency", Icon: Briefcase },
+  { href: "/artists", key: "artists", Icon: Users },
+  { href: "/events", key: "events", Icon: Calendar },
+  { href: "/mixes", key: "mixes", Icon: Radio },
+  { href: "/about", key: "about", Icon: Info },
+];
 
 export default function GlassBar() {
   const [open, setOpen] = useState(false);
@@ -40,9 +56,6 @@ export default function GlassBar() {
 
   useEffect(() => {
     if (!open) return;
-    // One frame of throttling: the raw scroll event fires dozens of times a
-    // second, and setting state on each was extra work during exactly the
-    // moment the bar needed to stay smooth.
     let queued = false;
     const onScroll = () => {
       if (queued) return;
@@ -82,90 +95,33 @@ export default function GlassBar() {
   const isActive = (href) =>
     href === "/" ? location.pathname === "/" : location.pathname.startsWith(href);
 
-  // The pane itself: translucent, blurred, with a lit rim and a shaded underside.
   const pane = {
     background:
-      "linear-gradient(160deg, rgba(255,255,255,0.58) 0%, rgba(243,235,217,0.42) 48%, rgba(243,235,217,0.30) 100%)",
-    backdropFilter: "blur(26px) saturate(200%) brightness(1.04)",
-    WebkitBackdropFilter: "blur(26px) saturate(200%) brightness(1.04)",
-    border: "1px solid rgba(255,255,255,0.55)",
+      "linear-gradient(155deg, rgba(255,255,255,0.60) 0%, rgba(243,235,217,0.44) 50%, rgba(243,235,217,0.32) 100%)",
+    backdropFilter: "blur(30px) saturate(190%) brightness(1.05)",
+    WebkitBackdropFilter: "blur(30px) saturate(190%) brightness(1.05)",
+    border: "1px solid rgba(255,255,255,0.6)",
     boxShadow: [
-      "inset 0 1px 0 rgba(255,255,255,0.92)",      // rim light along the top
-      "inset 0 -1px 0 rgba(22,19,14,0.10)",        // underside, reads as thickness
-      "inset 0 0 22px rgba(255,255,255,0.22)",     // soft interior glow
-      "0 14px 44px rgba(22,19,14,0.24)",           // cast shadow
-      "0 2px 8px rgba(22,19,14,0.10)",             // contact shadow
+      "inset 0 1px 0 rgba(255,255,255,0.95)",
+      "inset 0 -1px 0 rgba(22,19,14,0.07)",
+      "inset 0 0 28px rgba(255,255,255,0.24)",
+      "0 1px 3px rgba(22,19,14,0.06)",
     ].join(", "),
   };
 
   const sheenLayer = (
     <span
       aria-hidden="true"
-      className="absolute inset-0 rounded-full"
+      className="absolute inset-0"
       style={{
-        background: `radial-gradient(120px circle at ${sheen.x}% ${sheen.y}%, rgba(255,255,255,0.55), rgba(255,255,255,0) 62%)`,
+        borderRadius: "inherit",
+        background: `radial-gradient(140px circle at ${sheen.x}% ${sheen.y}%, rgba(255,255,255,0.5), rgba(255,255,255,0) 65%)`,
         opacity: sheen.on ? 1 : 0,
-        transition: "opacity 260ms ease",
+        transition: "opacity 280ms ease",
         pointerEvents: "none",
       }}
     />
   );
-
-  const pill = (
-    <Link
-      to="/"
-      onClick={(e) => { e.preventDefault(); handleTap(); }}
-      onPointerDown={(e) => { setPressing(true); trackSheen(e); }}
-      onPointerMove={(e) => pressing && trackSheen(e)}
-      onPointerUp={() => { setPressing(false); setSheen((s) => ({ ...s, on: false })); }}
-      onPointerLeave={() => { setPressing(false); setSheen((s) => ({ ...s, on: false })); }}
-      onContextMenu={(e) => e.preventDefault()}
-      aria-label="Menu — tap once to open, twice for home"
-      className="relative rounded-full flex items-center gap-2.5 px-6 py-3 overflow-hidden"
-      style={{
-        ...pane,
-        transform: pressing ? "scale(0.94)" : "scale(1)",
-        transition: `transform 420ms ${SPRING}`,
-      }}
-    >
-      {sheenLayer}
-      <span className="flex flex-col gap-[3px] relative" aria-hidden="true">
-        <span style={{ width: "16px", height: "1.5px", background: theme.ink, display: "block" }} />
-        <span style={{ width: "16px", height: "1.5px", background: theme.ink, display: "block" }} />
-        <span style={{ width: "10px", height: "1.5px", background: theme.ink, display: "block" }} />
-      </span>
-      <span className="relative" style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.18em", color: theme.ink }}>
-        HIDDEN STATE
-      </span>
-    </Link>
-  );
-
-  const item = (to, label, key) => (
-    <Link
-      key={key}
-      to={to}
-      onClick={() => setOpen(false)}
-      className="px-4 py-2 rounded-full whitespace-nowrap relative"
-      style={{
-        ...fontUtility, fontSize: "10px", letterSpacing: "0.16em",
-        scrollSnapAlign: "center",
-        color: isActive(to) ? theme.bg : theme.ink,
-        background: isActive(to) ? theme.ink : "transparent",
-        boxShadow: isActive(to) ? "0 2px 10px rgba(22,19,14,0.28)" : "none",
-        transition: `background 220ms ease, color 220ms ease`,
-      }}
-    >
-      {label}
-    </Link>
-  );
-
-  const labelFor = (item_) => {
-    const map = {
-      NEWS: "news", RECORDS: "records", AGENCY: "agency", ARTISTS: "artists",
-      EVENTS: "events", MIXES: "mixes", ABOUT: "about",
-    };
-    return map[item_.label] ? t(map[item_.label]) : item_.label;
-  };
 
   return (
     <>
@@ -174,46 +130,111 @@ export default function GlassBar() {
       )}
 
       <div
-        className="fixed left-0 right-0 z-[79] lg:hidden flex justify-center px-4"
+        className="fixed left-0 right-0 z-[79] lg:hidden flex justify-center px-3"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 34px)",
-          // Own compositor layer — stops the bar lagging behind on iOS
-          // momentum scroll and snapping back when it ends.
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 30px)",
           transform: "translateZ(0)",
           WebkitTransform: "translateZ(0)",
           willChange: "transform",
           backfaceVisibility: "hidden",
           WebkitBackfaceVisibility: "hidden",
-          contain: "layout paint",
         }}
       >
-        <div className="relative w-full max-w-[520px] flex justify-center">
+        <div className="relative w-full max-w-[560px] flex justify-center">
+          {/* collapsed — a larger, quieter pill */}
           <div
             style={{
               opacity: open ? 0 : 1,
-              transform: open ? "translateY(16px) scale(0.92)" : "translateY(0) scale(1)",
+              transform: open ? "translateY(18px) scale(0.9)" : "translateY(0) scale(1)",
               pointerEvents: open ? "none" : "auto",
-              transition: `opacity 220ms ease, transform 420ms ${SPRING}`,
+              transition: `opacity 200ms ease, transform 440ms ${SPRING}`,
             }}
           >
-            {pill}
+            <Link
+              to="/"
+              onClick={(e) => { e.preventDefault(); handleTap(); }}
+              onPointerDown={(e) => { setPressing(true); trackSheen(e); }}
+              onPointerMove={(e) => pressing && trackSheen(e)}
+              onPointerUp={() => { setPressing(false); setSheen((s) => ({ ...s, on: false })); }}
+              onPointerLeave={() => { setPressing(false); setSheen((s) => ({ ...s, on: false })); }}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label="Menu — tap once to open, twice for home"
+              className="relative flex items-center gap-3 overflow-hidden"
+              style={{
+                ...pane,
+                borderRadius: "26px",
+                padding: "15px 26px",
+                transform: pressing ? "scale(0.95)" : "scale(1)",
+                transition: `transform 440ms ${SPRING}`,
+              }}
+            >
+              {sheenLayer}
+              <span className="flex flex-col gap-[3.5px] relative" aria-hidden="true">
+                <span style={{ width: "18px", height: "1.5px", background: theme.ink, display: "block" }} />
+                <span style={{ width: "18px", height: "1.5px", background: theme.ink, display: "block" }} />
+                <span style={{ width: "11px", height: "1.5px", background: theme.ink, display: "block" }} />
+              </span>
+              <span className="relative" style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em", color: theme.ink }}>
+                HIDDEN STATE
+              </span>
+            </Link>
           </div>
 
+          {/* open — icon over label, the way a tab bar reads */}
           <nav
             aria-label="Site navigation"
-            className="absolute left-0 right-0 rounded-full overflow-hidden"
+            className="absolute left-0 right-0 overflow-hidden"
             style={{
               ...pane,
+              borderRadius: "28px",
               opacity: open ? 1 : 0,
-              transform: open ? "translateY(0) scale(1)" : "translateY(20px) scale(0.94)",
+              transform: open ? "translateY(0) scale(1)" : "translateY(22px) scale(0.92)",
               pointerEvents: open ? "auto" : "none",
-              transition: `opacity 220ms ease, transform 460ms ${SPRING}`,
+              transition: `opacity 200ms ease, transform 480ms ${SPRING}`,
             }}
           >
-            <div className="flex gap-1 overflow-x-auto no-scrollbar px-2 py-2 relative"
-                 style={{ scrollSnapType: "x proximity" }}>
-              {item("/", t("home"), "home")}
-              {NAV_ITEMS.map((n) => item(n.href, labelFor(n), n.label))}
+            <div
+              className="flex overflow-x-auto no-scrollbar"
+              style={{ scrollSnapType: "x proximity", padding: "8px 8px" }}
+            >
+              {TABS.map(({ href, key, Icon }) => {
+                const active = isActive(href);
+                return (
+                  <Link
+                    key={key}
+                    to={href}
+                    onClick={() => setOpen(false)}
+                    className="flex flex-col items-center justify-center shrink-0"
+                    style={{
+                      scrollSnapAlign: "center",
+                      minWidth: "68px",
+                      padding: "9px 6px",
+                      borderRadius: "18px",
+                      gap: "5px",
+                      background: active ? "rgba(22,19,14,0.90)" : "transparent",
+                      transition: "background 240ms ease",
+                    }}
+                  >
+                    <Icon
+                      size={19}
+                      strokeWidth={1.6}
+                      color={active ? theme.bg : theme.ink}
+                      aria-hidden="true"
+                    />
+                    <span
+                      style={{
+                        ...fontUtility,
+                        fontSize: "8.5px",
+                        letterSpacing: "0.12em",
+                        color: active ? theme.bg : theme.ink,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {t(key)}
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           </nav>
         </div>
