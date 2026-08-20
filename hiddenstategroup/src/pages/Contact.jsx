@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React, { useState } from "react";
 import {
   Nav, Footer, useGoogleFonts, Field, inputStyle, Instagram,
@@ -12,6 +13,7 @@ const initialForm = { name: "", email: "", reason: "General Inquiry", message: "
 
 export default function Contact() {
   useGoogleFonts();
+  usePageMeta({ title: "Contact", description: "Get in touch with Hidden State — booking, press, demos and management." });
   const [form, setForm] = useState(initialForm);
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);

@@ -110,7 +110,7 @@ export default function Gallery({ photos = [], prefix = "hidden-state", title = 
           <figure key={src} className="m-0 relative">
             <button onClick={() => setLightbox(src)} className="block w-full"
                     aria-label={`Open photo ${i + 1}`}>
-              <img src={src} alt="" className="w-full block"
+              <img loading="lazy" decoding="async" src={src} alt="" className="w-full block"
                    style={{ aspectRatio: "1 / 1", objectFit: "cover", background: theme.raised }} />
             </button>
             <button
@@ -134,7 +134,7 @@ export default function Gallery({ photos = [], prefix = "hidden-state", title = 
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"
              style={{ background: "rgba(22,19,14,0.92)" }}
              onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="" style={{ maxWidth: "100%", maxHeight: "86vh", display: "block" }} />
+          <img loading="lazy" decoding="async" src={lightbox} alt="" style={{ maxWidth: "100%", maxHeight: "86vh", display: "block" }} />
           <button onClick={() => setLightbox(null)}
                   className="absolute top-4 right-4 px-4 py-2"
                   style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em",

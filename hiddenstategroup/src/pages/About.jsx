@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React from "react";
 import { Link } from "react-router-dom";
 import {
@@ -19,6 +20,7 @@ const DIVISIONS = [
 
 export default function About() {
   useGoogleFonts();
+  usePageMeta({ title: "About", description: "One artist building a universe around a sound. Records, agency, events." });
   return (
     <div style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />

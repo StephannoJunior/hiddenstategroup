@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import GlassBar from "./components/GlassBar";
+import { LangProvider } from "./lib/lang";
 import Home from "./pages/Home";
 import Records from "./pages/Records";
 import Agency from "./pages/Agency";
@@ -29,6 +30,7 @@ function ScrollToTop() {
 
 export default function App() {
   return (
+    <LangProvider>
     <BrowserRouter>
       <ScrollToTop />
       <GlassBar />
@@ -57,5 +59,6 @@ export default function App() {
         <Route path="*" element={<Home />} />
       </Routes>
     </BrowserRouter>
+    </LangProvider>
   );
 }

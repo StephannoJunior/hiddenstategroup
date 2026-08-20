@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React from "react";
 import { Link } from "react-router-dom";
 import {
@@ -12,7 +13,7 @@ function Card({ a }) {
     <Link to={`/artists/${a.id}`} className="block">
       <article className="grid md:grid-cols-[260px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
-        <img src={a.photo} alt={a.name} className="w-full block"
+        <img loading="lazy" decoding="async" src={a.photo} alt={a.name} className="w-full block"
              style={{ background: theme.raised, aspectRatio: "3 / 4", objectFit: "cover" }} />
         <div>
           <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
@@ -50,6 +51,7 @@ function Card({ a }) {
 
 export default function Artists() {
   useGoogleFonts();
+  usePageMeta({ title: "Artists", description: "The DJs and producers represented by Hidden State." });
   return (
     <div style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />

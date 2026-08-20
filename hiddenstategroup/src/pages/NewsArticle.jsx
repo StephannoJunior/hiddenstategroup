@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -11,6 +12,7 @@ export default function NewsArticle() {
   useGoogleFonts();
   const { slug } = useParams();
   const a = getArticle(slug);
+  usePageMeta({ title: a ? a.headline : "Story", description: a ? a.summary : "Hidden State news.", image: a ? (a.photo || a.poster) : null, type: "article" });
 
   if (!a) {
     return (
@@ -68,7 +70,7 @@ export default function NewsArticle() {
           <figure className="m-0 mt-6">
             <div className={(a.posters || []).length > 1 ? "grid grid-cols-2 gap-3" : ""}>
               {(a.posters || [a.poster]).map((src) => (
-                <img key={src} src={src} alt={a.headline} className="w-full block"
+                <img loading="lazy" decoding="async" key={src} src={src} alt={a.headline} className="w-full block"
                      style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
               ))}
             </div>
@@ -82,7 +84,7 @@ export default function NewsArticle() {
 
         {a.photo && (
           <figure className="m-0 mt-6">
-            <img src={a.photo} alt={a.headline} className="w-full block" style={{ background: theme.raised }} />
+            <img loading="lazy" decoding="async" src={a.photo} alt={a.headline} className="w-full block" style={{ background: theme.raised }} />
             <figcaption className="pt-1.5 mt-1.5"
               style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
                        borderTop: "1px solid " + theme.rule }}>
@@ -181,7 +183,7 @@ export default function NewsArticle() {
           {others.map((o) => (
             <Link key={o.slug} to={`/news/${o.slug}`} className="flex gap-4 py-4"
                   style={{ borderTop: "1px solid " + theme.rule }}>
-              <img src={o.photo || o.poster} alt="" className="block" style={{ width: "84px", background: theme.raised }} />
+              <img loading="lazy" decoding="async" src={o.photo || o.poster} alt="" className="block" style={{ width: "84px", background: theme.raised }} />
               <span>
                 <span className="block" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
                   {o.date}

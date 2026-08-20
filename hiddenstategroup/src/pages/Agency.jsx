@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -9,6 +10,7 @@ import { SOCIAL } from "../lib/social";
 
 export default function Agency() {
   useGoogleFonts();
+  usePageMeta({ title: "Agency", description: "Booking and representation for the Hidden State roster." });
   const [drawer, setDrawer] = useState(false);
   const [chosen, setChosen] = useState(null);
   const book = (a) => { setChosen(a); setDrawer(true); };
@@ -54,7 +56,7 @@ export default function Agency() {
           <div key={a.id} className="grid md:grid-cols-[180px_1fr_auto] gap-4 md:gap-7 items-center py-6"
                style={{ borderBottom: "1px solid " + theme.rule }}>
             <Link to={`/artists/${a.id}`}>
-              <img src={a.photo} alt={a.name} className="w-full block"
+              <img loading="lazy" decoding="async" src={a.photo} alt={a.name} className="w-full block"
                    style={{ background: theme.raised, aspectRatio: "3 / 4", objectFit: "cover" }} />
             </Link>
             <div>

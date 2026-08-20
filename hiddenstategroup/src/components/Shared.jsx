@@ -4,6 +4,7 @@ import { Menu, X, Search } from "lucide-react";
 import { MARK_SJ, MARK_SEAL, MARK_NOPROBLEM } from "../lib/marks";
 import { ARTISTS } from "../lib/data";
 import { SOCIAL } from "../lib/social";
+import { LiveDateline, LanguageSwitch } from "./Dateline";
 import { FORM_ENDPOINT, CONTACT_EMAIL, BOOKING_EMAIL } from "../lib/config";
 
 /*
@@ -118,7 +119,7 @@ export function DoubleRule({ className = "" }) {
 export function Wordmark({ size = "h-9", dark = false }) {
   // The official line logo. `dark` picks the ink version for paper backgrounds.
   return (
-    <img
+    <img loading="lazy" decoding="async"
       src={dark ? "/wordmark-black.png" : "/wordmark.png"}
       alt="Hidden State"
       className={`${size} w-auto block`}
@@ -144,7 +145,7 @@ export function MarkClipping({ src, alt, w = 92 }) {
       className="shrink-0 p-2"
       style={{ background: "#E9DCC3", border: "1px solid #2A2823" }}
     >
-      <img src={src} alt={alt} style={{ width: w, display: "block" }} />
+      <img loading="lazy" decoding="async" src={src} alt={alt} style={{ width: w, display: "block" }} />
     </div>
   );
 }
@@ -189,12 +190,18 @@ export function Nav() {
         <div className="max-w-[1180px] mx-auto px-[18px] h-[76px] flex items-center justify-center relative">
           <Link to="/"><Wordmark size="h-[38px]" dark /></Link>
           <button
-            className="lg:hidden absolute right-[18px] top-1/2 -mt-[7px] w-[22px] h-[14px]"
+            className="lg:hidden absolute right-[64px] top-1/2 -mt-[7px] w-[22px] h-[14px]"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Menu"
           >
             {mobileOpen ? <X size={20} color={theme.ink} strokeWidth={1.5} /> : <Menu size={20} color={theme.ink} strokeWidth={1.5} />}
           </button>
+          <span className="absolute left-[18px] hidden md:inline">
+            <LiveDateline />
+          </span>
+          <span className="absolute right-[18px] lg:hidden">
+            <LanguageSwitch compact />
+          </span>
           <nav className="hidden lg:flex items-center gap-7 absolute right-[18px]">
             {NAV_ITEMS.map((item) => (
               <Link
@@ -210,6 +217,7 @@ export function Nav() {
                 {item.label}
               </Link>
             ))}
+            <LanguageSwitch />
           </nav>
         </div>
       </header>
@@ -245,6 +253,7 @@ export function Footer() {
             <Instagram account={SOCIAL.official} />
             <Instagram account={SOCIAL.group} />
           </div>
+          <LiveDateline />
           <p style={{ ...fontUtility, color: theme.ink2, fontSize: "9.5px", letterSpacing: "0.2em" }}>
             © 2026 HIDDEN STATE — ALL RIGHTS RESERVED
           </p>
@@ -450,7 +459,7 @@ export function ArticleCard({ article }) {
       className="group relative flex flex-col overflow-hidden h-full"
     >
       <div className={`relative overflow-hidden ${article.span === "wide" ? "aspect-[21/9]" : article.span === "lg" ? "aspect-[4/5] md:aspect-auto md:h-full md:min-h-[420px]" : "aspect-[4/3]"}`}>
-        <img
+        <img loading="lazy" decoding="async"
           src={article.image}
           alt=""
           className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"

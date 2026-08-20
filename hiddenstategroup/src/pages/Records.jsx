@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React from "react";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
@@ -10,7 +11,7 @@ function Album({ a }) {
   return (
     <section className="max-w-[1180px] mx-auto px-[18px] pb-6">
       <div className="grid md:grid-cols-[360px_1fr] gap-6 md:gap-10 items-start py-8">
-        <img src={a.cover} alt={a.title} className="w-full block" style={{ background: theme.raised }} />
+        <img loading="lazy" decoding="async" src={a.cover} alt={a.title} className="w-full block" style={{ background: theme.raised }} />
         <div>
           <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
             {a.kind}{a.catalog ? ` · ${a.catalog}` : ""}{a.releaseDate ? ` · ${a.releaseDate}` : ""}
@@ -52,7 +53,7 @@ function Album({ a }) {
             <span style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.14em", color: theme.ink2, width: "22px" }}>
               {String(t.n).padStart(2, "0")}
             </span>
-            <img src={t.cover} alt="" className="block"
+            <img loading="lazy" decoding="async" src={t.cover} alt="" className="block"
                  style={{ width: "56px", height: "56px", objectFit: "cover", background: theme.raised }} />
             <span className="flex-1" style={{ ...fontDisplay, fontSize: "21px", color: theme.ink }}>
               {t.title}
@@ -69,6 +70,7 @@ function Album({ a }) {
 
 export default function Records() {
   useGoogleFonts();
+  usePageMeta({ title: "Records", description: "Releases on Hidden State Records." });
   return (
     <div style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />

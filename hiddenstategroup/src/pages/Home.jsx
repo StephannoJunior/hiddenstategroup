@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -32,7 +33,7 @@ function Nameplate() {
           FROM ANOTHER STATE OF MIND
         </p>
         <h1 className="my-6">
-          <img src="/wordmark-black.png" alt="Hidden State"
+          <img loading="lazy" decoding="async" src="/wordmark-black.png" alt="Hidden State"
                className="block mx-auto w-full" style={{ maxWidth: "440px" }} />
         </h1>
         <div style={{ borderTop: "2px solid " + theme.ink }} />
@@ -54,7 +55,7 @@ function LeadPicture() {
     <section style={{ background: theme.bg }} className="pb-10">
       <div className="max-w-[1180px] mx-auto px-[18px]">
         <figure className="m-0">
-          <img src="/club.jpg" alt="" className="w-full block" style={{ background: theme.raised }} />
+          <img loading="lazy" decoding="async" src="/club.jpg" alt="" className="w-full block" style={{ background: theme.raised }} />
           <figcaption
             className="pt-1.5 mt-1.5"
             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2, borderTop: "1px solid " + theme.rule }}
@@ -80,7 +81,7 @@ function Story() {
         </h2>
 
         <figure className="m-0 mb-5">
-          <img src="/portrait.jpg" alt="Stephanno Jr." className="w-full block" style={{ background: theme.raised }} />
+          <img loading="lazy" decoding="async" src="/portrait.jpg" alt="Stephanno Jr." className="w-full block" style={{ background: theme.raised }} />
           <figcaption
             className="pt-1.5 mt-1.5"
             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2, borderTop: "1px solid " + theme.rule }}
@@ -168,7 +169,7 @@ function Row({ to, img, kicker, title, sub, meta }) {
     <Link to={to} className="flex items-center gap-4 py-4"
           style={{ borderBottom: "1px solid " + theme.rule }}>
       {img && (
-        <img src={img} alt="" className="block shrink-0"
+        <img loading="lazy" decoding="async" src={img} alt="" className="block shrink-0"
              style={{ width: "64px", height: "64px", objectFit: "cover", background: theme.raised }} />
       )}
       <span className="flex-1">
@@ -297,6 +298,7 @@ function TabBar() {
 
 export default function Home() {
   useGoogleFonts();
+  usePageMeta({ title: null, description: "Records, agency, booking, events and artists — from another state of mind." });
   return (
     <div style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />

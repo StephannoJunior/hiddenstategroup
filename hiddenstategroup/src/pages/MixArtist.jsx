@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -13,6 +14,7 @@ export default function MixArtist() {
   useGoogleFonts();
   const { slug } = useParams();
   const a = getMixArtist(slug);
+  usePageMeta({ title: a ? `${a.name} — Sessions` : "Sessions", description: a ? a.intro : "Recorded sets from the Hidden State roster.", image: a ? a.photo : null });
 
   if (!a) {
     return (
@@ -71,7 +73,7 @@ export default function MixArtist() {
         </p>
 
         <figure className="m-0 mt-6">
-          <img src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
+          <img loading="lazy" decoding="async" src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
         </figure>
 
         <div className="md:columns-2 md:gap-x-9 mt-6"

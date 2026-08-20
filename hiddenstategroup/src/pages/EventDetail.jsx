@@ -1,3 +1,4 @@
+import { usePageMeta, useEventSchema } from "../lib/seo";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -13,6 +14,13 @@ export default function EventDetail() {
   useGoogleFonts();
   const { id } = useParams();
   const e = EVENTS.find((x) => String(x.id) === id || x.slug === id);
+  usePageMeta({
+    title: e ? `${e.name}${e.subtitle ? " — " + e.subtitle : ""}` : "Event",
+    description: e ? e.description : "Hidden State events.",
+    image: e ? e.artwork : null,
+    type: "article",
+  });
+  useEventSchema(e);
 
   if (!e) {
     return (
@@ -75,7 +83,7 @@ export default function EventDetail() {
 
         {e.artwork ? (
           <figure className="m-0 mt-6">
-            <img src={e.artwork} alt={e.name} className="w-full block"
+            <img loading="lazy" decoding="async" src={e.artwork} alt={e.name} className="w-full block"
                  style={{ background: theme.raised, filter: past ? "grayscale(55%)" : "none" }} />
           </figure>
         ) : (

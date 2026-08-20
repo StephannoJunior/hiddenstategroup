@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React, { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -14,6 +15,7 @@ export default function ArtistProfile() {
   const { id } = useParams();
   const [drawer, setDrawer] = useState(false);
   const a = ARTISTS.find((x) => String(x.id) === id);
+  usePageMeta({ title: a ? (a.alias ? `${a.name} — ${a.alias}` : a.name) : "Artist", description: a ? a.bio.slice(0, 155) : "Hidden State roster.", image: a ? a.photo : null, type: "profile" });
 
   if (!a) {
     return (
@@ -71,7 +73,7 @@ export default function ArtistProfile() {
         </p>
 
         <figure className="m-0 mt-6">
-          <img src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
+          <img loading="lazy" decoding="async" src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
           <figcaption className="pt-1.5 mt-1.5"
             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
                      borderTop: "1px solid " + theme.rule }}>
@@ -86,7 +88,7 @@ export default function ArtistProfile() {
 
         {a.poster && (
           <figure className="m-0 mt-8">
-            <img src={a.poster} alt={a.name} className="w-full block"
+            <img loading="lazy" decoding="async" src={a.poster} alt={a.name} className="w-full block"
                  style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
             <figcaption className="pt-1.5 mt-1.5"
               style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,

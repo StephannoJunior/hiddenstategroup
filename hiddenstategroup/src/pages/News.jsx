@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -19,7 +20,7 @@ function Issue({ a }) {
     <Link to={`/news/${a.slug}`} className="block group">
       <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
-        <img src={a.photo || a.poster} alt="" className="w-full block"
+        <img loading="lazy" decoding="async" src={a.photo || a.poster} alt="" className="w-full block"
              style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
         <div>
           <div className="flex flex-wrap gap-x-4 gap-y-1"
@@ -49,6 +50,7 @@ function Issue({ a }) {
 
 export default function News() {
   useGoogleFonts();
+  usePageMeta({ title: "News", description: "Announcements, signings and dispatches from inside Hidden State." });
   const [active, setActive] = useState("ALL");
   const inTab = (a, tab) =>
     tab === "ALL" || (a.categories || [a.category]).includes(tab);

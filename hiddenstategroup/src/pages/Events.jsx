@@ -1,3 +1,4 @@
+import { usePageMeta } from "../lib/seo";
 import React from "react";
 import { Link } from "react-router-dom";
 import {
@@ -33,7 +34,7 @@ function Card({ e }) {
       <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
         {e.artwork ? (
-          <img src={e.artwork} alt="" className="w-full block"
+          <img loading="lazy" decoding="async" src={e.artwork} alt="" className="w-full block"
                style={{ background: theme.raised, filter: past ? "grayscale(55%)" : "none" }} />
         ) : (
           <EventPlate e={e} />
@@ -70,6 +71,7 @@ function Card({ e }) {
 
 export default function Events() {
   useGoogleFonts();
+  usePageMeta({ title: "Events", description: "Nights, festivals and experiences from Hidden State." });
   const upcoming = EVENTS.filter((e) => e.status !== "past");
   const past = EVENTS.filter((e) => e.status === "past");
 
