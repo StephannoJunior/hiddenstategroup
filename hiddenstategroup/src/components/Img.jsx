@@ -52,6 +52,7 @@ export default function Img({
       decoding="async"
       fetchpriority={eager ? "high" : undefined}
       onLoad={() => setLoaded(true)}
+      data-transparent={isTransparent ? "" : undefined}
       className={className}
       style={{
         // caller styles first, so ours win where they must

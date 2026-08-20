@@ -38,7 +38,7 @@ function Card({ e }) {
       <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
         {e.artwork ? (
-          <Img src={e.artwork} alt="" className="w-full block"
+          <Img src={e.artwork} alt={`${e.name} — artwork`} className="w-full block"
                style={{ background: theme.raised, filter: past ? "grayscale(55%)" : "none" }} />
         ) : (
           <EventPlate e={e} />

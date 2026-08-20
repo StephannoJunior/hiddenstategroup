@@ -16,6 +16,7 @@ export const SOCIAL = {
   stephannojr: ig("stephannojuniorofficial"),
   djtengu:     ig("dj.tengu_"),
   djmario:     ig("mario_daniel28"),
+  bmike:       ig("bmike.official"),
   djstephanno: ig("tucafanel"),
   circoloco:   ig("circcoloco"),
 

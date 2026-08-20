@@ -579,3 +579,17 @@ export function Instagram({ account, size = "10px", color = null }) {
     </a>
   );
 }
+
+// A printer's ornament, used where a plain rule would be the third in a row.
+export function Fleuron({ mark = "\u2766" }) {
+  return (
+    <div className="hs-fleuron my-9" aria-hidden="true">
+      <span style={{ fontSize: "15px", lineHeight: 1 }}>{mark}</span>
+    </div>
+  );
+}
+
+// Thick over thin — the classic newspaper divider.
+export function DoubleRuleClassic() {
+  return <div className="hs-double-rule" aria-hidden="true" />;
+}

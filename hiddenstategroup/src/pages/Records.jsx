@@ -1,4 +1,4 @@
-import { usePageMeta } from "../lib/seo";
+import { usePageMeta, useAlbumSchema } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
 import React from "react";
@@ -56,7 +56,7 @@ function Album({ a }) {
             <span style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.14em", color: theme.ink2, width: "22px" }}>
               {String(t.n).padStart(2, "0")}
             </span>
-            <Img src={t.cover} alt="" className="block"
+            <Img src={t.cover} alt={`${t.title} — cover`} className="block"
                  style={{ width: "56px", height: "56px", objectFit: "cover", background: theme.raised }} />
             <span className="flex-1" style={{ ...fontDisplay, fontSize: "21px", color: theme.ink }}>
               {t.title}
@@ -74,6 +74,7 @@ function Album({ a }) {
 export default function Records() {
   useGoogleFonts();
   const { t } = useLang();
+  useAlbumSchema(ALBUMS[0]);
   usePageMeta({ title: "Records", description: "Releases on Hidden State Records." });
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>

@@ -23,7 +23,7 @@ function Issue({ a }) {
     <Link to={`/news/${a.slug}`} className="block group">
       <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
-        <Img src={a.photo || a.poster} alt="" className="w-full block"
+        <Img src={a.photo || a.poster} alt={a.headline} className="w-full block"
              style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
         <div>
           <div className="flex flex-wrap gap-x-4 gap-y-1"

@@ -42,7 +42,7 @@ export default function About() {
         <h2 className="mb-5" style={{ ...fontDisplay, fontWeight: 300, color: theme.ink, fontSize: "clamp(25px,5.4vw,42px)", lineHeight: 1.16 }}>
           One artist, building a <em style={{ fontStyle: "italic", color: theme.brass }}>universe</em> around a sound.
         </h2>
-        <div className="md:columns-2 md:gap-x-9" style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.64, color: theme.ink }}>
+        <div className="md:columns-2 md:gap-x-9 hs-wide-cols" style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.64, color: theme.ink }}>
           <p className="mt-0 mb-3.5 hs-drop">
             Hidden State began as one artist's way of joining the parts of a scene that usually stay
             apart — the records, the rooms, and the people who make them.

@@ -89,3 +89,79 @@ export function useEventSchema(event) {
     return () => document.getElementById(id)?.remove();
   }, [event]);
 }
+
+/*
+  useArtistSchema — describes a musician in the format Google reads.
+
+  Google has a distinct rich result for musicians. Without this, an artist
+  page is just another blue link; with it, the name, image and genres can be
+  understood as a person rather than as words on a page.
+*/
+export function useArtistSchema(artist) {
+  useEffect(() => {
+    if (!artist) return;
+    const id = "hs-artist-schema";
+    document.getElementById(id)?.remove();
+
+    const data = {
+      "@context": "https://schema.org",
+      "@type": "MusicGroup",
+      name: artist.alias ? `${artist.name} (${artist.alias})` : artist.name,
+      description: artist.bio,
+      image: artist.photo ? BASE + artist.photo : undefined,
+      url: `${BASE}/artists/${artist.id}`,
+      genre: artist.genres,
+      foundingLocation: artist.country
+        ? { "@type": "Place", name: artist.country }
+        : undefined,
+      memberOf: { "@type": "Organization", name: SITE, url: BASE },
+    };
+
+    const tag = document.createElement("script");
+    tag.type = "application/ld+json";
+    tag.id = id;
+    tag.textContent = JSON.stringify(data);
+    document.head.appendChild(tag);
+    return () => document.getElementById(id)?.remove();
+  }, [artist]);
+}
+
+/*
+  useAlbumSchema — describes a release, with its tracks.
+
+  This is what lets a release appear in search with its track listing rather
+  than as a page title alone.
+*/
+export function useAlbumSchema(album) {
+  useEffect(() => {
+    if (!album) return;
+    const id = "hs-album-schema";
+    document.getElementById(id)?.remove();
+
+    const data = {
+      "@context": "https://schema.org",
+      "@type": "MusicAlbum",
+      name: album.title,
+      byArtist: { "@type": "MusicGroup", name: album.artist },
+      description: album.note,
+      image: album.cover ? BASE + album.cover : undefined,
+      url: `${BASE}/records`,
+      numTracks: (album.tracks || []).length,
+      datePublished: album.releaseDate || undefined,
+      track: (album.tracks || []).map((t) => ({
+        "@type": "MusicRecording",
+        name: t.title,
+        position: t.n,
+        url: t.youtube ? `https://www.youtube.com/watch?v=${t.youtube}` : undefined,
+      })),
+      publisher: { "@type": "Organization", name: "Hidden State Records", url: BASE },
+    };
+
+    const tag = document.createElement("script");
+    tag.type = "application/ld+json";
+    tag.id = id;
+    tag.textContent = JSON.stringify(data);
+    document.head.appendChild(tag);
+    return () => document.getElementById(id)?.remove();
+  }, [album]);
+}

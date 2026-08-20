@@ -5,33 +5,34 @@ import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 
 /*
-  GlassBar — the floating navigation on phones.
+  GlassBar — floating navigation on phones.
 
     One tap   → open / close
     Two taps  → home
-    Swipe     → the open bar scrolls sideways
+    Swipe     → the open bar scrolls sideways with snap
 
-  Built to sit closer to an iOS tab bar: icon above a small label, a soft
-  rounded highlight behind the current section, and glass that gets its
-  separation from refraction rather than from a drop shadow.
+  THE MATERIAL. Apple renders its glass in the OS; a website cannot use that.
+  What produces the effect here, layer by layer, bottom to top:
 
-  A note on the material. Apple's own is rendered by the OS and can't be used
-  by a website, so this is built from what a browser does give us:
+    1  backdrop-filter        blur + saturation of everything behind
+    2  clear tint             only a whisper of colour, so the page shows through
+    3  specular streak        a fixed bright band across the upper third — this
+                              is the reflection, and it is what sells glass more
+                              than anything else
+    4  rim light              the lit top edge
+    5  underside shade        darker lower edge, reads as thickness
+    6  moving sheen           a highlight that tracks your finger
+    7  spring press           slight squash with overshoot returning
 
-    backdrop-filter   blurs and saturates the page behind the panel
-    layered gradient  depth across the surface instead of flat translucency
-    rim highlight     the lit top edge where glass catches light
-    underside shade   the darker lower edge, which reads as thickness
-    sheen             a soft highlight that tracks your finger
-    spring            a slight squash on press that overshoots coming back
+  Kept deliberately CLEAR rather than milky: earlier versions used a heavy
+  opaque tint that read as frosted plastic. Real glass shows what is behind it.
 
-  Deliberately NOT mix-blend-mode, which broke this site on iOS once.
+  NOT mix-blend-mode, which broke this site on iOS once.
 */
 
 const DOUBLE_TAP_MS = 260;
 const SPRING = "cubic-bezier(.34,1.56,.64,1)";
 
-// Only long-standing lucide icons, so this can't break on a version bump.
 const TABS = [
   { href: "/", key: "home", Icon: Home },
   { href: "/news", key: "news", Icon: Newspaper },
@@ -95,19 +96,34 @@ export default function GlassBar() {
   const isActive = (href) =>
     href === "/" ? location.pathname === "/" : location.pathname.startsWith(href);
 
+  // Clear, not milky. Low opacity so the page reads through the panel.
   const pane = {
     background:
-      "linear-gradient(155deg, rgba(255,255,255,0.60) 0%, rgba(243,235,217,0.44) 50%, rgba(243,235,217,0.32) 100%)",
-    backdropFilter: "blur(30px) saturate(190%) brightness(1.05)",
-    WebkitBackdropFilter: "blur(30px) saturate(190%) brightness(1.05)",
-    border: "1px solid rgba(255,255,255,0.6)",
+      "linear-gradient(180deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.16) 42%, rgba(243,235,217,0.20) 100%)",
+    backdropFilter: "blur(34px) saturate(210%) brightness(1.08)",
+    WebkitBackdropFilter: "blur(34px) saturate(210%) brightness(1.08)",
+    border: "1px solid rgba(255,255,255,0.42)",
     boxShadow: [
-      "inset 0 1px 0 rgba(255,255,255,0.95)",
-      "inset 0 -1px 0 rgba(22,19,14,0.07)",
-      "inset 0 0 28px rgba(255,255,255,0.24)",
-      "0 1px 3px rgba(22,19,14,0.06)",
+      "inset 0 1px 0 rgba(255,255,255,0.9)",
+      "inset 0 -1px 0 rgba(22,19,14,0.06)",
+      "0 1px 3px rgba(22,19,14,0.05)",
     ].join(", "),
   };
+
+  // The reflection: a fixed specular band across the top, slightly angled,
+  // the way light catches a curved glass surface.
+  const reflection = (
+    <span
+      aria-hidden="true"
+      className="absolute inset-0"
+      style={{
+        borderRadius: "inherit",
+        background:
+          "linear-gradient(168deg, rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.22) 26%, rgba(255,255,255,0) 46%)",
+        pointerEvents: "none",
+      }}
+    />
+  );
 
   const sheenLayer = (
     <span
@@ -115,9 +131,9 @@ export default function GlassBar() {
       className="absolute inset-0"
       style={{
         borderRadius: "inherit",
-        background: `radial-gradient(140px circle at ${sheen.x}% ${sheen.y}%, rgba(255,255,255,0.5), rgba(255,255,255,0) 65%)`,
+        background: `radial-gradient(150px circle at ${sheen.x}% ${sheen.y}%, rgba(255,255,255,0.55), rgba(255,255,255,0) 62%)`,
         opacity: sheen.on ? 1 : 0,
-        transition: "opacity 280ms ease",
+        transition: "opacity 300ms ease",
         pointerEvents: "none",
       }}
     />
@@ -140,14 +156,19 @@ export default function GlassBar() {
           WebkitBackfaceVisibility: "hidden",
         }}
       >
-        <div className="relative w-full max-w-[560px] flex justify-center">
-          {/* collapsed — a larger, quieter pill */}
+        {/* Fixed-height stage. Both states are absolutely placed inside it, so
+            neither pushes the other and the slide stays perfectly smooth. */}
+        <div className="relative w-full max-w-[560px]" style={{ height: "72px" }}>
+
+          {/* collapsed pill */}
           <div
+            className="absolute left-0 right-0 flex justify-center"
             style={{
+              bottom: 0,
               opacity: open ? 0 : 1,
-              transform: open ? "translateY(18px) scale(0.9)" : "translateY(0) scale(1)",
+              transform: open ? "translateY(20px) scale(0.88)" : "translateY(0) scale(1)",
               pointerEvents: open ? "none" : "auto",
-              transition: `opacity 200ms ease, transform 440ms ${SPRING}`,
+              transition: `opacity 200ms ease, transform 460ms ${SPRING}`,
             }}
           >
             <Link
@@ -162,12 +183,13 @@ export default function GlassBar() {
               className="relative flex items-center gap-3 overflow-hidden"
               style={{
                 ...pane,
-                borderRadius: "26px",
-                padding: "15px 26px",
+                borderRadius: "24px",
+                padding: "14px 26px",
                 transform: pressing ? "scale(0.95)" : "scale(1)",
-                transition: `transform 440ms ${SPRING}`,
+                transition: `transform 460ms ${SPRING}`,
               }}
             >
+              {reflection}
               {sheenLayer}
               <span className="flex flex-col gap-[3.5px] relative" aria-hidden="true">
                 <span style={{ width: "18px", height: "1.5px", background: theme.ink, display: "block" }} />
@@ -180,22 +202,24 @@ export default function GlassBar() {
             </Link>
           </div>
 
-          {/* open — icon over label, the way a tab bar reads */}
+          {/* open tab bar */}
           <nav
             aria-label="Site navigation"
             className="absolute left-0 right-0 overflow-hidden"
             style={{
               ...pane,
-              borderRadius: "28px",
+              bottom: 0,
+              borderRadius: "26px",
               opacity: open ? 1 : 0,
-              transform: open ? "translateY(0) scale(1)" : "translateY(22px) scale(0.92)",
+              transform: open ? "translateY(0) scale(1)" : "translateY(24px) scale(0.9)",
               pointerEvents: open ? "auto" : "none",
-              transition: `opacity 200ms ease, transform 480ms ${SPRING}`,
+              transition: `opacity 200ms ease, transform 500ms ${SPRING}`,
             }}
           >
+            {reflection}
             <div
-              className="flex overflow-x-auto no-scrollbar"
-              style={{ scrollSnapType: "x proximity", padding: "8px 8px" }}
+              className="flex overflow-x-auto no-scrollbar relative"
+              style={{ scrollSnapType: "x proximity", padding: "7px" }}
             >
               {TABS.map(({ href, key, Icon }) => {
                 const active = isActive(href);
@@ -204,28 +228,24 @@ export default function GlassBar() {
                     key={key}
                     to={href}
                     onClick={() => setOpen(false)}
-                    className="flex flex-col items-center justify-center shrink-0"
+                    className="flex flex-col items-center justify-center shrink-0 relative"
                     style={{
                       scrollSnapAlign: "center",
-                      minWidth: "68px",
-                      padding: "9px 6px",
-                      borderRadius: "18px",
+                      minWidth: "66px",
+                      padding: "8px 6px",
+                      borderRadius: "17px",
                       gap: "5px",
-                      background: active ? "rgba(22,19,14,0.90)" : "transparent",
-                      transition: "background 240ms ease",
+                      background: active ? "rgba(22,19,14,0.88)" : "transparent",
+                      boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.18)" : "none",
+                      transition: "background 260ms ease",
                     }}
                   >
-                    <Icon
-                      size={19}
-                      strokeWidth={1.6}
-                      color={active ? theme.bg : theme.ink}
-                      aria-hidden="true"
-                    />
+                    <Icon size={19} strokeWidth={1.6} color={active ? theme.bg : theme.ink} aria-hidden="true" />
                     <span
                       style={{
                         ...fontUtility,
                         fontSize: "8.5px",
-                        letterSpacing: "0.12em",
+                        letterSpacing: "0.1em",
                         color: active ? theme.bg : theme.ink,
                         whiteSpace: "nowrap",
                       }}

@@ -107,7 +107,7 @@ export default function NewsArticle() {
           </p>
         )}
 
-        <div className="md:columns-2 md:gap-x-9 mt-5"
+        <div className="md:columns-2 md:gap-x-9 hs-wide-cols mt-5"
              style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.64, color: theme.ink }}>
           {a.body.map((p, i) => (
             <p key={i} className={i === 0 ? "mt-0 mb-3.5 hs-drop" : "mb-3.5"}>{p}</p>
@@ -157,12 +157,7 @@ export default function NewsArticle() {
           </div>
         )}
 
-        {a.signoff && (
-          <p className="text-center mt-7 m-0"
-             style={{ ...fontDisplay, fontStyle: "italic", fontSize: "20px", color: theme.ink }}>
-            {a.signoff}
-          </p>
-        )}
+        {a.signoff && <p className="hs-pullquote">{a.signoff}</p>}
 
         {a.link && (
           <div className="text-center mt-7">

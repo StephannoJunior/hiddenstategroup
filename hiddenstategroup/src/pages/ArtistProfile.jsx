@@ -1,4 +1,4 @@
-import { usePageMeta } from "../lib/seo";
+import { usePageMeta, useArtistSchema } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
 import React, { useState } from "react";
@@ -18,6 +18,7 @@ export default function ArtistProfile() {
   const { id } = useParams();
   const [drawer, setDrawer] = useState(false);
   const a = ARTISTS.find((x) => String(x.id) === id);
+  useArtistSchema(a);
   usePageMeta({ title: a ? (a.alias ? `${a.name} — ${a.alias}` : a.name) : "Artist", description: a ? a.bio.slice(0, 155) : "Hidden State roster.", image: a ? a.photo : null, type: "profile" });
 
   if (!a) {

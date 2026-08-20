@@ -76,9 +76,23 @@ h1, h2 { font-optical-sizing: auto; }
   }
 }
 
-/* Photographs fade in as they decode, rather than snapping in. */
-img {
+/* Photographs fade in from the paper tone as they decode, rather than
+   snapping in over grey.
+
+   Scoped to raster photos only. A blanket `img` rule here was putting a
+   visible box behind the transparent PNG logo — the component-level guard
+   could not win against a global stylesheet rule. */
+img[src$=".webp"]:not([data-transparent]),
+img[src$=".jpg"]:not([data-transparent]),
+img[src$=".jpeg"]:not([data-transparent]) {
   background-color: #E8DEC7;
+}
+
+/* Logos and any other transparent artwork must never gain a backing. */
+img[src$=".png"],
+img[src$=".svg"],
+img[data-transparent] {
+  background-color: transparent !important;
 }
 
 /* Visible keyboard focus — invisible focus rings fail anyone
@@ -130,4 +144,95 @@ main, [data-page] {
   [data-page] > div:first-of-type > section:first-of-type {
     padding-top: 168px;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FINE TYPESETTING
+   The details that separate real typesetting from a website that
+   happens to use a serif.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Old-style figures. In proper book and newspaper setting, numerals have
+   ascenders and descenders like lowercase letters — the 3 and 5 drop below
+   the line, the 6 and 8 rise. Lining figures (all cap-height) are a
+   twentieth-century convention and make dates shout inside a sentence.
+   EB Garamond and Fraunces both carry the alternate set. */
+body,
+.hs-drop,
+p, blockquote, figcaption, h1, h2, h3 {
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  font-feature-settings: "onum" 1, "pnum" 1, "kern" 1, "liga" 1;
+}
+
+/* Utility type stays on lining figures — a dateline or a catalogue number
+   should align in a column, which old-style figures deliberately do not. */
+[style*="Space Grotesk"] {
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
+
+/* Discretionary ligatures in display sizes only. At headline size the
+   joined fi, fl, ff and Th read as care; at body size they blur. */
+h1, h2 {
+  font-variant-ligatures: common-ligatures discretionary-ligatures contextual;
+  font-feature-settings: "dlig" 1, "liga" 1, "kern" 1, "onum" 1;
+}
+
+/* The opening words of an article set in small caps, the traditional way a
+   paper eases the reader from the drop cap into running text. */
+.hs-drop::first-line {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.04em;
+}
+
+/* An ornament between major sections, in place of yet another plain rule. */
+.hs-fleuron {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #8A6A28;
+}
+.hs-fleuron::before,
+.hs-fleuron::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid #C4B593;
+}
+
+/* A pull quote, set large and italic, hung between rules. */
+.hs-pullquote {
+  font-family: "Fraunces", Georgia, serif;
+  font-style: italic;
+  font-size: clamp(21px, 4.2vw, 30px);
+  line-height: 1.3;
+  color: #16130E;
+  text-align: center;
+  margin: 34px 0;
+  padding: 22px 0;
+  border-top: 1px solid #16130E;
+  border-bottom: 1px solid #16130E;
+}
+
+/* Three columns once the page is genuinely wide. Two columns across a
+   1400px screen gives a measure far longer than is comfortable to read;
+   newspapers narrow the column rather than widen it. */
+@media (min-width: 1280px) {
+  .hs-wide-cols {
+    column-count: 3;
+    column-gap: 40px;
+  }
+}
+
+/* True double rule — thick over thin, the classic newspaper divider. */
+.hs-double-rule {
+  border-top: 3px solid #16130E;
+  border-bottom: 1px solid #16130E;
+  height: 4px;
+  margin: 0;
+}
+
+/* Hanging punctuation, so an opening quote sits outside the measure and the
+   text edge stays optically straight. */
+blockquote, .hs-pullquote {
+  hanging-punctuation: first last;
 }

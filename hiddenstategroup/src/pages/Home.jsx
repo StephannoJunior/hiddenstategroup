@@ -1,6 +1,7 @@
 import { usePageMeta } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
+import { Fleuron } from "../components/Shared";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -57,7 +58,7 @@ function LeadPicture() {
     <section style={{ background: theme.bg }} className="pb-10">
       <div className="max-w-[1180px] mx-auto px-[18px]">
         <figure className="m-0">
-          <Img src="/club.webp" alt="" className="w-full block" style={{ background: theme.raised }} />
+          <Img src="/club.webp" alt="Hidden State — a night in the room" className="w-full block" style={{ background: theme.raised }} />
           <figcaption
             className="pt-1.5 mt-1.5"
             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2, borderTop: "1px solid " + theme.rule }}
@@ -93,7 +94,7 @@ function Story() {
           </figcaption>
         </figure>
 
-        <div className="md:columns-2 md:gap-x-9" style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.62, color: theme.ink }}>
+        <div className="md:columns-2 md:gap-x-9 hs-wide-cols" style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.62, color: theme.ink }}>
           <p className="mt-0 mb-3.5 hs-drop">
             Hidden State began as one artist's way of joining the parts of a scene that usually stay
             apart — the records, the rooms, and the people who make them.
@@ -310,6 +311,7 @@ export default function Home() {
       <Nameplate />
       <LeadPicture />
       <Story />
+      <Fleuron />
       <Offer />
       <TabBar />
       <Footer />
