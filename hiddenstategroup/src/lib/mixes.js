@@ -93,6 +93,26 @@ export const MIX_ARTISTS = [
     comingSoonNote: "Soon we will display his discography.",
     sections: [],
   },
+  {
+    slug: "dj-stephanno-model1",
+    artistId: 5,
+    name: "DJ Stephanno",
+    alias: "Model 1",
+    photo: "/artists/dj-stephanno-model1.jpg",
+    genres: ["House", "Techno", "Vinyl"],
+    intro:
+      "Vinyl only. Two decades behind the decks, built around groove, atmosphere and storytelling.",
+    comingSoon: false,
+    sections: [
+      {
+        label: "Vinyl Only",
+        items: [
+          { title: "Model 1 \u2014 S02E01", url: "https://soundcloud.com/model_1/model-1-s02e01-vinyl-only" },
+          { title: "Model 1 \u2014 S02E02", url: "https://soundcloud.com/model_1/model-1-s02e02-vinyl-only" },
+        ],
+      },
+    ],
+  },
 ];
 
 export const getMixArtist = (slug) => MIX_ARTISTS.find((a) => a.slug === slug) || null;

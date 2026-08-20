@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
+import GlassBar from "./components/GlassBar";
 import Home from "./pages/Home";
 import Records from "./pages/Records";
 import Agency from "./pages/Agency";
@@ -30,6 +31,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <GlassBar />
       <Routes>
         <Route path="/" element={<Home />} />
 

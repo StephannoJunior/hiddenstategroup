@@ -4,6 +4,10 @@ import {
   Nav, Footer, useGoogleFonts,
   fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
+import { ARTICLES } from "../lib/news";
+import { ARTISTS, EVENTS } from "../lib/data";
+import { ALBUMS } from "../lib/records";
+import { MIX_ARTISTS, countMixes } from "../lib/mixes";
 
 /*
   HOME — the broadsheet.
@@ -156,35 +160,137 @@ function Offer() {
   );
 }
 
-const TABS = ["ALL", "MUSIC", "ARTISTS", "RECORDS", "EVENTS", "INTERVIEWS", "INDUSTRY"];
+const TABS = ["ALL", "NEWS", "ARTISTS", "RECORDS", "EVENTS", "MIXES", "INDUSTRY"];
+
+// One row shape for everything, so the tabs read as a single index.
+function Row({ to, img, kicker, title, sub, meta }) {
+  return (
+    <Link to={to} className="flex items-center gap-4 py-4"
+          style={{ borderBottom: "1px solid " + theme.rule }}>
+      {img && (
+        <img src={img} alt="" className="block shrink-0"
+             style={{ width: "64px", height: "64px", objectFit: "cover", background: theme.raised }} />
+      )}
+      <span className="flex-1">
+        {kicker && (
+          <span className="block" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
+            {kicker}
+          </span>
+        )}
+        <span className="block mt-1" style={{ ...fontDisplay, fontSize: "19px", lineHeight: 1.2, color: theme.ink }}>
+          {title}
+        </span>
+        {sub && (
+          <span className="block mt-1" style={{ ...fontText, fontSize: "15px", lineHeight: 1.45, color: theme.ink2 }}>
+            {sub}
+          </span>
+        )}
+      </span>
+      {meta && (
+        <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.14em", color: theme.ink2, whiteSpace: "nowrap" }}>
+          {meta}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function Heading({ children }) {
+  return (
+    <p className="m-0 mt-7 mb-1" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+      {children}
+    </p>
+  );
+}
+
+const newsRows = (list) =>
+  list.map((a) => (
+    <Row key={a.slug} to={`/news/${a.slug}`} img={a.photo || a.poster}
+         kicker={a.category} title={a.headline} meta={a.date} />
+  ));
+
+const artistRows = () =>
+  ARTISTS.map((a) => (
+    <Row key={a.id} to={`/artists/${a.id}`} img={a.photo}
+         kicker={a.type} title={a.alias ? `${a.name} — ${a.alias}` : a.name}
+         sub={a.desc} meta={a.genres[0].toUpperCase()} />
+  ));
+
+const eventRows = () =>
+  EVENTS.map((e) => (
+    <Row key={e.id} to={`/events/${e.id}`} img={e.artwork}
+         kicker={e.status === "past" ? "PAST EVENT" : "UPCOMING"}
+         title={e.name} sub={e.subtitle} meta={e.date} />
+  ));
+
+const recordRows = () =>
+  ALBUMS.map((al) => (
+    <Row key={al.slug} to="/records" img={al.cover}
+         kicker={`${al.kind} · ${al.catalog}`} title={al.title}
+         sub={`${al.artist} — ${al.tracks.length} tracks`} meta="LISTEN" />
+  ));
+
+const mixRows = () =>
+  MIX_ARTISTS.map((m) => {
+    const n = countMixes(m);
+    return (
+      <Row key={m.slug} to={`/mixes/${m.slug}`} img={m.photo}
+           kicker={m.comingSoon ? "COMING SOON" : `${n} ${n === 1 ? "MIX" : "MIXES"}`}
+           title={m.alias ? `${m.name} — ${m.alias}` : m.name} sub={m.intro} />
+    );
+  });
+
+function Empty({ label }) {
+  return (
+    <div className="my-8 py-14 text-center"
+         style={{ border: "1px dashed " + theme.rule, ...fontUtility,
+                  fontSize: "10.5px", letterSpacing: "0.16em", color: theme.ink2 }}>
+      {label} — NOTHING FILED YET
+    </div>
+  );
+}
 
 function TabBar() {
   const [active, setActive] = useState("ALL");
+  const industry = ARTICLES.filter((a) => (a.categories || []).includes("INDUSTRY"));
+
+  let content;
+  if (active === "ALL") {
+    content = (
+      <>
+        <Heading>LATEST NEWS</Heading>
+        {newsRows(ARTICLES.slice(0, 3))}
+        <Heading>ON THE LABEL</Heading>
+        {recordRows()}
+        <Heading>NEXT EVENTS</Heading>
+        {eventRows().slice(0, 3)}
+        <Heading>THE ROSTER</Heading>
+        {artistRows().slice(0, 3)}
+      </>
+    );
+  } else if (active === "NEWS") content = newsRows(ARTICLES);
+  else if (active === "ARTISTS") content = artistRows();
+  else if (active === "RECORDS") content = recordRows();
+  else if (active === "EVENTS") content = eventRows();
+  else if (active === "MIXES") content = mixRows();
+  else if (active === "INDUSTRY")
+    content = industry.length ? newsRows(industry) : <Empty label="INDUSTRY" />;
+
   return (
     <>
       <div style={{ background: theme.bg, borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
         <div className="max-w-[1180px] mx-auto px-[18px] flex gap-6 overflow-x-auto no-scrollbar">
           {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setActive(t)}
-              className="py-3"
-              style={{
-                ...fontUtility, fontSize: "10.5px", letterSpacing: "0.16em", whiteSpace: "nowrap",
-                color: active === t ? theme.ink : theme.ink2,
-                borderBottom: `2px solid ${active === t ? theme.brass : "transparent"}`,
-              }}
-            >
+            <button key={t} onClick={() => setActive(t)} className="py-3"
+              style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.16em", whiteSpace: "nowrap",
+                       color: active === t ? theme.ink : theme.ink2,
+                       borderBottom: `2px solid ${active === t ? theme.brass : "transparent"}` }}>
               {t}
             </button>
           ))}
         </div>
       </div>
-      <div className="max-w-[1180px] mx-auto px-[18px] py-10">
-        <div className="py-14 text-center" style={{ border: "1px dashed " + theme.rule, color: theme.ink2, ...fontUtility, fontSize: "10.5px", letterSpacing: "0.16em" }}>
-          {active} — NOTHING FILED YET
-        </div>
-      </div>
+      <div className="max-w-[1180px] mx-auto px-[18px] pb-14">{content}</div>
     </>
   );
 }

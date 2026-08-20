@@ -16,6 +16,8 @@ export const SOCIAL = {
   stephannojr: ig("stephannojuniorofficial"),
   djtengu:     ig("dj.tengu_"),
   djmario:     ig("mario_daniel28"),
+  djstephanno: ig("tucafanel"),
+  circoloco:   ig("circcoloco"),
 
   // Partners / events
   astryon: ig("astryonfestival"),

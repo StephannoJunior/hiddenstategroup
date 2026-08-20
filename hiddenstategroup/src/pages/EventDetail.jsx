@@ -6,6 +6,7 @@ import {
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
 import { EVENTS } from "../lib/data";
+import Gallery from "../components/Gallery";
 import { SOCIAL } from "../lib/social";
 
 export default function EventDetail() {
@@ -158,18 +159,28 @@ export default function EventDetail() {
           )}
         </div>
 
-        {e.gallery && e.gallery.length > 0 && (
-          <div className="mt-10">
-            <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-              FROM THE NIGHT
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {e.gallery.map((g, i) => (
-                <img key={i} src={g} alt="" className="w-full block" style={{ background: theme.raised }} />
-              ))}
-            </div>
-          </div>
+        {e.tagline && (
+          <p className="text-center mt-7 m-0"
+             style={{ ...fontDisplay, fontStyle: "italic", fontSize: "21px", color: theme.ink }}>
+            {e.tagline}
+          </p>
         )}
+
+        {e.gallery && e.gallery.length > 0 && (
+          <Gallery photos={e.gallery} prefix={e.slug || "hidden-state"} />
+        )}
+
+        {e.photosLink && (
+          <p className="text-center mt-6 m-0">
+            <a href={e.photosLink} target="_blank" rel="noopener noreferrer"
+               className="inline-block px-9 py-3.5"
+               style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em",
+                        background: theme.ink, color: theme.bg }}>
+              {e.photosLinkLabel || "ALL PHOTOS"}
+            </a>
+          </p>
+        )}
+
       </article>
 
       <Footer />

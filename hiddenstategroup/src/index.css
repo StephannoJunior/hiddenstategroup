@@ -34,3 +34,9 @@ body {
   padding: 4px 9px 0 0;
   color: #16130E;
 }
+
+/* The floating glass bar sits over the page on phones — keep clear space
+   under the footer so it never covers the last line of content. */
+@media (max-width: 1023px) {
+  footer { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px) !important; }
+}

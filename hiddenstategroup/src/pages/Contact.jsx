@@ -1,9 +1,13 @@
 import React, { useState } from "react";
-import { Reveal, StampTag, GrainOverlay, Nav, Footer, Field, inputStyle, useGoogleFonts, fontDisplay, fontUtility, fontBody } from "../components/Shared";
+import {
+  Nav, Footer, useGoogleFonts, Field, inputStyle, Instagram,
+  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+} from "../components/Shared";
 import { FORM_ENDPOINT, CONTACT_EMAIL } from "../lib/config";
+import { EMAILS } from "../lib/contacts";
+import { SOCIAL } from "../lib/social";
 
 const REASONS = ["General Inquiry", "Booking", "Press", "Demo Submission", "Partnership", "Other"];
-
 const initialForm = { name: "", email: "", reason: "General Inquiry", message: "" };
 
 export default function Contact() {
@@ -18,13 +22,10 @@ export default function Contact() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-
-    // No endpoint configured yet — tell the truth rather than fake a success.
     if (!FORM_ENDPOINT) {
       setError(`This form isn't connected yet. Please email ${CONTACT_EMAIL} directly.`);
       return;
     }
-
     setSending(true);
     try {
       const res = await fetch(FORM_ENDPOINT, {
@@ -42,78 +43,95 @@ export default function Contact() {
   };
 
   return (
-    <div style={{ background: "#0A0A09", minHeight: "100vh" }}>
-      <GrainOverlay />
+    <div style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <section className="pt-40 md:pt-52 pb-14 md:pb-20 px-6 md:px-10 max-w-[1600px] mx-auto">
-        <Reveal>
-          <StampTag>CONTACT</StampTag>
-          <h1 className="mt-6 text-[42px] leading-[1.05] md:text-[80px] md:leading-[0.98]" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>
-            Get in
-            <br />
-            <span style={{ fontStyle: "italic", color: "#B98A2E" }}>Touch</span>
-          </h1>
-          <p className="mt-6 text-[15px] md:text-[18px] max-w-lg" style={{ ...fontBody, color: "#C7C3B8" }}>
-            Booking a specific artist? Use the BOOKING link on their profile instead —
-            it routes straight to the agency team. Everything else, start here.
-          </p>
-        </Reveal>
+
+      <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
+        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
+          Contact
+        </h1>
+        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
+        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
+        <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
+          GET IN TOUCH
+        </p>
       </section>
 
-      <section className="max-w-[1600px] mx-auto px-6 md:px-10 pb-20 md:pb-28 grid md:grid-cols-3 gap-12">
-        <div className="md:col-span-2">
-          <Reveal>
-            {submitted ? (
-              <div className="border p-8 md:p-10" style={{ borderColor: "#2A2823" }}>
-                <StampTag>MESSAGE SENT</StampTag>
-                <h3 className="mt-5 text-[26px]" style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}>
-                  Thank you.
-                </h3>
-                <p className="mt-3 text-[14px] leading-relaxed max-w-sm" style={{ ...fontBody, color: "#C7C3B8" }}>
-                  Your message has been received. The Hidden State team will be in touch soon.
-                </p>
+      <section className="max-w-[1180px] mx-auto px-[18px] pt-9 pb-16 grid md:grid-cols-[1fr_320px] gap-10">
+        <div>
+          <p className="m-0 mb-5" style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.64, color: theme.ink }}>
+            Booking a specific artist? Use the BOOK button on their profile — it routes straight to
+            the agency. Everything else, start here.
+          </p>
+
+          {submitted ? (
+            <div className="p-8" style={{ border: "1px solid " + theme.ink }}>
+              <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+                MESSAGE SENT
+              </p>
+              <h3 className="mt-3 mb-2" style={{ ...fontDisplay, fontWeight: 400, fontSize: "26px", color: theme.ink }}>
+                Thank you.
+              </h3>
+              <p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>
+                Your message has been received. We'll be in touch soon.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-5 max-w-xl">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Name"><input required style={inputStyle} value={form.name} onChange={update("name")} /></Field>
+                <Field label="Email"><input required type="email" style={inputStyle} value={form.email} onChange={update("email")} /></Field>
               </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-5 max-w-xl">
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Name"><input required style={inputStyle} value={form.name} onChange={update("name")} /></Field>
-                  <Field label="Email"><input required type="email" style={inputStyle} value={form.email} onChange={update("email")} /></Field>
-                </div>
-                <Field label="Reason">
-                  <select style={inputStyle} value={form.reason} onChange={update("reason")}>
-                    {REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </Field>
-                <Field label="Message">
-                  <textarea required rows={6} style={{ ...inputStyle, resize: "none" }} value={form.message} onChange={update("message")} />
-                </Field>
-                {error && (
-                  <p className="text-[12.5px] leading-relaxed px-3 py-2.5 border" style={{ ...fontBody, color: "#E8B4B4", borderColor: "#5A2A2A", background: "#1A1010" }}>
-                    {error}
-                  </p>
-                )}
-                <button
-                  type="submit"
-                  disabled={sending}
-                  className="text-[12px] tracking-[0.16em] px-8 py-4"
-                  style={{ ...fontUtility, color: "#0A0A09", background: "#F4F1EA", opacity: sending ? 0.6 : 1, cursor: sending ? "wait" : "pointer" }}
-                >
-                  {sending ? "SENDING…" : "SEND MESSAGE"}
-                </button>
-              </form>
-            )}
-          </Reveal>
+              <Field label="Reason">
+                <select style={inputStyle} value={form.reason} onChange={update("reason")}>
+                  {REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </Field>
+              <Field label="Message">
+                <textarea required rows={6} style={{ ...inputStyle, resize: "none" }} value={form.message} onChange={update("message")} />
+              </Field>
+              {error && (
+                <p className="m-0 px-3 py-2.5" style={{ ...fontText, fontSize: "15px", color: "#7A2E2E", border: "1px solid #C08A8A" }}>
+                  {error}
+                </p>
+              )}
+              <button type="submit" disabled={sending} className="px-9 py-3.5"
+                      style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em",
+                               background: theme.ink, color: theme.bg, opacity: sending ? 0.6 : 1 }}>
+                {sending ? "SENDING…" : "SEND MESSAGE"}
+              </button>
+            </form>
+          )}
         </div>
 
-        <Reveal delay={100}>
-          <div className="border p-6" style={{ borderColor: "#2A2823" }}>
-            <p style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.1em", color: "#8C887E" }}>DIRECT</p>
-            <p className="mt-3 text-[14px]" style={{ ...fontBody, color: "#C7C3B8" }}>hello@hiddenstategroup.com</p>
-            <p className="mt-6" style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.1em", color: "#8C887E" }}>SOCIAL</p>
-            <p className="mt-3 text-[14px]" style={{ ...fontBody, color: "#C7C3B8" }}>Instagram — @hiddenstate</p>
+        <aside>
+          <p className="m-0 mb-1" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+            DIRECT
+          </p>
+          <div style={{ borderTop: "1px solid " + theme.ink }}>
+            {Object.values(EMAILS).map((e) => (
+              <a key={e.address} href={`mailto:${e.address}`} className="block py-3"
+                 style={{ borderBottom: "1px solid " + theme.rule }}>
+                <span className="block" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.ink2 }}>
+                  {e.label.toUpperCase()}
+                </span>
+                <span className="block mt-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{e.address}</span>
+              </a>
+            ))}
           </div>
-        </Reveal>
+          <p className="m-0 mt-7 mb-2" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+            SOCIAL
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <Instagram account={SOCIAL.official} />
+            <Instagram account={SOCIAL.group} />
+            <Instagram account={SOCIAL.agency} />
+            <Instagram account={SOCIAL.records} />
+            <Instagram account={SOCIAL.news} />
+          </div>
+        </aside>
       </section>
+
       <Footer />
     </div>
   );

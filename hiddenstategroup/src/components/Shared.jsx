@@ -4,7 +4,7 @@ import { Menu, X, Search } from "lucide-react";
 import { MARK_SJ, MARK_SEAL, MARK_NOPROBLEM } from "../lib/marks";
 import { ARTISTS } from "../lib/data";
 import { SOCIAL } from "../lib/social";
-import { FORM_ENDPOINT, CONTACT_EMAIL } from "../lib/config";
+import { FORM_ENDPOINT, CONTACT_EMAIL, BOOKING_EMAIL } from "../lib/config";
 
 /*
   HIDDEN STATE — Design tokens (dark editorial + vintage press hybrid)
@@ -302,7 +302,7 @@ export function BookingDrawer({ open, onClose, artist }) {
 
     // No endpoint configured yet — tell the truth rather than fake a success.
     if (!FORM_ENDPOINT) {
-      setError(`This form isn't connected yet. Please email ${CONTACT_EMAIL} directly.`);
+      setError(`This form isn't connected yet. Please email ${BOOKING_EMAIL} directly.`);
       return;
     }
 
@@ -311,12 +311,16 @@ export function BookingDrawer({ open, onClose, artist }) {
       const res = await fetch(FORM_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ ...form, _subject: `Booking request — ${form.artist || "Hidden State"}` }),
+        body: JSON.stringify({
+          ...form,
+          _subject: `Booking request — ${form.artist || "Hidden State"}`,
+          _deliverTo: BOOKING_EMAIL,
+        }),
       });
       if (!res.ok) throw new Error("Request failed");
       setSubmitted(true);
     } catch {
-      setError(`Something went wrong sending that. Please email ${CONTACT_EMAIL} instead.`);
+      setError(`Something went wrong sending that. Please email ${BOOKING_EMAIL} instead.`);
     } finally {
       setSending(false);
     }
@@ -339,6 +343,10 @@ export function BookingDrawer({ open, onClose, artist }) {
             <h2 className="mt-1 text-[22px]" style={{ ...fontDisplay, fontStyle: "italic", fontWeight: 500, color: theme.ink }}>
               {artist ? artist.name : "Hidden State Agency"}
             </h2>
+            <a href={`mailto:${BOOKING_EMAIL}`} className="mt-1 inline-block"
+               style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.1em", color: theme.ink2 }}>
+              {BOOKING_EMAIL}
+            </a>
           </div>
           <button onClick={onClose} style={{ color: theme.ink }}><X size={22} strokeWidth={1.5} /></button>
         </div>

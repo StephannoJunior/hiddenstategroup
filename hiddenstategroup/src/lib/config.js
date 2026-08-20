@@ -13,10 +13,16 @@
 // email instead — they will NOT pretend the message was sent.
 // ---------------------------------------------------------------------------
 
-export const FORMSPREE_ID = "";
+export const FORMSPREE_ID = "myeglvwa";
 
 // Shown to visitors as a fallback if a submission fails for any reason.
-export const CONTACT_EMAIL = "hello@hiddenstategroup.com";
+export const CONTACT_EMAIL = "info@hiddenstategroup.com";
+
+// Where each form should be delivered. IMPORTANT: Formspree decides the actual
+// destination in ITS dashboard, not here — set the booking form to deliver to
+// booking@hiddenstategroup.com there. These values put the right address in the
+// subject line and in the fallback message.
+export const BOOKING_EMAIL = "booking@hiddenstategroup.com";
 
 export const FORM_ENDPOINT = FORMSPREE_ID
   ? `https://formspree.io/f/${FORMSPREE_ID}`
