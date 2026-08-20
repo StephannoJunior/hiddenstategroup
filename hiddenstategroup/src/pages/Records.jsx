@@ -1,4 +1,6 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
 import React from "react";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
@@ -8,10 +10,11 @@ import { ALBUMS, watchUrl } from "../lib/records";
 import { SOCIAL } from "../lib/social";
 
 function Album({ a }) {
+  const { t } = useLang();
   return (
     <section className="max-w-[1180px] mx-auto px-[18px] pb-6">
       <div className="grid md:grid-cols-[360px_1fr] gap-6 md:gap-10 items-start py-8">
-        <img loading="lazy" decoding="async" src={a.cover} alt={a.title} className="w-full block" style={{ background: theme.raised }} />
+        <Img src={a.cover} alt={a.title} className="w-full block" style={{ background: theme.raised }} />
         <div>
           <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
             {a.kind}{a.catalog ? ` · ${a.catalog}` : ""}{a.releaseDate ? ` · ${a.releaseDate}` : ""}
@@ -36,14 +39,14 @@ function Album({ a }) {
             <a href={a.playlist} target="_blank" rel="noopener noreferrer"
                className="inline-block mt-5 px-8 py-3.5"
                style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em", background: theme.ink, color: theme.bg }}>
-              PLAY THE ALBUM
+              {t("playAlbum")}
             </a>
           )}
         </div>
       </div>
 
       <p className="m-0 mb-1" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-        TRACKLIST
+        {t("tracklist")}
       </p>
       <div style={{ borderTop: "1px solid " + theme.ink }}>
         {a.tracks.map((t) => (
@@ -53,7 +56,7 @@ function Album({ a }) {
             <span style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.14em", color: theme.ink2, width: "22px" }}>
               {String(t.n).padStart(2, "0")}
             </span>
-            <img loading="lazy" decoding="async" src={t.cover} alt="" className="block"
+            <Img src={t.cover} alt="" className="block"
                  style={{ width: "56px", height: "56px", objectFit: "cover", background: theme.raised }} />
             <span className="flex-1" style={{ ...fontDisplay, fontSize: "21px", color: theme.ink }}>
               {t.title}
@@ -70,18 +73,19 @@ function Album({ a }) {
 
 export default function Records() {
   useGoogleFonts();
+  const { t } = useLang();
   usePageMeta({ title: "Records", description: "Releases on Hidden State Records." });
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
       <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
         <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          The Records
+          {t("theRecords")}
         </h1>
         <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
         <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
         <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
-          RELEASED ON HIDDEN STATE RECORDS
+          {t("recordsSub")}
         </p>
         <p className="mt-2.5 mb-0">
           <Instagram account={SOCIAL.records} size="10.5px" />

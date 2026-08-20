@@ -1,4 +1,6 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
 import React from "react";
 import { Link } from "react-router-dom";
 import {
@@ -13,7 +15,7 @@ function Card({ a }) {
     <Link to={`/mixes/${a.slug}`} className="block">
       <article className="grid md:grid-cols-[260px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
-        <img loading="lazy" decoding="async" src={a.photo} alt={a.name} className="w-full block"
+        <Img src={a.photo} alt={a.name} className="w-full block"
              style={{ background: theme.raised, aspectRatio: "3 / 4", objectFit: "cover" }} />
         <div>
           <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
@@ -47,18 +49,19 @@ function Card({ a }) {
 
 export default function Mixes() {
   useGoogleFonts();
+  const { t } = useLang();
   usePageMeta({ title: "Sessions & Radio", description: "Recorded sets and radio sessions from the Hidden State roster." });
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
       <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
         <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          Sessions &amp; Radio
+          {t("sessionsRadio")}
         </h1>
         <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
         <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
         <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
-          RECORDED SETS FROM THE HIDDEN STATE ROSTER
+          {t("mixesSub")}
         </p>
       </section>
 

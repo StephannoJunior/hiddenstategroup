@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import GlassBar from "./components/GlassBar";
 import { LangProvider } from "./lib/lang";
 import Home from "./pages/Home";
+import NotFound from "./pages/NotFound";
 import Records from "./pages/Records";
 import Agency from "./pages/Agency";
 import Artists from "./pages/Artists";
@@ -55,8 +56,8 @@ export default function App() {
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
 
-        {/* Unmatched URLs fall back to the homepage rather than a blank screen. */}
-        <Route path="*" element={<Home />} />
+        {/* Unknown URLs get a real page, not a silent redirect to home. */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
     </LangProvider>

@@ -1,0 +1,149 @@
+# Pages CMS configuration — https://pagescms.org
+#
+# This describes your content to the CMS so you get proper forms instead of
+# raw JSON. Nothing here affects the website itself; it only tells the editor
+# what fields exist and where they live.
+#
+# To start editing: go to pagescms.org, sign in with GitHub, grant access to
+# this repository, and it reads this file.
+
+media:
+  input: public
+  output: /
+
+content:
+  - name: news
+    label: News articles
+    type: file
+    path: src/content/news.json
+    list: true
+    fields:
+      - { name: slug, label: URL slug, type: string, required: true, description: "Lowercase with dashes. This becomes the web address, so never change it once published." }
+      - { name: headline, label: Headline, type: string, required: true }
+      - { name: summary, label: Summary, type: text, description: "One or two sentences, shown on the news index." }
+      - { name: date, label: Date shown, type: string, description: "e.g. 19 AUGUST 2026"}
+      - { name: sortDate, label: Sort date, type: date, description: "Controls the order. Newest first."}
+      - { name: issue, label: Issue number, type: string}
+      - { name: category, label: Main category, type: select, options: { values: [NEWS, ARTISTS, MUSIC, RECORDS, EVENTS, INTERVIEWS, INDUSTRY] } }
+      - { name: categories, label: Also show under, type: string, list: true }
+      - { name: poster, label: Poster image, type: image}
+      - { name: photo, label: Photo, type: image}
+      - { name: caption, label: Photo caption, type: string}
+      - { name: body, label: Paragraphs, type: text, list: true }
+      - { name: kicker, label: Kicker, type: string}
+      - { name: signoff, label: Sign-off, type: string}
+      - { name: tags, label: Tags, type: string, list: true }
+      - { name: footnote, label: Footnote, type: string}
+      - { name: link, label: Button link, type: string}
+      - { name: linkLabel, label: Button text, type: string}
+
+  - name: artists
+    label: Artists
+    type: file
+    path: src/content/artists.json
+    list: true
+    fields:
+      - { name: id, label: ID, type: number, required: true, description: "Must be unique. Used in the web address."}
+      - { name: name, label: Name, type: string, required: true }
+      - { name: alias, label: Also known as, type: string}
+      - { name: type, label: Type, type: select, options: { values: [DJ, Producer, Live Act] } }
+      - { name: genres, label: Genres, type: string, list: true }
+      - { name: country, label: Country, type: string}
+      - { name: location, label: Location, type: string}
+      - { name: desc, label: Short line, type: string, description: "One sentence, shown on the roster." }
+      - { name: bio, label: Biography, type: text}
+      - { name: photo, label: Photo, type: image}
+      - { name: poster, label: Newspaper poster, type: image}
+      - { name: instagram, label: Instagram key, type: string, description: "The key from src/lib/social.js, not the URL." }
+
+  - name: events
+    label: Events
+    type: file
+    path: src/content/events.json
+    list: true
+    fields:
+      - { name: id, label: ID, type: number, required: true }
+      - { name: slug, label: Slug, type: string}
+      - { name: status, label: Status, type: select, options: { values: [upcoming, past] }, description: "Set to past and it moves down the page automatically."}
+      - { name: name, label: Name, type: string, required: true }
+      - { name: subtitle, label: Subtitle, type: string}
+      - { name: date, label: Date shown, type: string}
+      - { name: sortDate, label: Sort date, type: date}
+      - { name: venue, label: Venue, type: string}
+      - { name: city, label: City, type: string}
+      - { name: country, label: Country, type: string}
+      - { name: artwork, label: Artwork, type: image, description: "Leave empty and a typographic panel is shown instead."}
+      - { name: description, label: Description, type: text}
+      - { name: facts, label: Facts, type: string, list: true }
+      - { name: lineup, label: Line-up, type: string, list: true }
+      - { name: lineupLabel, label: Line-up heading, type: string}
+      - { name: tagline, label: Tagline, type: string}
+      - { name: tickets, label: Ticket link, type: string}
+      - { name: website, label: Website, type: string}
+      - { name: article, label: Linked article slug, type: string}
+      - { name: photosLink, label: All-photos link, type: string}
+      - { name: photosLinkLabel, label: All-photos button text, type: string}
+      - { name: gallery, label: Gallery photos, type: image, list: true }
+
+  - name: records
+    label: Releases
+    type: file
+    path: src/content/records.json
+    list: true
+    fields:
+      - { name: slug, label: Slug, type: string, required: true }
+      - { name: title, label: Title, type: string, required: true }
+      - { name: artist, label: Artist, type: string}
+      - { name: kind, label: Kind, type: select, options: { values: [ALBUM, EP, SINGLE] } }
+      - { name: tagline, label: Tagline, type: string}
+      - { name: catalog, label: Catalogue number, type: string}
+      - { name: releaseDate, label: Release date, type: string}
+      - { name: cover, label: Cover, type: image}
+      - { name: playlist, label: Playlist link, type: string}
+      - { name: note, label: Note, type: text}
+      - name: tracks
+        label: Tracks
+        type: object
+        list: true
+        fields:
+          - { name: n, label: "No.", type: number}
+          - { name: title, label: Title, type: string}
+          - { name: cover, label: Cover, type: image}
+          - { name: youtube, label: YouTube video ID, type: string, description: "Just the ID — the part after youtu.be/"}
+
+  - name: mixes
+    label: Sessions & Radio
+    type: file
+    path: src/content/mixes.json
+    list: true
+    fields:
+      - { name: slug, label: Slug, type: string, required: true }
+      - { name: artistId, label: Artist ID, type: number, description: "Matches the ID on the Artists list."}
+      - { name: name, label: Name, type: string}
+      - { name: alias, label: Also known as, type: string}
+      - { name: photo, label: Photo, type: image}
+      - { name: genres, label: Genres, type: string, list: true }
+      - { name: intro, label: Intro, type: text}
+      - { name: comingSoon, label: "Coming soon?", type: boolean}
+      - { name: comingSoonNote, label: Coming-soon note, type: string}
+      - name: sections
+        label: Sections
+        type: object
+        list: true
+        fields:
+          - { name: label, label: Section heading, type: string}
+          - name: items
+            label: Mixes
+            type: object
+            list: true
+            fields:
+              - { name: title, label: Title, type: string}
+              - { name: url, label: Link, type: string}
+
+  - name: settings
+    label: Site text
+    type: file
+    path: src/content/settings.json
+    fields:
+      - { name: rosterNote, label: Note under the roster, type: string}
+      - { name: eventsNote, label: Note under events, type: string}

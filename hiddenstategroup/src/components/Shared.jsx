@@ -1,3 +1,4 @@
+import Img from "./Img";
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, Search } from "lucide-react";
@@ -5,6 +6,7 @@ import { MARK_SJ, MARK_SEAL, MARK_NOPROBLEM } from "../lib/marks";
 import { ARTISTS } from "../lib/data";
 import { SOCIAL } from "../lib/social";
 import { LiveDateline, LanguageSwitch } from "./Dateline";
+import { useLang } from "../lib/lang";
 import { FORM_ENDPOINT, CONTACT_EMAIL, BOOKING_EMAIL } from "../lib/config";
 
 /*
@@ -119,7 +121,9 @@ export function DoubleRule({ className = "" }) {
 export function Wordmark({ size = "h-9", dark = false }) {
   // The official line logo. `dark` picks the ink version for paper backgrounds.
   return (
-    <img loading="lazy" decoding="async"
+    <img
+      fetchpriority="high"
+      decoding="async"
       src={dark ? "/wordmark-black.png" : "/wordmark.png"}
       alt="Hidden State"
       className={`${size} w-auto block`}
@@ -145,7 +149,7 @@ export function MarkClipping({ src, alt, w = 92 }) {
       className="shrink-0 p-2"
       style={{ background: "#E9DCC3", border: "1px solid #2A2823" }}
     >
-      <img loading="lazy" decoding="async" src={src} alt={alt} style={{ width: w, display: "block" }} />
+      <Img src={src} alt={alt} style={{ width: w, display: "block" }} />
     </div>
   );
 }
@@ -172,6 +176,12 @@ export const NAV_ITEMS = [
 ];
 
 export function Nav() {
+  const { t } = useLang();
+  const navLabel = (item) => {
+    const map = { NEWS: "news", RECORDS: "records", AGENCY: "agency", ARTISTS: "artists",
+                  EVENTS: "events", MIXES: "mixes", ABOUT: "about", CONTACT: "contact" };
+    return map[item.label] ? t(map[item.label]) : item.label;
+  };
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
@@ -185,40 +195,51 @@ export function Nav() {
     <>
       <header
         className="fixed top-0 left-0 right-0 z-40"
-        style={{ background: theme.bg, borderBottom: `1px solid ${theme.ink}` }}
+        style={{
+          background: theme.bg,
+          borderBottom: `1px solid ${theme.ink}`,
+          transform: "translateZ(0)",
+          WebkitTransform: "translateZ(0)",
+        }}
       >
-        <div className="max-w-[1180px] mx-auto px-[18px] h-[76px] flex items-center justify-center relative">
-          <Link to="/"><Wordmark size="h-[38px]" dark /></Link>
-          <button
-            className="lg:hidden absolute right-[64px] top-1/2 -mt-[7px] w-[22px] h-[14px]"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            aria-label="Menu"
-          >
-            {mobileOpen ? <X size={20} color={theme.ink} strokeWidth={1.5} /> : <Menu size={20} color={theme.ink} strokeWidth={1.5} />}
-          </button>
-          <span className="absolute left-[18px] hidden md:inline">
+        <div className="max-w-[1180px] mx-auto px-[18px] h-[76px] grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+          {/* left — the dateline, on every size */}
+          <span className="justify-self-start min-w-0">
             <LiveDateline />
           </span>
-          <span className="absolute right-[18px] lg:hidden">
-            <LanguageSwitch compact />
-          </span>
-          <nav className="hidden lg:flex items-center gap-7 absolute right-[18px]">
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.label}
-                to={item.href}
-                className="text-[10.5px] pb-0.5"
-                style={{
-                  ...fontUtility, letterSpacing: "0.16em",
-                  color: isActive(item.href) ? theme.brass : theme.ink2,
-                  borderBottom: `2px solid ${isActive(item.href) ? theme.brass : "transparent"}`,
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
+
+          {/* centre — the logo, which now cannot be crowded by either side */}
+          <Link to="/" className="justify-self-center shrink-0">
+            <Wordmark size="h-[38px]" dark />
+          </Link>
+
+          {/* right — nav on desktop, language + burger on mobile */}
+          <div className="justify-self-end flex items-center gap-4 min-w-0">
+            <nav className="hidden lg:flex items-center gap-7">
+              {NAV_ITEMS.map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.href}
+                  className="text-[10.5px] pb-0.5 whitespace-nowrap"
+                  style={{
+                    ...fontUtility, letterSpacing: "0.16em",
+                    color: isActive(item.href) ? theme.brass : theme.ink2,
+                    borderBottom: `2px solid ${isActive(item.href) ? theme.brass : "transparent"}`,
+                  }}
+                >
+                  {navLabel(item)}
+                </Link>
+              ))}
+            </nav>
             <LanguageSwitch />
-          </nav>
+            <button
+              className="lg:hidden"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              aria-label="Menu"
+            >
+              {mobileOpen ? <X size={20} color={theme.ink} strokeWidth={1.5} /> : <Menu size={20} color={theme.ink} strokeWidth={1.5} />}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -230,7 +251,7 @@ export function Nav() {
           {NAV_ITEMS.map((item, i) => (
             <Link key={item.label} to={item.href} onClick={() => setMobileOpen(false)}
               className="py-4 flex items-baseline justify-between" style={{ borderBottom: `1px solid ${theme.rule}` }}>
-              <span style={{ ...fontDisplay, fontSize: "30px", color: theme.ink }}>{item.label}</span>
+              <span style={{ ...fontDisplay, fontSize: "30px", color: theme.ink }}>{navLabel(item)}</span>
               <span style={{ ...fontUtility, fontSize: "10px", color: theme.brass, letterSpacing: "0.1em" }}>0{i + 1}</span>
             </Link>
           ))}
@@ -459,7 +480,7 @@ export function ArticleCard({ article }) {
       className="group relative flex flex-col overflow-hidden h-full"
     >
       <div className={`relative overflow-hidden ${article.span === "wide" ? "aspect-[21/9]" : article.span === "lg" ? "aspect-[4/5] md:aspect-auto md:h-full md:min-h-[420px]" : "aspect-[4/3]"}`}>
-        <img loading="lazy" decoding="async"
+        <Img
           src={article.image}
           alt=""
           className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"

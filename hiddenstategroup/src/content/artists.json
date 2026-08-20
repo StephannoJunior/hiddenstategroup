@@ -1,0 +1,118 @@
+[
+  {
+    "id": 1,
+    "name": "Stephanno Jr.",
+    "type": "DJ",
+    "genres": [
+      "Afro House",
+      "Afro Tech",
+      "Deep House"
+    ],
+    "country": "Romania",
+    "location": "Romania",
+    "desc": "DJ, producer and founder of Hidden State.",
+    "bio": "As a DJ, producer and founder of Hidden State and all its divisions, Stephanno Jr. continues to build his own universe within the electronic music scene — connecting music, events, artists and creative experiences under one vision. Bringing his signature sound across Afro House, Afro Tech and Deep House, he plays with a sound shaped by years behind the decks and a constant drive to create something of his own.",
+    "photo": "/portrait.webp",
+    "poster": "/news/posters/stephanno-astryon.webp",
+    "instagram": "stephannojr",
+    "soundcloud": null,
+    "releases": [],
+    "upcoming": [
+      {
+        "name": "Astryon Festival",
+        "date": "18–20 JUN 2027",
+        "venue": "Romania — Main Stage"
+      }
+    ],
+    "past": []
+  },
+  {
+    "id": 2,
+    "name": "DJ Tengu",
+    "type": "DJ",
+    "genres": [
+      "Old School Hip-Hop",
+      "R&B",
+      "Funk",
+      "Soul",
+      "Classic Urban"
+    ],
+    "country": null,
+    "location": null,
+    "desc": "Old soul, real music, new energy.",
+    "bio": "DJ Tengu is driven by passion, talent, and a genuine love for music. With experience behind the decks and an unmistakable old-school spirit, he brings a sound that connects generations and keeps the energy alive. His selections travel through the golden sounds of old school hip-hop, R&B, funk, soul, rap and classic urban music, blending timeless records with his own style and personality. For DJ Tengu, music is more than just playing tracks — it's about creating an atmosphere, telling a story and making people feel every beat.",
+    "photo": "/news/dj-tengu.webp",
+    "poster": "/news/posters/dj-tengu.webp",
+    "instagram": "djtengu",
+    "soundcloud": null,
+    "releases": [],
+    "upcoming": [],
+    "past": []
+  },
+  {
+    "id": 3,
+    "name": "Mario Daniel",
+    "alias": "DJ Mario",
+    "type": "DJ",
+    "genres": [
+      "Afro House",
+      "House"
+    ],
+    "country": null,
+    "location": null,
+    "desc": "Deep grooves, rhythm and energy.",
+    "bio": "DJ Mario brings together the energy, warmth and hypnotic character of Afro House in sets designed to be felt from beginning to end. With a carefully selected tracklist, flowing transitions and a strong focus on rhythm, his Fill & Dance set explores the deeper and more energetic side of Afro House — moving naturally between atmospheric moments, powerful grooves and uplifting rhythms. More than a collection of tracks, it captures his approach to music: letting the rhythm build naturally while keeping the energy alive throughout the entire journey.",
+    "photo": "/artists/dj-mario.webp",
+    "poster": "/news/posters/dj-mario.webp",
+    "instagram": "djmario",
+    "soundcloud": null,
+    "releases": [],
+    "upcoming": [],
+    "past": []
+  },
+  {
+    "id": 4,
+    "name": "B.MIKE",
+    "alias": "Heartbeat Vibes",
+    "type": "DJ",
+    "genres": [
+      "2000s Retro",
+      "EDM",
+      "House",
+      "Tech-House",
+      "Drum & Bass"
+    ],
+    "country": "Romania",
+    "location": "Romania",
+    "desc": "Turning passion into ability, and ability into music.",
+    "bio": "B.MIKE started DJing in 2022 and is part of OWPN Academy. Since then he has played major festivals including UNTOLD, Electric Castle, Flight Festival, Take Off Festival, Codru Festival, Snow Fest France, Nassau Festival, Univibes and Takeover, alongside venues across Romania such as Fratelli Timisoara, Form Space Cluj and Underground Pub Iasi — sharing stages with Carla's Dreams, DJ Project, Alina Eremia, Feli, Elena Gheorghe and Lidia Buble. His awards include the Timisoara Music Awards New Talent Award (2023) and Tech-House Award (2024), a place among the five Drum & Bass finalists (2025), and an Excellence Award from Flight Festival in 2025. Since March 2026 he has been part of EPICA, a charitable music project alongside Pascal Junior, Jayko, Silviu Andrei and Mindblow. His sets move between 2000s retro, EDM, house, tech-house and drum & bass, running anywhere from 128 to 175 BPM.",
+    "photo": "/artists/b-mike.webp",
+    "poster": "/news/posters/b-mike.webp",
+    "instagram": null,
+    "releases": [],
+    "upcoming": [],
+    "past": []
+  },
+  {
+    "id": 5,
+    "name": "DJ Stephanno",
+    "alias": "Model 1",
+    "type": "DJ",
+    "genres": [
+      "House",
+      "Techno",
+      "Vinyl"
+    ],
+    "country": "Romania",
+    "location": "Romania",
+    "desc": "Two decades of experience. One passion. Pure vinyl.",
+    "bio": "With over 20 years behind the decks, DJ Stephanno / Model 1 is a true lover of the art of DJing. A vinyl-driven artist with a deep connection to the roots of electronic music, he brings together the timeless character of house and techno with experience, instinct and an authentic underground spirit. His sets are built around groove, atmosphere and storytelling, allowing the music to speak naturally and the dancefloor to become part of the journey.",
+    "photo": "/artists/dj-stephanno-model1.webp",
+    "poster": "/news/posters/dj-stephanno-model1.webp",
+    "instagram": "djstephanno",
+    "instagramExtra": "circoloco",
+    "releases": [],
+    "upcoming": [],
+    "past": []
+  }
+]

@@ -1,4 +1,6 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
 import React from "react";
 import { Link } from "react-router-dom";
 import {
@@ -9,6 +11,7 @@ import { EVENTS, EVENTS_NOTE } from "../lib/data";
 
 // Shown when an event has no artwork yet — set in type rather than a broken image.
 function EventPlate({ e, big = false }) {
+  const { t } = useLang();
   return (
     <div className="flex flex-col items-center justify-center text-center px-4"
          style={{ background: theme.ink, color: theme.bg, aspectRatio: "1 / 1" }}>
@@ -28,13 +31,14 @@ function EventPlate({ e, big = false }) {
 }
 
 function Card({ e }) {
+  const { t } = useLang();
   const past = e.status === "past";
   return (
     <Link to={`/events/${e.id}`} className="block">
       <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
         {e.artwork ? (
-          <img loading="lazy" decoding="async" src={e.artwork} alt="" className="w-full block"
+          <Img src={e.artwork} alt="" className="w-full block"
                style={{ background: theme.raised, filter: past ? "grayscale(55%)" : "none" }} />
         ) : (
           <EventPlate e={e} />
@@ -61,7 +65,7 @@ function Card({ e }) {
           <span className="inline-block mt-4 pb-0.5"
                 style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em", color: theme.ink,
                          borderBottom: "1px solid " + theme.brass }}>
-            FULL DETAILS
+            {t("fullDetails")}
           </span>
         </div>
       </article>
@@ -71,21 +75,22 @@ function Card({ e }) {
 
 export default function Events() {
   useGoogleFonts();
+  const { t } = useLang();
   usePageMeta({ title: "Events", description: "Nights, festivals and experiences from Hidden State." });
   const upcoming = EVENTS.filter((e) => e.status !== "past");
   const past = EVENTS.filter((e) => e.status === "past");
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
       <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
         <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          The Events
+          {t("theEvents")}
         </h1>
         <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
         <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
         <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
-          NIGHTS, FESTIVALS &amp; EXPERIENCES
+          {t("eventsSub")}
         </p>
       </section>
 
@@ -95,7 +100,7 @@ export default function Events() {
         {past.length > 0 && (
           <>
             <p className="mt-10 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-              PAST EVENTS
+              {t("pastEvents")}
             </p>
             {past.map((e) => <Card key={e.id} e={e} />)}
           </>

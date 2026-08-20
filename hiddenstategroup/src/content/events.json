@@ -1,0 +1,182 @@
+[
+  {
+    "id": 1,
+    "slug": "astryon-festival-2027",
+    "status": "upcoming",
+    "name": "Astryon Festival",
+    "subtitle": "The First Chapter",
+    "date": "18–20 JUNE 2027",
+    "sortDate": "2027-06-18",
+    "venue": "Main Stage",
+    "city": "Black Sea Coast",
+    "country": "Romania",
+    "artwork": null,
+    "description": "Three days of electronic music on Romania's Black Sea coast, with more than 200 DJs and producers playing across multiple stages — techno, house, Afro House and further out into ambient and experimental. Stephanno Jr. takes the main stage.",
+    "facts": [
+      "72 HOURS OF MUSIC",
+      "OVER 200 ARTISTS",
+      "MULTIPLE STAGES"
+    ],
+    "lineup": [
+      "Stephanno Jr."
+    ],
+    "tickets": "https://www.astryonfestival.com/tickets",
+    "website": "https://www.astryonfestival.com",
+    "instagram": "astryon",
+    "gallery": []
+  },
+  {
+    "id": 2,
+    "slug": "creamfields-2026",
+    "status": "upcoming",
+    "name": "Creamfields",
+    "subtitle": "Daresbury, UK",
+    "date": "27–30 AUGUST 2026",
+    "sortDate": "2026-08-27",
+    "venue": null,
+    "city": "Daresbury",
+    "country": "United Kingdom",
+    "artwork": "/news/posters/creamfields-calvin-harris.webp",
+    "description": "Four nights at Daresbury with Calvin Harris, Martin Garrix, Armin van Buuren and Tiësto among the headliners.",
+    "facts": [
+      "4 NIGHTS",
+      "DARESBURY, UK"
+    ],
+    "lineup": [
+      "Calvin Harris",
+      "Martin Garrix",
+      "Armin van Buuren",
+      "Tiësto"
+    ],
+    "lineupLabel": "— HEADLINERS —",
+    "tickets": null,
+    "website": null,
+    "article": "creamfields-2026",
+    "gallery": []
+  },
+  {
+    "id": 3,
+    "slug": "black-coffee-hi-ibiza",
+    "status": "upcoming",
+    "name": "Black Coffee",
+    "subtitle": "Hi Ibiza",
+    "date": "22 AUG – 3 OCT 2026",
+    "sortDate": "2026-08-22",
+    "venue": "Hi Ibiza",
+    "city": "Ibiza",
+    "country": "Spain",
+    "artwork": "/news/posters/black-coffee.webp",
+    "description": "Black Coffee's Ibiza dates run through August and September, closing on 3 October.",
+    "facts": [
+      "AUG 22, 29",
+      "SEP 5, 12, 19, 26",
+      "CLOSING SET OCT 3"
+    ],
+    "lineup": [
+      "Black Coffee"
+    ],
+    "tickets": null,
+    "website": null,
+    "article": "black-coffee-hi-ibiza",
+    "gallery": []
+  },
+  {
+    "id": 4,
+    "slug": "indira-paganotto-hi-ibiza",
+    "status": "upcoming",
+    "name": "Indira Paganotto",
+    "subtitle": "Hi Ibiza",
+    "date": "23 AUG – 4 OCT 2026",
+    "sortDate": "2026-08-23",
+    "venue": "Hi Ibiza",
+    "city": "Ibiza",
+    "country": "Spain",
+    "artwork": "/news/posters/indira-paganotto.webp",
+    "description": "Indira Paganotto's psy-techno residency runs through August and September, closing on 4 October.",
+    "facts": [
+      "AUG 23, 30",
+      "SEP 6, 13, 20, 27",
+      "CLOSING SET OCT 4"
+    ],
+    "lineup": [
+      "Indira Paganotto"
+    ],
+    "tickets": null,
+    "website": null,
+    "article": "indira-paganotto-hi-ibiza",
+    "gallery": []
+  },
+  {
+    "id": 5,
+    "slug": "miss-monique-hi-ibiza",
+    "status": "upcoming",
+    "name": "Miss Monique",
+    "subtitle": "Hi Ibiza",
+    "date": "20 AUG – 24 SEP 2026",
+    "sortDate": "2026-08-20",
+    "venue": "Hi Ibiza",
+    "city": "Ibiza",
+    "country": "Spain",
+    "artwork": "/news/posters/miss-monique.webp",
+    "description": "Miss Monique plays Hi Ibiza across August and September, with a closing set on 24 September.",
+    "facts": [
+      "AUG 20, 27",
+      "SEP 3, 10, 17",
+      "CLOSING SET SEP 24"
+    ],
+    "lineup": [
+      "Miss Monique"
+    ],
+    "tickets": null,
+    "website": null,
+    "article": "miss-monique-hi-ibiza",
+    "gallery": []
+  },
+  {
+    "id": 6,
+    "slug": "euphoria",
+    "status": "past",
+    "name": "Euphoria",
+    "subtitle": "An Obscure Experience",
+    "date": "6 MARCH 2026",
+    "sortDate": "2026-03-06",
+    "venue": null,
+    "city": null,
+    "country": null,
+    "artwork": "/events/euphoria-poster.webp",
+    "description": "Euphoria brought Stephanno Jr. and Mario Daniel together behind the decks for the night, with CEASE playing alongside them and a special guest on the bill. All genres, one room, doors at 19:00.",
+    "facts": [
+      "ALL GENRES",
+      "DOORS 19:00",
+      "SPECIAL GUEST"
+    ],
+    "lineup": [
+      "Stephanno Jr.",
+      "Mario Daniel",
+      "CEASE"
+    ],
+    "lineupLabel": "— ARTISTS PERFORMING —",
+    "tagline": "Be euphoric, be there.",
+    "tickets": null,
+    "website": null,
+    "article": null,
+    "photosLink": "https://www.dropbox.com/scl/fi/i977jp8rgasjqdig12j90/EUPHORIA.zip?rlkey=vy198l3nlhnd77iwkr0gr70rg&dl=1",
+    "photosLinkLabel": "EUPHORIA PHOTOS",
+    "gallery": [
+      "/events/euphoria/01.webp",
+      "/events/euphoria/02.webp",
+      "/events/euphoria/03.webp",
+      "/events/euphoria/04.webp",
+      "/events/euphoria/05.webp",
+      "/events/euphoria/06.webp",
+      "/events/euphoria/07.webp",
+      "/events/euphoria/08.webp",
+      "/events/euphoria/09.webp",
+      "/events/euphoria/10.webp",
+      "/events/euphoria/11.webp",
+      "/events/euphoria/12.webp",
+      "/events/euphoria/13.webp",
+      "/events/euphoria/14.webp"
+    ]
+  }
+]

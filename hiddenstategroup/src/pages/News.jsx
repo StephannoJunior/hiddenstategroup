@@ -1,4 +1,6 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -16,11 +18,12 @@ import { SOCIAL } from "../lib/social";
 const CATS = ["ALL", "NEWS", "ARTISTS", "MUSIC", "RECORDS", "EVENTS", "INTERVIEWS", "INDUSTRY"];
 
 function Issue({ a }) {
+  const { t } = useLang();
   return (
     <Link to={`/news/${a.slug}`} className="block group">
       <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
                style={{ borderBottom: "1px solid " + theme.rule }}>
-        <img loading="lazy" decoding="async" src={a.photo || a.poster} alt="" className="w-full block"
+        <Img src={a.photo || a.poster} alt="" className="w-full block"
              style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
         <div>
           <div className="flex flex-wrap gap-x-4 gap-y-1"
@@ -40,7 +43,7 @@ function Issue({ a }) {
           <span className="inline-block mt-4 pb-0.5"
                 style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em", color: theme.ink,
                          borderBottom: "1px solid " + theme.brass }}>
-            READ THE FULL STORY
+            {t("readFullStory")}
           </span>
         </div>
       </article>
@@ -50,6 +53,7 @@ function Issue({ a }) {
 
 export default function News() {
   useGoogleFonts();
+  const { t } = useLang();
   usePageMeta({ title: "News", description: "Announcements, signings and dispatches from inside Hidden State." });
   const [active, setActive] = useState("ALL");
   const inTab = (a, tab) =>
@@ -57,12 +61,12 @@ export default function News() {
   const shown = ARTICLES.filter((a) => inTab(a, active));
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
       <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] pb-2 text-center">
         <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          Daily News
+          {t("dailyNews")}
         </h1>
         <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
         <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />

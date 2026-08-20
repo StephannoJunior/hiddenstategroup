@@ -1,4 +1,6 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
 import React, { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -12,6 +14,7 @@ import { MIX_ARTISTS } from "../lib/mixes";
 
 export default function ArtistProfile() {
   useGoogleFonts();
+  const { t } = useLang();
   const { id } = useParams();
   const [drawer, setDrawer] = useState(false);
   const a = ARTISTS.find((x) => String(x.id) === id);
@@ -19,7 +22,7 @@ export default function ArtistProfile() {
 
   if (!a) {
     return (
-      <div style={{ background: theme.bg, minHeight: "100vh" }}>
+      <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
         <Nav />
         <section className="max-w-[1180px] mx-auto px-[18px] pt-[140px] pb-24 text-center">
           <h1 style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(28px,6vw,44px)" }}>
@@ -37,7 +40,7 @@ export default function ArtistProfile() {
   }
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
       <article className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-16">
@@ -73,7 +76,7 @@ export default function ArtistProfile() {
         </p>
 
         <figure className="m-0 mt-6">
-          <img loading="lazy" decoding="async" src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
+          <Img src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
           <figcaption className="pt-1.5 mt-1.5"
             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
                      borderTop: "1px solid " + theme.rule }}>
@@ -88,12 +91,12 @@ export default function ArtistProfile() {
 
         {a.poster && (
           <figure className="m-0 mt-8">
-            <img loading="lazy" decoding="async" src={a.poster} alt={a.name} className="w-full block"
+            <Img src={a.poster} alt={a.name} className="w-full block"
                  style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
             <figcaption className="pt-1.5 mt-1.5"
               style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
                        borderTop: "1px solid " + theme.rule }}>
-              THE PRINTED ISSUE
+              {t("printedIssue")}
             </figcaption>
           </figure>
         )}

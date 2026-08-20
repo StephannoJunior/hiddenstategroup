@@ -19,16 +19,40 @@ export function LiveDateline() {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30000);
-    return () => clearInterval(id);
+    // Line up with the clock: wait until the next whole minute, then tick
+    // every minute. Polling every 30s meant the displayed time could sit up
+    // to half a minute behind, which is what made it look frozen.
+    let interval;
+    const msToNextMinute = 60000 - (Date.now() % 60000);
+    const timeout = setTimeout(() => {
+      setNow(new Date());
+      interval = setInterval(() => setNow(new Date()), 60000);
+    }, msToNextMinute);
+
+    // Phones suspend timers when the screen locks or the tab is hidden, so
+    // refresh the moment the page becomes visible again.
+    const onVisible = () => { if (!document.hidden) setNow(new Date()); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
+    return () => {
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, []);
 
   let date = "";
+  let dateShort = "";
   let time = "";
   let zone = "";
   try {
     date = new Intl.DateTimeFormat(lang, {
       weekday: "long", day: "numeric", month: "long", year: "numeric",
+    }).format(now);
+    dateShort = new Intl.DateTimeFormat(lang, {
+      day: "numeric", month: "short",
     }).format(now);
     time = new Intl.DateTimeFormat(lang, { hour: "2-digit", minute: "2-digit" }).format(now);
     zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
@@ -39,10 +63,11 @@ export function LiveDateline() {
 
   return (
     <span
-      style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", color: theme.ink2 }}
+      style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.14em", color: theme.ink2, whiteSpace: "nowrap" }}
       title={zone ? `Your time — ${zone}` : undefined}
     >
-      {date.toUpperCase()} · {time}
+      <span className="hidden md:inline">{date.toUpperCase()} · {time}</span>
+      <span className="md:hidden">{(dateShort || date).toUpperCase()} · {time}</span>
     </span>
   );
 }

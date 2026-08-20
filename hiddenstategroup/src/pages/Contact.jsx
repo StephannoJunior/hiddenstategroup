@@ -1,4 +1,5 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
 import React, { useState } from "react";
 import {
   Nav, Footer, useGoogleFonts, Field, inputStyle, Instagram,
@@ -13,6 +14,7 @@ const initialForm = { name: "", email: "", reason: "General Inquiry", message: "
 
 export default function Contact() {
   useGoogleFonts();
+  const { t } = useLang();
   usePageMeta({ title: "Contact", description: "Get in touch with Hidden State — booking, press, demos and management." });
   const [form, setForm] = useState(initialForm);
   const [submitted, setSubmitted] = useState(false);
@@ -45,7 +47,7 @@ export default function Contact() {
   };
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
       <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
@@ -108,7 +110,7 @@ export default function Contact() {
 
         <aside>
           <p className="m-0 mb-1" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-            DIRECT
+            {t("direct")}
           </p>
           <div style={{ borderTop: "1px solid " + theme.ink }}>
             {Object.values(EMAILS).map((e) => (
@@ -122,7 +124,7 @@ export default function Contact() {
             ))}
           </div>
           <p className="m-0 mt-7 mb-2" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-            SOCIAL
+            {t("social")}
           </p>
           <div className="flex flex-wrap gap-x-5 gap-y-2">
             <Instagram account={SOCIAL.official} />

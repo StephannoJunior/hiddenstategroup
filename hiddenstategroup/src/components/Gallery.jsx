@@ -1,3 +1,5 @@
+import { useLang } from "../lib/lang";
+import Img from "./Img";
 import React, { useState } from "react";
 import { fontUtility, fontDisplay, fontText, theme } from "./Shared";
 
@@ -22,6 +24,7 @@ function fileNameFor(src, i, prefix) {
 }
 
 export default function Gallery({ photos = [], prefix = "hidden-state", title = null }) {
+  const { t } = useLang();
   const [zipping, setZipping] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -78,7 +81,7 @@ export default function Gallery({ photos = [], prefix = "hidden-state", title = 
   return (
     <section className="mt-10">
       <p className="m-0 mb-1" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-        {title || "FROM THE NIGHT"}
+        {title || t("fromTheNight")}
       </p>
       <div style={{ borderTop: "1px solid " + theme.ink }} />
 
@@ -110,7 +113,7 @@ export default function Gallery({ photos = [], prefix = "hidden-state", title = 
           <figure key={src} className="m-0 relative">
             <button onClick={() => setLightbox(src)} className="block w-full"
                     aria-label={`Open photo ${i + 1}`}>
-              <img loading="lazy" decoding="async" src={src} alt="" className="w-full block"
+              <Img src={src} alt="" className="w-full block"
                    style={{ aspectRatio: "1 / 1", objectFit: "cover", background: theme.raised }} />
             </button>
             <button
@@ -134,7 +137,7 @@ export default function Gallery({ photos = [], prefix = "hidden-state", title = 
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"
              style={{ background: "rgba(22,19,14,0.92)" }}
              onClick={() => setLightbox(null)}>
-          <img loading="lazy" decoding="async" src={lightbox} alt="" style={{ maxWidth: "100%", maxHeight: "86vh", display: "block" }} />
+          <Img src={lightbox} alt="" style={{ maxWidth: "100%", maxHeight: "86vh", display: "block" }} />
           <button onClick={() => setLightbox(null)}
                   className="absolute top-4 right-4 px-4 py-2"
                   style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em",

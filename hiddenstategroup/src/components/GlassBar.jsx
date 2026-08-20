@@ -40,9 +40,17 @@ export default function GlassBar() {
 
   useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener("scroll", close, { passive: true });
-    return () => window.removeEventListener("scroll", close);
+    // One frame of throttling: the raw scroll event fires dozens of times a
+    // second, and setting state on each was extra work during exactly the
+    // moment the bar needed to stay smooth.
+    let queued = false;
+    const onScroll = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; setOpen(false); });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, [open]);
 
   useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current); }, []);
@@ -167,7 +175,17 @@ export default function GlassBar() {
 
       <div
         className="fixed left-0 right-0 z-[79] lg:hidden flex justify-center px-4"
-        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 34px)" }}
+        style={{
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 34px)",
+          // Own compositor layer — stops the bar lagging behind on iOS
+          // momentum scroll and snapping back when it ends.
+          transform: "translateZ(0)",
+          WebkitTransform: "translateZ(0)",
+          willChange: "transform",
+          backfaceVisibility: "hidden",
+          WebkitBackfaceVisibility: "hidden",
+          contain: "layout paint",
+        }}
       >
         <div className="relative w-full max-w-[520px] flex justify-center">
           <div

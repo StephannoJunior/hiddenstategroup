@@ -1,4 +1,6 @@
 import { usePageMeta, useEventSchema } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -12,6 +14,7 @@ import { SOCIAL } from "../lib/social";
 
 export default function EventDetail() {
   useGoogleFonts();
+  const { t } = useLang();
   const { id } = useParams();
   const e = EVENTS.find((x) => String(x.id) === id || x.slug === id);
   usePageMeta({
@@ -24,7 +27,7 @@ export default function EventDetail() {
 
   if (!e) {
     return (
-      <div style={{ background: theme.bg, minHeight: "100vh" }}>
+      <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
         <Nav />
         <section className="max-w-[1180px] mx-auto px-[18px] pt-[140px] pb-24 text-center">
           <h1 style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(28px,6vw,44px)" }}>
@@ -45,7 +48,7 @@ export default function EventDetail() {
   const place = [e.venue, e.city, e.country].filter(Boolean).join(" · ");
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
       <article className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-16">
@@ -83,7 +86,7 @@ export default function EventDetail() {
 
         {e.artwork ? (
           <figure className="m-0 mt-6">
-            <img loading="lazy" decoding="async" src={e.artwork} alt={e.name} className="w-full block"
+            <Img src={e.artwork} alt={e.name} className="w-full block"
                  style={{ background: theme.raised, filter: past ? "grayscale(55%)" : "none" }} />
           </figure>
         ) : (
@@ -135,11 +138,11 @@ export default function EventDetail() {
           {e.tickets ? (
             <a href={e.tickets} target="_blank" rel="noopener noreferrer" className="inline-block px-10 py-3.5"
                style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em", background: theme.ink, color: theme.bg }}>
-              GET TICKETS
+              {t("getTickets")}
             </a>
           ) : !past ? (
             <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em", color: theme.ink2 }}>
-              TICKET LINK COMING SOON
+              {t("ticketsSoon")}
             </p>
           ) : null}
           {e.instagram && SOCIAL[e.instagram] && (
@@ -152,7 +155,7 @@ export default function EventDetail() {
               <Link to={`/news/${e.article}`} className="pb-0.5"
                     style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em", color: theme.ink2,
                              borderBottom: "1px solid " + theme.rule }}>
-                READ THE FULL STORY
+                {t("readFullStory")}
               </Link>
             </p>
           )}

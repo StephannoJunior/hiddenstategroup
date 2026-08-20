@@ -1,4 +1,7 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
+import { ReadingProgress, ShareRow, BackToTop, readingTime } from "../components/ArticleExtras";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -10,13 +13,14 @@ import { getArticle, ARTICLES } from "../lib/news";
 
 export default function NewsArticle() {
   useGoogleFonts();
+  const { t } = useLang();
   const { slug } = useParams();
   const a = getArticle(slug);
   usePageMeta({ title: a ? a.headline : "Story", description: a ? a.summary : "Hidden State news.", image: a ? (a.photo || a.poster) : null, type: "article" });
 
   if (!a) {
     return (
-      <div style={{ background: theme.bg, minHeight: "100vh" }}>
+      <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
         <Nav />
         <section className="max-w-[1180px] mx-auto px-[18px] pt-[140px] pb-24 text-center">
           <h1 style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(28px,6vw,44px)" }}>
@@ -33,11 +37,14 @@ export default function NewsArticle() {
     );
   }
 
-  const others = ARTICLES.filter((x) => x.slug !== a.slug).slice(0, 2);
+  const idx = ARTICLES.findIndex((x) => x.slug === slug);
+  const prev = idx > 0 ? ARTICLES[idx - 1] : null;
+  const next = idx > -1 && idx < ARTICLES.length - 1 ? ARTICLES[idx + 1] : null;
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
+      <ReadingProgress />
 
       <article className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-16">
         <Link to="/news" className="inline-flex items-center gap-2 mb-6"
@@ -46,18 +53,18 @@ export default function NewsArticle() {
         </Link>
 
         <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,6.5vw,42px)" }}>
-          Daily News
+          {t("dailyNews")}
         </h1>
         <div className="flex justify-between py-1.5 mt-2"
              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
                       borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
           <span>{a.issue}</span>
-          <span>{a.category}</span>
+          <span>{readingTime(a.body)} {t("minRead")}</span>
           <span>{a.date}</span>
         </div>
 
         <h2 className="text-center mt-6 mb-4" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8.5vw,56px)", lineHeight: 1 }}>
-          Breaking News
+          {t("breakingNews")}
         </h2>
 
         <p className="text-center py-2.5 m-0"
@@ -70,21 +77,21 @@ export default function NewsArticle() {
           <figure className="m-0 mt-6">
             <div className={(a.posters || []).length > 1 ? "grid grid-cols-2 gap-3" : ""}>
               {(a.posters || [a.poster]).map((src) => (
-                <img loading="lazy" decoding="async" key={src} src={src} alt={a.headline} className="w-full block"
+                <Img key={src} src={src} alt={a.headline} className="w-full block"
                      style={{ background: theme.raised, border: "1px solid " + theme.rule }} />
               ))}
             </div>
             <figcaption className="pt-1.5 mt-1.5"
               style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
                        borderTop: "1px solid " + theme.rule }}>
-              {(a.posters || []).length > 1 ? "THE PRINTED ISSUES" : "THE PRINTED ISSUE"}
+              {(a.posters || []).length > 1 ? t("printedIssues") : t("printedIssue")}
             </figcaption>
           </figure>
         )}
 
         {a.photo && (
           <figure className="m-0 mt-6">
-            <img loading="lazy" decoding="async" src={a.photo} alt={a.headline} className="w-full block" style={{ background: theme.raised }} />
+            <Img src={a.photo} alt={a.headline} className="w-full block" style={{ background: theme.raised }} />
             <figcaption className="pt-1.5 mt-1.5"
               style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
                        borderTop: "1px solid " + theme.rule }}>
@@ -174,26 +181,39 @@ export default function NewsArticle() {
         )}
       </article>
 
-      {others.length > 0 && (
-        <section className="max-w-[900px] mx-auto px-[18px] pb-20">
-          <div style={{ borderTop: "2px solid " + theme.ink }} className="mb-5" />
-          <p className="m-0 mb-4" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-            MORE FROM HIDDEN STATE
-          </p>
-          {others.map((o) => (
-            <Link key={o.slug} to={`/news/${o.slug}`} className="flex gap-4 py-4"
-                  style={{ borderTop: "1px solid " + theme.rule }}>
-              <img loading="lazy" decoding="async" src={o.photo || o.poster} alt="" className="block" style={{ width: "84px", background: theme.raised }} />
-              <span>
-                <span className="block" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
-                  {o.date}
+      <section className="max-w-[900px] mx-auto px-[18px] pb-4">
+        <div className="flex flex-wrap justify-center gap-x-6 gap-y-3 pt-6"
+             style={{ borderTop: "1px solid " + theme.rule }}>
+          <ShareRow title={a.headline} />
+        </div>
+      </section>
+
+      {(prev || next) && (
+        <section className="max-w-[900px] mx-auto px-[18px] pb-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6"
+               style={{ borderTop: "2px solid " + theme.ink }}>
+            {prev ? (
+              <Link to={`/news/${prev.slug}`} className="block py-3">
+                <span className="block" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.brass }}>
+                  ← {t("previous")}
                 </span>
-                <span className="block mt-1" style={{ ...fontDisplay, fontSize: "19px", color: theme.ink, lineHeight: 1.2 }}>
-                  {o.headline}
+                <span className="block mt-1.5" style={{ ...fontDisplay, fontSize: "20px", lineHeight: 1.25, color: theme.ink }}>
+                  {prev.headline}
                 </span>
-              </span>
-            </Link>
-          ))}
+              </Link>
+            ) : <span />}
+            {next ? (
+              <Link to={`/news/${next.slug}`} className="block py-3 md:text-right">
+                <span className="block" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.brass }}>
+                  {t("next")} →
+                </span>
+                <span className="block mt-1.5" style={{ ...fontDisplay, fontSize: "20px", lineHeight: 1.25, color: theme.ink }}>
+                  {next.headline}
+                </span>
+              </Link>
+            ) : <span />}
+          </div>
+          <BackToTop />
         </section>
       )}
 

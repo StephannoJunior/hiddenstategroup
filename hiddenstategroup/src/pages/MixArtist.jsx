@@ -1,4 +1,6 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -12,13 +14,14 @@ import { SOCIAL } from "../lib/social";
 
 export default function MixArtist() {
   useGoogleFonts();
+  const { t } = useLang();
   const { slug } = useParams();
   const a = getMixArtist(slug);
   usePageMeta({ title: a ? `${a.name} — Sessions` : "Sessions", description: a ? a.intro : "Recorded sets from the Hidden State roster.", image: a ? a.photo : null });
 
   if (!a) {
     return (
-      <div style={{ background: theme.bg, minHeight: "100vh" }}>
+      <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
         <Nav />
         <section className="max-w-[1180px] mx-auto px-[18px] pt-[140px] pb-24 text-center">
           <h1 style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(28px,6vw,44px)" }}>
@@ -38,7 +41,7 @@ export default function MixArtist() {
   const profile = ARTISTS.find((x) => x.id === a.artistId);
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
       <article className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-16">
@@ -48,7 +51,7 @@ export default function MixArtist() {
         </Link>
 
         <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,6.5vw,42px)" }}>
-          Sessions &amp; Radio
+          {t("sessionsRadio")}
         </h1>
         <div className="flex justify-between py-1.5 mt-2"
              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
@@ -73,7 +76,7 @@ export default function MixArtist() {
         </p>
 
         <figure className="m-0 mt-6">
-          <img loading="lazy" decoding="async" src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
+          <Img src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
         </figure>
 
         <div className="md:columns-2 md:gap-x-9 mt-6"

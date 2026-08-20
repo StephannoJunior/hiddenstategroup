@@ -1,4 +1,5 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
 import React from "react";
 import { Link } from "react-router-dom";
 import {
@@ -20,9 +21,10 @@ const DIVISIONS = [
 
 export default function About() {
   useGoogleFonts();
+  const { t } = useLang();
   usePageMeta({ title: "About", description: "One artist building a universe around a sound. Records, agency, events." });
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
       <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
@@ -63,7 +65,7 @@ export default function About() {
 
       <section className="max-w-[1180px] mx-auto px-[18px] pt-12">
         <p className="m-0 mb-1" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-          THE DIVISIONS
+          {t("theDivisions")}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3" style={{ borderTop: "1px solid " + theme.ink }}>
           {DIVISIONS.map((d, i) => (

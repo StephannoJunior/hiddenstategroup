@@ -1,4 +1,6 @@
 import { usePageMeta } from "../lib/seo";
+import { useLang } from "../lib/lang";
+import Img from "../components/Img";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -33,7 +35,7 @@ function Nameplate() {
           FROM ANOTHER STATE OF MIND
         </p>
         <h1 className="my-6">
-          <img loading="lazy" decoding="async" src="/wordmark-black.png" alt="Hidden State"
+          <Img src="/wordmark-black.png" alt="Hidden State"
                className="block mx-auto w-full" style={{ maxWidth: "440px" }} />
         </h1>
         <div style={{ borderTop: "2px solid " + theme.ink }} />
@@ -55,7 +57,7 @@ function LeadPicture() {
     <section style={{ background: theme.bg }} className="pb-10">
       <div className="max-w-[1180px] mx-auto px-[18px]">
         <figure className="m-0">
-          <img loading="lazy" decoding="async" src="/club.jpg" alt="" className="w-full block" style={{ background: theme.raised }} />
+          <Img src="/club.webp" alt="" className="w-full block" style={{ background: theme.raised }} />
           <figcaption
             className="pt-1.5 mt-1.5"
             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2, borderTop: "1px solid " + theme.rule }}
@@ -69,11 +71,12 @@ function LeadPicture() {
 }
 
 function Story() {
+  const { t } = useLang();
   return (
     <section style={{ background: theme.bg }} className="pt-10 pb-14">
       <div className="max-w-[1180px] mx-auto px-[18px]">
         <p style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }} className="mb-2.5">
-          THE STORY
+          {t("theStory")}
         </p>
         <h2 className="mb-5" style={{ ...fontDisplay, fontWeight: 300, color: theme.ink, fontSize: "clamp(27px,6vw,48px)", lineHeight: 1.14 }}>
           One artist. One vision. Records, rooms, and the people who{" "}
@@ -81,7 +84,7 @@ function Story() {
         </h2>
 
         <figure className="m-0 mb-5">
-          <img loading="lazy" decoding="async" src="/portrait.jpg" alt="Stephanno Jr." className="w-full block" style={{ background: theme.raised }} />
+          <Img src="/portrait.webp" alt="Stephanno Jr." className="w-full block" style={{ background: theme.raised }} />
           <figcaption
             className="pt-1.5 mt-1.5"
             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2, borderTop: "1px solid " + theme.rule }}
@@ -122,12 +125,13 @@ function Story() {
 }
 
 function Offer() {
+  const { t } = useLang();
   return (
     <section style={{ background: theme.bg }} className="pt-10 pb-16">
       <div className="max-w-[1180px] mx-auto px-[18px]">
         <div style={{ borderTop: "1px solid " + theme.rule }} className="mb-9" />
         <p style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-          WHAT WE OFFER
+          {t("whatWeOffer")}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 mt-5" style={{ borderTop: "1px solid " + theme.rule }}>
           {OFFER.map((o, i) => (
@@ -169,7 +173,7 @@ function Row({ to, img, kicker, title, sub, meta }) {
     <Link to={to} className="flex items-center gap-4 py-4"
           style={{ borderBottom: "1px solid " + theme.rule }}>
       {img && (
-        <img loading="lazy" decoding="async" src={img} alt="" className="block shrink-0"
+        <Img src={img} alt="" className="block shrink-0"
              style={{ width: "64px", height: "64px", objectFit: "cover", background: theme.raised }} />
       )}
       <span className="flex-1">
@@ -298,9 +302,10 @@ function TabBar() {
 
 export default function Home() {
   useGoogleFonts();
+  const { t } = useLang();
   usePageMeta({ title: null, description: "Records, agency, booking, events and artists — from another state of mind." });
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh" }}>
+    <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
       <Nameplate />
       <LeadPicture />

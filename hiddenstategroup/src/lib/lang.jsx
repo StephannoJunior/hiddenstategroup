@@ -24,6 +24,7 @@ export const LANGS = [
 
 export const STRINGS = {
   en: {
+    share: "SHARE", linkCopied: "LINK COPIED", backToTop: "BACK TO TOP", minRead: "MIN READ", previous: "PREVIOUS", next: "NEXT",
     news: "NEWS", records: "RECORDS", agency: "AGENCY", artists: "ARTISTS",
     events: "EVENTS", mixes: "MIXES", about: "ABOUT", contact: "CONTACT", home: "HOME",
     theRoster: "The Roster", theAgency: "The Agency", theRecords: "The Records",
@@ -39,7 +40,7 @@ export const STRINGS = {
     book: "BOOK", getTickets: "GET TICKETS", playAlbum: "PLAY THE ALBUM",
     tracklist: "TRACKLIST", lineUp: "LINE-UP", upcoming: "UPCOMING", pastEvent: "PAST EVENT",
     pastEvents: "PAST EVENTS", fromTheNight: "FROM THE NIGHT", downloadAll: "DOWNLOAD ALL",
-    save: "SAVE", close: "CLOSE", printedIssue: "THE PRINTED ISSUE",
+    save: "SAVE", close: "CLOSE", printedIssue: "THE PRINTED ISSUE", printedIssues: "THE PRINTED ISSUES",
     moreToCome: "More to come.", nothingFiled: "NOTHING FILED YET",
     ticketsSoon: "TICKET LINK COMING SOON", allIssues: "ALL ISSUES", allEvents: "ALL EVENTS",
     allSessions: "ALL SESSIONS", theStory: "THE STORY", whatWeOffer: "WHAT WE OFFER",
@@ -47,6 +48,7 @@ export const STRINGS = {
     saveHint: "Press and hold any picture to save it to your phone, or use the download button on each one. You can also take the whole set at once.",
   },
   ro: {
+    share: "DISTRIBUIE", linkCopied: "LINK COPIAT", backToTop: "SUS", minRead: "MIN CITIRE", previous: "ANTERIOR", next: "URMĂTOR",
     news: "ȘTIRI", records: "MUZICĂ", agency: "AGENȚIE", artists: "ARTIȘTI",
     events: "EVENIMENTE", mixes: "MIXURI", about: "DESPRE", contact: "CONTACT", home: "ACASĂ",
     theRoster: "Artiștii", theAgency: "Agenția", theRecords: "Discografia",
@@ -62,7 +64,7 @@ export const STRINGS = {
     book: "REZERVĂ", getTickets: "BILETE", playAlbum: "ASCULTĂ ALBUMUL",
     tracklist: "LISTA PIESELOR", lineUp: "LINE-UP", upcoming: "URMEAZĂ", pastEvent: "EVENIMENT TRECUT",
     pastEvents: "EVENIMENTE TRECUTE", fromTheNight: "DIN NOAPTEA ACEEA", downloadAll: "DESCARCĂ TOT",
-    save: "SALVEAZĂ", close: "ÎNCHIDE", printedIssue: "EDIȚIA TIPĂRITĂ",
+    save: "SALVEAZĂ", close: "ÎNCHIDE", printedIssue: "EDIȚIA TIPĂRITĂ", printedIssues: "EDIȚIILE TIPĂRITE",
     moreToCome: "Urmează mai multe.", nothingFiled: "NIMIC ÎNCĂ",
     ticketsSoon: "LINK BILETE ÎN CURÂND", allIssues: "TOATE EDIȚIILE", allEvents: "TOATE EVENIMENTELE",
     allSessions: "TOATE SESIUNILE", theStory: "POVESTEA", whatWeOffer: "CE OFERIM",
@@ -70,6 +72,7 @@ export const STRINGS = {
     saveHint: "Ține apăsat pe orice fotografie ca să o salvezi pe telefon, sau folosește butonul de descărcare de pe fiecare. Poți lua și tot setul deodată.",
   },
   es: {
+    share: "COMPARTIR", linkCopied: "ENLACE COPIADO", backToTop: "ARRIBA", minRead: "MIN DE LECTURA", previous: "ANTERIOR", next: "SIGUIENTE",
     news: "NOTICIAS", records: "DISCOS", agency: "AGENCIA", artists: "ARTISTAS",
     events: "EVENTOS", mixes: "MIXES", about: "SOBRE", contact: "CONTACTO", home: "INICIO",
     theRoster: "Los Artistas", theAgency: "La Agencia", theRecords: "Los Discos",
@@ -85,7 +88,7 @@ export const STRINGS = {
     book: "RESERVAR", getTickets: "ENTRADAS", playAlbum: "ESCUCHAR EL ÁLBUM",
     tracklist: "LISTA DE TEMAS", lineUp: "LINE-UP", upcoming: "PRÓXIMO", pastEvent: "EVENTO PASADO",
     pastEvents: "EVENTOS PASADOS", fromTheNight: "DE LA NOCHE", downloadAll: "DESCARGAR TODO",
-    save: "GUARDAR", close: "CERRAR", printedIssue: "LA EDICIÓN IMPRESA",
+    save: "GUARDAR", close: "CERRAR", printedIssue: "LA EDICIÓN IMPRESA", printedIssues: "LAS EDICIONES IMPRESAS",
     moreToCome: "Pronto habrá más.", nothingFiled: "AÚN NADA",
     ticketsSoon: "ENTRADAS PRÓXIMAMENTE", allIssues: "TODAS LAS EDICIONES", allEvents: "TODOS LOS EVENTOS",
     allSessions: "TODAS LAS SESIONES", theStory: "LA HISTORIA", whatWeOffer: "QUÉ OFRECEMOS",
@@ -93,6 +96,7 @@ export const STRINGS = {
     saveHint: "Mantén pulsada cualquier foto para guardarla en tu teléfono, o usa el botón de descarga de cada una. También puedes llevarte el set completo.",
   },
   de: {
+    share: "TEILEN", linkCopied: "LINK KOPIERT", backToTop: "NACH OBEN", minRead: "MIN LESEZEIT", previous: "ZURÜCK", next: "WEITER",
     news: "NEWS", records: "RECORDS", agency: "AGENTUR", artists: "ARTISTS",
     events: "EVENTS", mixes: "MIXES", about: "ÜBER UNS", contact: "KONTAKT", home: "START",
     theRoster: "Das Roster", theAgency: "Die Agentur", theRecords: "Die Releases",
@@ -108,7 +112,7 @@ export const STRINGS = {
     book: "BUCHEN", getTickets: "TICKETS", playAlbum: "ALBUM HÖREN",
     tracklist: "TRACKLIST", lineUp: "LINE-UP", upcoming: "KOMMEND", pastEvent: "VERGANGENES EVENT",
     pastEvents: "VERGANGENE EVENTS", fromTheNight: "AUS DER NACHT", downloadAll: "ALLE LADEN",
-    save: "SPEICHERN", close: "SCHLIESSEN", printedIssue: "DIE GEDRUCKTE AUSGABE",
+    save: "SPEICHERN", close: "SCHLIESSEN", printedIssue: "DIE GEDRUCKTE AUSGABE", printedIssues: "DIE GEDRUCKTEN AUSGABEN",
     moreToCome: "Mehr folgt.", nothingFiled: "NOCH NICHTS",
     ticketsSoon: "TICKETS DEMNÄCHST", allIssues: "ALLE AUSGABEN", allEvents: "ALLE EVENTS",
     allSessions: "ALLE SESSIONS", theStory: "DIE GESCHICHTE", whatWeOffer: "WAS WIR BIETEN",
@@ -116,6 +120,7 @@ export const STRINGS = {
     saveHint: "Halte ein Foto gedrückt, um es zu speichern, oder nutze den Download-Button. Du kannst auch alle auf einmal laden.",
   },
   fr: {
+    share: "PARTAGER", linkCopied: "LIEN COPIÉ", backToTop: "HAUT DE PAGE", minRead: "MIN DE LECTURE", previous: "PRÉCÉDENT", next: "SUIVANT",
     news: "ACTUS", records: "DISQUES", agency: "AGENCE", artists: "ARTISTES",
     events: "ÉVÉNEMENTS", mixes: "MIXES", about: "À PROPOS", contact: "CONTACT", home: "ACCUEIL",
     theRoster: "Les Artistes", theAgency: "L'Agence", theRecords: "Les Disques",
@@ -131,7 +136,7 @@ export const STRINGS = {
     book: "RÉSERVER", getTickets: "BILLETS", playAlbum: "ÉCOUTER L'ALBUM",
     tracklist: "TRACKLIST", lineUp: "LINE-UP", upcoming: "À VENIR", pastEvent: "ÉVÉNEMENT PASSÉ",
     pastEvents: "ÉVÉNEMENTS PASSÉS", fromTheNight: "DE LA SOIRÉE", downloadAll: "TOUT TÉLÉCHARGER",
-    save: "ENREGISTRER", close: "FERMER", printedIssue: "L'ÉDITION IMPRIMÉE",
+    save: "ENREGISTRER", close: "FERMER", printedIssue: "L'ÉDITION IMPRIMÉE", printedIssues: "LES ÉDITIONS IMPRIMÉES",
     moreToCome: "À suivre.", nothingFiled: "RIEN POUR L'INSTANT",
     ticketsSoon: "BILLETS BIENTÔT", allIssues: "TOUTES LES ÉDITIONS", allEvents: "TOUS LES ÉVÉNEMENTS",
     allSessions: "TOUTES LES SESSIONS", theStory: "L'HISTOIRE", whatWeOffer: "CE QUE NOUS PROPOSONS",
