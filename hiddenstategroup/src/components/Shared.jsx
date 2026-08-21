@@ -1,7 +1,7 @@
 import Img from "./Img";
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Search } from "lucide-react";
+import { X, Search } from "lucide-react";
 import { MARK_SJ, MARK_SEAL, MARK_NOPROBLEM } from "../lib/marks";
 import { ARTISTS } from "../lib/data";
 import { SOCIAL } from "../lib/social";
@@ -182,11 +182,7 @@ export function Nav() {
                   EVENTS: "events", MIXES: "mixes", ABOUT: "about", CONTACT: "contact" };
     return map[item.label] ? t(map[item.label]) : item.label;
   };
-  const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-
-  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
-  useEffect(() => { document.body.style.overflow = mobileOpen ? "hidden" : ""; }, [mobileOpen]);
 
   const isActive = (href) =>
     href === "/" ? location.pathname === "/" : location.pathname.startsWith(href);
@@ -227,52 +223,11 @@ export function Nav() {
           {/* right — language, plus the burger on phones */}
           <div className="flex items-center gap-4 shrink-0">
             <LanguageSwitch />
-            <button
-              className="lg:hidden"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="Menu"
-            >
-              {mobileOpen ? <X size={20} color={theme.ink} strokeWidth={1.5} /> : <Menu size={20} color={theme.ink} strokeWidth={1.5} />}
-            </button>
           </div>
         </div>
 
-        {/* Row two — the sections, on their own rule beneath the masthead.
-            Desktop only; phones use the drawer and the glass bar. */}
-        <div className="hidden lg:block" style={{ borderTop: `1px solid ${theme.rule}` }}>
-          <nav className="max-w-[1180px] mx-auto px-[18px] h-[44px] flex items-center justify-center gap-9">
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.label}
-                to={item.href}
-                className="text-[10.5px] pb-0.5 whitespace-nowrap"
-                style={{
-                  ...fontUtility, letterSpacing: "0.16em",
-                  color: isActive(item.href) ? theme.brass : theme.ink2,
-                  borderBottom: `2px solid ${isActive(item.href) ? theme.brass : "transparent"}`,
-                }}
-              >
-                {navLabel(item)}
-              </Link>
-            ))}
-          </nav>
-        </div>
       </header>
 
-      <div
-        className="fixed inset-0 z-30 lg:hidden transition-opacity duration-200"
-        style={{ background: theme.bg, opacity: mobileOpen ? 1 : 0, pointerEvents: mobileOpen ? "auto" : "none" }}
-      >
-        <div className="h-full flex flex-col justify-center px-8">
-          {NAV_ITEMS.map((item, i) => (
-            <Link key={item.label} to={item.href} onClick={() => setMobileOpen(false)}
-              className="py-4 flex items-baseline justify-between" style={{ borderBottom: `1px solid ${theme.rule}` }}>
-              <span style={{ ...fontDisplay, fontSize: "30px", color: theme.ink }}>{navLabel(item)}</span>
-              <span style={{ ...fontUtility, fontSize: "10px", color: theme.brass, letterSpacing: "0.1em" }}>0{i + 1}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
     </>
   );
 }

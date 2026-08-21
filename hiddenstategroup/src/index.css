@@ -35,10 +35,10 @@ body {
   color: #16130E;
 }
 
-/* The floating glass bar sits over the page on phones — keep clear space
-   under the footer so it never covers the last line of content. */
-@media (max-width: 1023px) {
-  footer { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px) !important; }
+/* The floating bar sits over the page at every size now, so the footer needs
+   clear space beneath it or it covers the last line of content. */
+footer {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 108px) !important;
 }
 
 /* ---------------------------------------------------------------
@@ -135,14 +135,14 @@ main, [data-page] {
 }
 
 /* hs-header-clearance
-   The masthead is one row on phones (76px) and two on desktop (92 + 44).
-   Pages carry pt-[104px] for the phone case; this tops it up on desktop so
-   content never starts underneath the navigation row. */
+   The masthead is a single row: 76px on phones, 92px on desktop. Pages carry
+   pt-[104px] for the phone case; this tops it up slightly on desktop. The
+   section navigation now lives in the floating bar, not the header. */
 @media (min-width: 1024px) {
   [data-page] > section:first-of-type,
   [data-page] > article:first-of-type,
   [data-page] > div:first-of-type > section:first-of-type {
-    padding-top: 168px;
+    padding-top: 124px;
   }
 }
 

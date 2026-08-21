@@ -45,7 +45,21 @@ const TABS = [
 ];
 
 export default function GlassBar() {
-  const [open, setOpen] = useState(false);
+  // On desktop the bar is simply always open — there is room for it, and a
+  // tap-to-reveal control makes no sense with a mouse. On phones it stays
+  // collapsed until tapped.
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = (e) => setIsDesktop(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", onChange) : mq.addListener(onChange);
+    return () => (mq.removeEventListener ? mq.removeEventListener("change", onChange) : mq.removeListener(onChange));
+  }, []);
+
+  const [openState, setOpen] = useState(false);
+  const open = isDesktop || openState;
   const [pressing, setPressing] = useState(false);
   const [sheen, setSheen] = useState({ x: 50, y: 50, on: false });
   const tapTimer = useRef(null);
@@ -56,7 +70,7 @@ export default function GlassBar() {
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || isDesktop) return;
     let queued = false;
     const onScroll = () => {
       if (queued) return;
@@ -65,7 +79,7 @@ export default function GlassBar() {
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [open]);
+  }, [open, isDesktop]);
 
   useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current); }, []);
 
@@ -146,7 +160,7 @@ export default function GlassBar() {
       )}
 
       <div
-        className="fixed left-0 right-0 z-[79] lg:hidden flex justify-center px-3"
+        className="fixed left-0 right-0 z-[79] flex justify-center px-3"
         style={{
           bottom: "calc(env(safe-area-inset-bottom, 0px) + 30px)",
           transform: "translateZ(0)",
@@ -217,10 +231,11 @@ export default function GlassBar() {
             }}
           >
             {reflection}
-            <div
-              className="flex overflow-x-auto no-scrollbar relative"
-              style={{ scrollSnapType: "x proximity", padding: "7px" }}
-            >
+            {/* Every tab shares the width equally, so all eight are visible
+                on a phone without sliding. Labels shrink rather than the bar
+                scrolling — being able to see the whole map matters more than
+                a comfortable label size. */}
+            <div className="flex relative" style={{ padding: "6px", gap: "2px" }}>
               {TABS.map(({ href, key, Icon }) => {
                 const active = isActive(href);
                 return (
@@ -230,10 +245,10 @@ export default function GlassBar() {
                     onClick={() => setOpen(false)}
                     className="flex flex-col items-center justify-center shrink-0 relative"
                     style={{
-                      scrollSnapAlign: "center",
-                      minWidth: "66px",
-                      padding: "8px 6px",
-                      borderRadius: "17px",
+                      flex: "1 1 0",
+                      minWidth: 0,
+                      padding: "8px 2px",
+                      borderRadius: "16px",
                       gap: "5px",
                       background: active ? "rgba(22,19,14,0.88)" : "transparent",
                       boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.18)" : "none",
@@ -244,10 +259,13 @@ export default function GlassBar() {
                     <span
                       style={{
                         ...fontUtility,
-                        fontSize: "8.5px",
-                        letterSpacing: "0.1em",
+                        fontSize: "7.5px",
+                        letterSpacing: "0.02em",
                         color: active ? theme.bg : theme.ink,
                         whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        maxWidth: "100%",
                       }}
                     >
                       {t(key)}

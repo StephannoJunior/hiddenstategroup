@@ -9,8 +9,16 @@
   "background_color": "#F3EBD9",
   "theme_color": "#F3EBD9",
   "icons": [
-    { "src": "/icons/icon-192.jpg", "sizes": "192x192", "type": "image/jpeg" },
-    { "src": "/icons/icon-512.jpg", "sizes": "512x512", "type": "image/jpeg" },
+    {
+      "src": "/icons/icon-192.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/icons/icon-512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    },
     {
       "src": "/icons/icon-maskable-512.jpg",
       "sizes": "512x512",
@@ -19,9 +27,21 @@
     }
   ],
   "shortcuts": [
-    { "name": "News", "url": "/news" },
-    { "name": "Artists", "url": "/artists" },
-    { "name": "Events", "url": "/events" },
-    { "name": "Sessions", "url": "/mixes" }
+    {
+      "name": "News",
+      "url": "/news"
+    },
+    {
+      "name": "Artists",
+      "url": "/artists"
+    },
+    {
+      "name": "Events",
+      "url": "/events"
+    },
+    {
+      "name": "Sessions",
+      "url": "/mixes"
+    }
   ]
 }
