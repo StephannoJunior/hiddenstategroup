@@ -39,7 +39,7 @@ function Album({ a }) {
             <a href={a.playlist} target="_blank" rel="noopener noreferrer"
                className="inline-block mt-5 px-8 py-3.5"
                style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em", background: theme.ink, color: theme.bg }}>
-              {t("playAlbum")}
+              {a.kind === "SINGLE" ? t("listen") : t("playAlbum")}
             </a>
           )}
         </div>
@@ -74,7 +74,7 @@ function Album({ a }) {
 export default function Records() {
   useGoogleFonts();
   const { t } = useLang();
-  useAlbumSchema(ALBUMS[0]);
+  useAlbumSchema(ALBUMS[0]);  // richest release gets the markup
   usePageMeta({ title: "Records", description: "Releases on Hidden State Records." });
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>

@@ -10,6 +10,7 @@ import {
 } from "../components/Shared";
 import { EVENTS } from "../lib/data";
 import Gallery from "../components/Gallery";
+import Countdown from "../components/Countdown";
 import { SOCIAL } from "../lib/social";
 
 export default function EventDetail() {
@@ -169,6 +170,12 @@ export default function EventDetail() {
             </p>
           )}
         </div>
+
+        {!past && e.countdownTo && (
+          <div className="mt-9">
+            <Countdown target={e.countdownTo} label={t("countdownTo")} compact />
+          </div>
+        )}
 
         {e.tagline && (
           <p className="text-center mt-7 m-0"

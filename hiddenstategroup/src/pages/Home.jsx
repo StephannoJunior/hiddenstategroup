@@ -2,6 +2,7 @@ import { usePageMeta } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
 import { Fleuron } from "../components/Shared";
+import Countdown, { DECEMBER_13 } from "../components/Countdown";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -48,24 +49,6 @@ function Nameplate() {
             </span>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
-
-function LeadPicture() {
-  return (
-    <section style={{ background: theme.bg }} className="pb-10">
-      <div className="max-w-[1180px] mx-auto px-[18px]">
-        <figure className="m-0">
-          <Img src="/club.webp" alt="Hidden State — a night in the room" className="w-full block" style={{ background: theme.raised }} />
-          <figcaption
-            className="pt-1.5 mt-1.5"
-            style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2, borderTop: "1px solid " + theme.rule }}
-          >
-            HIDDEN STATE — A NIGHT IN THE ROOM
-          </figcaption>
-        </figure>
       </div>
     </section>
   );
@@ -309,7 +292,16 @@ export default function Home() {
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
       <Nameplate />
-      <LeadPicture />
+
+      <section style={{ background: theme.bg }} className="pb-10">
+        <div className="max-w-[760px] mx-auto px-[18px]">
+          <Countdown target={DECEMBER_13} label={t("countdownTo") + " 13.12.2026"} />
+          <p className="text-center mt-3 m-0"
+             style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.ink2 }}>
+            LOCATION UNDISCLOSED · LINE-UP SEALED
+          </p>
+        </div>
+      </section>
       <Story />
       <Fleuron />
       <Offer />

@@ -113,31 +113,18 @@ export default function GlassBar() {
   // Clear, not milky. Low opacity so the page reads through the panel.
   const pane = {
     background:
-      "linear-gradient(180deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.16) 42%, rgba(243,235,217,0.20) 100%)",
-    backdropFilter: "blur(34px) saturate(210%) brightness(1.08)",
-    WebkitBackdropFilter: "blur(34px) saturate(210%) brightness(1.08)",
-    border: "1px solid rgba(255,255,255,0.42)",
-    boxShadow: [
-      "inset 0 1px 0 rgba(255,255,255,0.9)",
-      "inset 0 -1px 0 rgba(22,19,14,0.06)",
-      "0 1px 3px rgba(22,19,14,0.05)",
-    ].join(", "),
+      "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.05) 55%, rgba(255,255,255,0.09) 100%)",
+    backdropFilter: "blur(40px) saturate(260%) brightness(1.12) contrast(1.05)",
+    WebkitBackdropFilter: "blur(40px) saturate(260%) brightness(1.12) contrast(1.05)",
+    // No white outline and no bright streak. The edge is defined only by a
+    // faint darkening, which separates the panel from the page without
+    // drawing a visible line around it.
+    border: "1px solid rgba(22,19,14,0.07)",
+    boxShadow: "0 1px 3px rgba(22,19,14,0.07)",
   };
 
-  // The reflection: a fixed specular band across the top, slightly angled,
-  // the way light catches a curved glass surface.
-  const reflection = (
-    <span
-      aria-hidden="true"
-      className="absolute inset-0"
-      style={{
-        borderRadius: "inherit",
-        background:
-          "linear-gradient(168deg, rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.22) 26%, rgba(255,255,255,0) 46%)",
-        pointerEvents: "none",
-      }}
-    />
-  );
+  // The specular streak was removed — it read as a hard white line across
+  // the top rather than as light on glass.
 
   const sheenLayer = (
     <span
@@ -203,7 +190,6 @@ export default function GlassBar() {
                 transition: `transform 460ms ${SPRING}`,
               }}
             >
-              {reflection}
               {sheenLayer}
               <span className="flex flex-col gap-[3.5px] relative" aria-hidden="true">
                 <span style={{ width: "18px", height: "1.5px", background: theme.ink, display: "block" }} />
@@ -230,7 +216,6 @@ export default function GlassBar() {
               transition: `opacity 200ms ease, transform 500ms ${SPRING}`,
             }}
           >
-            {reflection}
             {/* Every tab shares the width equally, so all eight are visible
                 on a phone without sliding. Labels shrink rather than the bar
                 scrolling — being able to see the whole map matters more than

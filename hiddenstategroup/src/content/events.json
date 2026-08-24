@@ -163,7 +163,6 @@
     "photosLink": "https://www.dropbox.com/scl/fi/i977jp8rgasjqdig12j90/EUPHORIA.zip?rlkey=vy198l3nlhnd77iwkr0gr70rg&dl=1",
     "photosLinkLabel": "EUPHORIA PHOTOS",
     "gallery": [
-      "/events/euphoria/01.webp",
       "/events/euphoria/02.webp",
       "/events/euphoria/03.webp",
       "/events/euphoria/04.webp",
@@ -178,5 +177,31 @@
       "/events/euphoria/13.webp",
       "/events/euphoria/14.webp"
     ]
+  },
+  {
+    "id": 7,
+    "slug": "december-13",
+    "status": "upcoming",
+    "name": "13.12.2026",
+    "subtitle": "Undisclosed",
+    "date": "13 DECEMBER 2026",
+    "sortDate": "2026-12-13",
+    "venue": null,
+    "city": null,
+    "country": null,
+    "artwork": "/events/december-secret.webp",
+    "description": "Five figures, one date, and nothing else announced. The location stays undisclosed and the line-up stays sealed until closer to the night. What is confirmed: Hidden State, No Problem and SJ are behind it, and it happens on 13 December 2026.",
+    "facts": [
+      "LOCATION UNDISCLOSED",
+      "LINE-UP SEALED",
+      "13.12.2026"
+    ],
+    "lineup": [],
+    "tagline": "Updates will appear here first.",
+    "tickets": null,
+    "website": null,
+    "article": null,
+    "gallery": [],
+    "countdownTo": "2026-12-13T00:00:00+02:00"
   }
 ]

@@ -48,5 +48,25 @@
         "youtube": "elLTDFL5L1Q"
       }
     ]
+  },
+  {
+    "slug": "pearl-of-sand",
+    "title": "PEARL OF SAND",
+    "artist": "Claire Cruz",
+    "kind": "SINGLE",
+    "tagline": "a dark, hypnotic atmosphere",
+    "catalog": "HS-002",
+    "releaseDate": null,
+    "cover": "/artists/claire-cruz.webp",
+    "playlist": "https://www.youtube.com/watch?v=uJR9jclSYMU",
+    "note": "Claire Cruz's debut single, blending Afro House, melodic techno and tribal elements.",
+    "tracks": [
+      {
+        "n": 1,
+        "title": "Pearl of Sand",
+        "cover": "/artists/claire-cruz.webp",
+        "youtube": "uJR9jclSYMU"
+      }
+    ]
   }
 ]

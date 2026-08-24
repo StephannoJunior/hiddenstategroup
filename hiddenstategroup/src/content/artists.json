@@ -114,5 +114,48 @@
     "releases": [],
     "upcoming": [],
     "past": []
+  },
+  {
+    "id": 6,
+    "name": "Tess Wich",
+    "alias": "Tech Wich",
+    "type": "DJ",
+    "genres": [
+      "Hard Techno",
+      "Peak-Time",
+      "Hard Bounce",
+      "Rave"
+    ],
+    "country": "Australia",
+    "location": "Australia",
+    "desc": "Dark atmospheres, hypnotic grooves, built for the dancefloor.",
+    "bio": "Australian DJ and electronic music artist, performing as Tech Wich. Known for her powerful hard techno, peak-time, hard bounce and rave sound, Tess brings dark atmospheres, hypnotic grooves and high-energy sets built for the dancefloor. With a distinctive visual identity and an evolving international presence, she is quickly making her mark on the global techno scene.",
+    "photo": "/artists/tess-wich.webp",
+    "poster": "/news/posters/tess-wich.webp",
+    "instagram": "tesswich",
+    "releases": [],
+    "upcoming": [],
+    "past": []
+  },
+  {
+    "id": 7,
+    "name": "Claire Cruz",
+    "alias": null,
+    "type": "DJ",
+    "genres": [
+      "Afro House",
+      "Melodic Techno",
+      "Tribal"
+    ],
+    "country": "United Arab Emirates",
+    "location": "Dubai",
+    "desc": "Afro House and melodic techno with a dark, hypnotic edge.",
+    "bio": "Filipino-Spanish DJ and producer based in Dubai, and founder of Impact Studio FZE and InfluencersDubai.AE. She stepped into music after a career across events, marketing and influencer management. Her debut single, “Pearl of Sand,” introduces a sound blending Afro House, melodic techno and tribal elements into a dark, hypnotic atmosphere. Following her debut she is set to take her music beyond Dubai, with Romania marking her first festival performance in Europe and outside the UAE.",
+    "photo": "/artists/claire-cruz.webp",
+    "poster": "/news/posters/claire-cruz.webp",
+    "instagram": "clairecruz",
+    "releases": [],
+    "upcoming": [],
+    "past": []
   }
 ]
