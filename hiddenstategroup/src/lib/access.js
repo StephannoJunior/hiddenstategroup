@@ -38,18 +38,36 @@ export const ROLES = {
 };
 
 /*
-  SHA-256 of each passcode. To change one, run this in any browser console:
+  ACCOUNTS. Each person signs in with their own username and password, so you
+  can see who is on the door and remove one person without changing everyone
+  else's login.
 
-    crypto.subtle.digest("SHA-256", new TextEncoder().encode("your-code"))
+  Passwords are stored as salted hashes. The salt means two people choosing
+  the same password do not produce the same stored value.
+
+  To add or change someone, run this in any browser console and paste the
+  result in below:
+
+    const salt = "hidden-state-door-v1";
+    const user = "newname", pass = "their-password";
+    crypto.subtle.digest("SHA-256", new TextEncoder()
+      .encode(`${salt}:${user.toLowerCase()}:${pass}`))
       .then(b => console.log([...new Uint8Array(b)]
-        .map(x => x.toString(16).padStart(2,"0")).join("")))
+        .map(x => x.toString(16).padStart(2,"0")).join("")));
 
-  Trial codes are  door-2026  and  hidden-2026 — change both before a real night.
+  The trial passwords are NOT written here on purpose. Anything in this file
+  ships to every visitor's browser, so listing them in a comment would hand
+  them over to anyone who opens the source — and undo the whole point of
+  storing hashes rather than plain text.
 */
-const HASHES = {
-  STAFF: "d147933f8d45b3be460a081c27083efa4208cd75cf53d3f60e88ba2f24fc8d4f",
-  OWNER: "3ed54c6113cc525bbeb11e57b6f9efda9600d8dff3133c142910faab5a540037",
-};
+const SALT = "hidden-state-door-v1";
+
+const ACCOUNTS = [
+  { user: "stephanno", role: "OWNER", name: "Stephanno Jr.", hash: "b64e2a670d592d811893d3f30de7490ffde81de039cc4f1360d0f1a4efe6425f" },
+  { user: "manager", role: "OWNER", name: "Management", hash: "2f733ad873e480697cebc1e936c9b3ec03c52b8d334f013e49b0cbd21b6501c1" },
+  { user: "door", role: "STAFF", name: "Door staff", hash: "d8979a54888af958d253508c7d71df8cb07f3631872a70c93ec6a1f5696bdcc0" },
+  { user: "door2", role: "STAFF", name: "Door staff 2", hash: "8fa8ddbd3fd0f9ee0f740be434eea70538bf10c428c6692c4b02d39f9566dfe5" }
+];
 
 const SESSION_KEY = "hs-door-role";
 
@@ -67,13 +85,17 @@ async function sha256(text) {
   reveal which role was hit. That matters less here than it would on a server,
   but it costs nothing to do properly.
 */
-export async function roleForCode(code) {
-  const digest = await sha256((code || "").trim());
+export async function signInWith(username, password) {
+  const digest = await sha256(`${SALT}:${(username || "").trim().toLowerCase()}:${password || ""}`);
+
+  // Every account is compared even after a match, so how long this takes
+  // never hints at which usernames exist.
   let found = null;
-  for (const [role, hash] of Object.entries(HASHES)) {
-    if (digest === hash) found = role;
+  for (const acc of ACCOUNTS) {
+    if (acc.hash === digest && acc.user === (username || "").trim().toLowerCase()) found = acc;
   }
-  return found ? ROLES[found] : null;
+  if (!found) return null;
+  return { ...ROLES[found.role], user: found.user, displayName: found.name };
 }
 
 /*
@@ -83,8 +105,11 @@ export async function roleForCode(code) {
 */
 export function currentRole() {
   try {
-    const id = sessionStorage.getItem(SESSION_KEY);
-    return id && ROLES[id] ? ROLES[id] : null;
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    const base = ROLES[saved.id];
+    return base ? { ...base, user: saved.user, displayName: saved.displayName } : null;
   } catch {
     return null;
   }
@@ -92,7 +117,10 @@ export function currentRole() {
 
 export function signIn(role) {
   try {
-    sessionStorage.setItem(SESSION_KEY, role.id);
+    sessionStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({ id: role.id, user: role.user, displayName: role.displayName })
+    );
   } catch {
     /* private browsing blocks this; the role still holds for this render */
   }

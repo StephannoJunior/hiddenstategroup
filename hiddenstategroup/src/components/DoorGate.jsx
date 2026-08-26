@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, fontText, fontMasthead, theme } from "./Shared";
-import { roleForCode, currentRole, signIn, signOut } from "../lib/access";
+import { signInWith, currentRole, signIn, signOut } from "../lib/access";
 
 /*
   DoorGate — wraps the scanner and the door list.
@@ -14,7 +14,8 @@ import { roleForCode, currentRole, signIn, signOut } from "../lib/access";
 export default function DoorGate({ children }) {
   useGoogleFonts();
   const [role, setRole] = useState(null);
-  const [code, setCode] = useState("");
+  const [user, setUser] = useState("");
+  const [pass, setPass] = useState("");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
 
@@ -24,16 +25,19 @@ export default function DoorGate({ children }) {
     e.preventDefault();
     setError("");
     setChecking(true);
-    const found = await roleForCode(code);
+    const found = await signInWith(user, pass);
     setChecking(false);
     if (!found) {
-      setError("That code isn't recognised.");
-      setCode("");
+      // Deliberately vague: saying which half was wrong would tell someone
+      // guessing that a username exists.
+      setError("Those details weren't recognised.");
+      setPass("");
       return;
     }
     signIn(found);
     setRole(found);
-    setCode("");
+    setUser("");
+    setPass("");
   };
 
   if (role) {
@@ -46,7 +50,7 @@ export default function DoorGate({ children }) {
           <span className="px-3 py-1"
                 style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em",
                          background: theme.ink, color: theme.bg, pointerEvents: "auto" }}>
-            {role.label.toUpperCase()}
+            {(role.displayName || role.label).toUpperCase()}
             <button onClick={() => { signOut(); setRole(null); }}
                     style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em",
                              color: theme.bg, marginLeft: "12px", opacity: 0.7 }}>
@@ -71,13 +75,24 @@ export default function DoorGate({ children }) {
 
         <form onSubmit={submit} className="mt-8">
           <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-            ENTER YOUR CODE
+            USERNAME
+          </p>
+          <input
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            autoCapitalize="none"
+            autoComplete="username"
+            style={{ width: "100%", background: "transparent", border: "1px solid " + theme.rule,
+                     color: theme.ink, padding: "13px", fontSize: "17px", letterSpacing: "0.06em" }}
+          />
+          <p className="m-0 mt-4 mb-2" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+            PASSWORD
           </p>
           <input
             type="password"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            autoComplete="off"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+            autoComplete="current-password"
             style={{ width: "100%", background: "transparent", border: "1px solid " + theme.rule,
                      color: theme.ink, padding: "13px", fontSize: "17px", letterSpacing: "0.1em" }}
           />

@@ -34,6 +34,7 @@ const Pass = lazy(() => import("./pages/Pass"));
 const Scan = lazy(() => import("./pages/Scan"));
 const Guestlist = lazy(() => import("./pages/Guestlist"));
 const PassList = lazy(() => import("./pages/PassList"));
+const Admin = lazy(() => import("./pages/Admin"));
 
 // Scrolls to the top of the page on every route change — matches the
 // window.scrollTo({ top: 0 }) behaviour the original pages used when
@@ -86,6 +87,7 @@ export default function App() {
               <Route path="/scan" element={<Scan />} />
               <Route path="/guestlist" element={<Guestlist />} />
               <Route path="/doorlist" element={<PassList />} />
+              <Route path="/admin" element={<Admin />} />
 
               {/* Unknown URLs get a real page, not a silent redirect to home. */}
               <Route path="*" element={<NotFound />} />
