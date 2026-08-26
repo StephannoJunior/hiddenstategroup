@@ -28,6 +28,13 @@ const About = lazy(() => import("./pages/About"));
 const Contact = lazy(() => import("./pages/Contact"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+// Passes — kept out of the main navigation deliberately. A guest reaches
+// their pass by link, and door staff reach the scanner by a bookmark.
+const Pass = lazy(() => import("./pages/Pass"));
+const Scan = lazy(() => import("./pages/Scan"));
+const Guestlist = lazy(() => import("./pages/Guestlist"));
+const PassList = lazy(() => import("./pages/PassList"));
+
 // Scrolls to the top of the page on every route change — matches the
 // window.scrollTo({ top: 0 }) behaviour the original pages used when
 // switching between internal views.
@@ -74,6 +81,11 @@ export default function App() {
 
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
+
+              <Route path="/pass/:code" element={<Pass />} />
+              <Route path="/scan" element={<Scan />} />
+              <Route path="/guestlist" element={<Guestlist />} />
+              <Route path="/doorlist" element={<PassList />} />
 
               {/* Unknown URLs get a real page, not a silent redirect to home. */}
               <Route path="*" element={<NotFound />} />

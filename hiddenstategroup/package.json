@@ -13,7 +13,9 @@
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.23.0",
     "lucide-react": "^0.400.0",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "qrcode": "^1.5.3",
+    "jsqr": "^1.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
