@@ -20,13 +20,18 @@ export default function DoorGate({ children }) {
   const [checking, setChecking] = useState(false);
   const [ready, setReady] = useState(false);
 
-  // A token in this tab means an existing session. Ask the server who it
-  // belongs to rather than trusting anything stored in the browser.
+  /*
+    A token in this tab means a session may still be open. Ask the server who
+    it belongs to rather than trusting anything the browser is holding — and
+    restore it, so a refresh mid-shift does not dump someone back to the
+    login screen.
+  */
   useEffect(() => {
     const token = api.getToken();
     if (!token) { setReady(true); return; }
-    api.listParties().then((res) => {
-      if (res.signedOut) api.setToken(null);
+    api.me().then((res) => {
+      if (res.ok) setRole(res.user);
+      else api.setToken(null);
       setReady(true);
     });
   }, []);
@@ -49,6 +54,10 @@ export default function DoorGate({ children }) {
     setUser("");
     setPass("");
   };
+
+  // Blank while the session check runs: showing the login form for a moment
+  // and then replacing it looks like a fault.
+  if (!ready) return <div style={{ background: theme.bg, minHeight: "100vh" }} />;
 
   if (role) {
     return (

@@ -148,6 +148,14 @@ async function handleApi(request, env, url) {
     });
   }
 
+  // Who the current token belongs to. Without this, a refresh would show the
+  // login form again even though the session was still perfectly valid.
+  if (path === "/me" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who) return fail("Not signed in.", 401);
+    return json({ ok: true, user: { ...who, can: CAN[who.role] } });
+  }
+
   if (path === "/logout" && method === "POST") {
     const header = request.headers.get("authorization") || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : null;

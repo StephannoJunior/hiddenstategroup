@@ -74,6 +74,10 @@ export const login = (username, password) =>
 
 export const logout = () => call("/logout", { method: "POST" });
 
+// Who the stored token belongs to. Called on load so a refresh does not throw
+// someone back to the login form mid-shift.
+export const me = () => call("/me");
+
 // ── a guest's own pass ──────────────────────────────────────────────────────
 export const fetchPass = (code) =>
   call(`/pass/${encodeURIComponent(code)}`, { auth: false });
