@@ -38,10 +38,14 @@ async function sha256Hex(text) {
   SHA-256. A single hash is far too quick to compute, which is exactly what
   makes stolen hashes worth brute-forcing. This is deliberately slow.
 */
+// 100,000 is the ceiling Workers allow for PBKDF2. Asking for more does not
+// make it slower — it throws, and every login fails with a 500.
+const PBKDF2_ROUNDS = 100000;
+
 async function hashPassword(password, salt) {
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt: enc.encode(salt), iterations: 150000, hash: "SHA-256" },
+    { name: "PBKDF2", salt: enc.encode(salt), iterations: PBKDF2_ROUNDS, hash: "SHA-256" },
     key,
     256
   );
@@ -497,7 +501,15 @@ export default {
         // Never return the raw error: it can reveal table names and query
         // shapes. Log it for the dashboard, tell the caller nothing useful.
         console.error("API error:", err && err.message, err && err.stack);
-        return fail("Something went wrong.", 500);
+        /*
+          The message is normally hidden, because error text can reveal table
+          names and query shapes. During setup that secrecy costs more than it
+          buys: a bare "something went wrong" is impossible to act on. Set
+          DEBUG_ERRORS to "1" as a Worker variable to see the real reason, and
+          remove it once the system is running.
+        */
+        const detail = env.DEBUG_ERRORS === "1" && err ? String(err.message) : undefined;
+        return json({ ok: false, error: "Something went wrong.", detail }, 500);
       }
     }
 
