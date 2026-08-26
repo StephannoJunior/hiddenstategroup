@@ -115,6 +115,11 @@ export const submitRequest = (req) =>
   call("/requests", { method: "POST", body: req, auth: false });
 export const listRequests = () => call("/requests");
 
+// Approving creates the pass and emails it in one step, so a guest can never
+// be approved but left without a pass.
+export const decideRequest = (id, decision, party) =>
+  call(`/requests/${id}`, { method: "PATCH", body: { decision, party } });
+
 // Public: the next event, for pages a guest sees. Returns null rather than
 // throwing when nothing is scheduled, so the form still works.
 export async function nextParty() {

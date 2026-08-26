@@ -24,6 +24,7 @@ export default function Pass() {
   const { code } = useParams();
   const [state, setState] = useState({ loading: true });
   const [left, setLeft] = useState(30);
+  const [qr, setQr] = useState(null);
 
   usePageMeta({
     title: state.pass ? `Pass — ${state.pass.name}` : "Pass",
@@ -41,6 +42,24 @@ export default function Pass() {
       // Remember this pass on the device, so the bar can offer a way back.
       if (res.ok) {
         try { localStorage.setItem("hs-guest-pass", res.pass.code); } catch { /* not fatal */ }
+      }
+
+      /*
+        Redraw the QR each time the number changes, so the square and the
+        digits below it always agree. The library is fetched only here, and
+        only when a pass is actually on screen.
+      */
+      if (res.ok && res.code) {
+        try {
+          const QR = await import("qrcode");
+          const url = await QR.toDataURL(`HS|${res.pass.code}|${res.code}`, {
+            margin: 1, width: 560,
+            color: { dark: "#16130E", light: "#EFE6D0" },
+          });
+          if (alive) setQr(url);
+        } catch {
+          if (alive) setQr(null);   // the number below still works
+        }
       }
     };
 
@@ -142,8 +161,18 @@ export default function Pass() {
       )}
 
       <div className="mt-7 p-5" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
-        <p className="text-center m-0"
-           style={{ ...fontDisplay, fontWeight: 300, fontSize: "48px", letterSpacing: "0.14em",
+        {qr ? (
+          <img src={qr} alt="Entry code" className="block"
+               style={{ width: "100%", maxWidth: "300px", margin: "0 auto", imageRendering: "pixelated" }} />
+        ) : (
+          <p className="text-center m-0 py-10"
+             style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em", color: theme.ink2 }}>
+            SHOW THE NUMBER BELOW
+          </p>
+        )}
+
+        <p className="text-center m-0 mt-4"
+           style={{ ...fontDisplay, fontWeight: 300, fontSize: "44px", letterSpacing: "0.14em",
                     color: theme.ink, fontVariantNumeric: "tabular-nums lining-nums",
                     fontFeatureSettings: '"tnum" 1, "lnum" 1' }}>
           {state.code || "······"}

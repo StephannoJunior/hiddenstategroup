@@ -1,5 +1,6 @@
 import { usePageMeta } from "../lib/seo";
 import React, { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts, Field, inputStyle,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
@@ -21,7 +22,16 @@ import * as api from "../lib/api";
   database exists.
 */
 
+/*
+  Tabs, each shown only to whoever may use it.
+
+  The scanner and door list open as their own pages rather than living inside
+  a tab: at a door you want the scanner filling the screen, not sharing it
+  with a form. They belong here as ways in, not as panels.
+*/
 const TABS = [
+  { id: "scan",     label: "SCANNER",  need: "scan",    to: "/scan" },
+  { id: "door",     label: "DOOR",     need: "seeList", to: "/doorlist" },
   { id: "passes",   label: "PASSES",   need: "seeList" },
   { id: "events",   label: "EVENTS",   need: "issue" },
   { id: "team",     label: "TEAM",     need: "team" },
@@ -394,33 +404,86 @@ function Team() {
 
 // ── REQUESTS ────────────────────────────────────────────────────────────────
 
-function Requests() {
+function Requests({ role, party }) {
   const [rows, setRows] = useState([]);
-  useEffect(() => {
-    api.listRequests().then((res) => { if (res.ok) setRows(res.requests || []); });
-  }, []);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(null);
 
-  return (
-    <Section title={`GUEST LIST REQUESTS — ${rows.length}`}>
-      {rows.length === 0 && (
-        <p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>
-          Nothing yet.
+  const load = useCallback(async () => {
+    const res = await api.listRequests();
+    if (res.ok) setRows(res.requests || []);
+    else setMsg(res.error || "Couldn't load the requests.");
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const decide = async (id, decision) => {
+    setBusy(id); setMsg("");
+    const res = await api.decideRequest(id, decision, party);
+    setBusy(null);
+    if (!res.ok) { setMsg(res.error || "Couldn't record that."); return; }
+    if (decision === "APPROVED") {
+      setMsg(res.email?.sent
+        ? `Approved — pass ${res.code} emailed.`
+        : `Approved — pass ${res.code}. Not emailed: ${res.email?.reason || "send it yourself"}.`);
+    }
+    load();
+  };
+
+  const pending = rows.filter((r) => r.status === "PENDING");
+  const decided = rows.filter((r) => r.status !== "PENDING");
+
+  const card = (r) => (
+    <div key={r.id} className="py-3.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+      <div className="flex items-start gap-3">
+        <span className="flex-1 min-w-0">
+          <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{r.name}</span>
+          <span className="block" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.12em", color: theme.ink2 }}>
+            {r.email}{r.phone ? ` · ${r.phone}` : ""} · {new Date(r.created_at).toLocaleDateString()}
+            {r.pass_code ? ` · ${r.pass_code}` : ""}
+          </span>
+        </span>
+        {r.status === "PENDING" && role.can.issue && (
+          <span className="flex gap-3 shrink-0">
+            <button disabled={busy === r.id} onClick={() => decide(r.id, "APPROVED")}
+                    style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                             color: "#1E4620", background: "transparent", border: 0, cursor: "pointer" }}>
+              {busy === r.id ? "…" : "APPROVE"}
+            </button>
+            <button disabled={busy === r.id} onClick={() => decide(r.id, "DECLINED")}
+                    style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                             color: "#7A2E2E", background: "transparent", border: 0, cursor: "pointer" }}>
+              DECLINE
+            </button>
+          </span>
+        )}
+        {r.status !== "PENDING" && (
+          <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                         color: r.status === "APPROVED" ? "#1E4620" : theme.ink2 }}>
+            {r.status}
+          </span>
+        )}
+      </div>
+      {r.note && (
+        <p className="m-0 mt-1.5" style={{ ...fontText, fontSize: "15px", color: theme.ink2, fontStyle: "italic" }}>
+          “{r.note}”
         </p>
       )}
-      {rows.map((r) => (
-        <div key={r.id} className="py-3" style={{ borderBottom: `1px solid ${theme.rule}` }}>
-          <p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{r.name}</p>
-          <p className="m-0" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.12em", color: theme.ink2 }}>
-            {r.email}{r.phone ? ` · ${r.phone}` : ""} · {new Date(r.created_at).toLocaleDateString()}
+    </div>
+  );
+
+  return (
+    <>
+      <Notice message={msg} tone={msg.startsWith("Approved") ? "good" : "bad"} />
+      <Section title={`WAITING — ${pending.length}`}>
+        {pending.length === 0 && (
+          <p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>
+            Nothing waiting.
           </p>
-          {r.note && (
-            <p className="m-0 mt-1.5" style={{ ...fontText, fontSize: "15px", color: theme.ink2, fontStyle: "italic" }}>
-              “{r.note}”
-            </p>
-          )}
-        </div>
-      ))}
-    </Section>
+        )}
+        {pending.map(card)}
+      </Section>
+      {decided.length > 0 && <Section title={`DECIDED — ${decided.length}`}>{decided.map(card)}</Section>}
+    </>
   );
 }
 
@@ -460,6 +523,13 @@ function ConsoleScreen({ role }) {
 
         <div className="flex gap-5 mt-5 overflow-x-auto no-scrollbar">
           {allowed.map((t) => (
+            t.to ? (
+              <Link key={t.id} to={t.to} className="pb-1 whitespace-nowrap"
+                    style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em",
+                             color: theme.ink2, borderBottom: "2px solid transparent" }}>
+                {t.label} →
+              </Link>
+            ) : (
             <button key={t.id} onClick={() => setTab(t.id)} className="pb-1 whitespace-nowrap"
                     style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em",
                              color: tab === t.id ? theme.brass : theme.ink2,
@@ -467,6 +537,7 @@ function ConsoleScreen({ role }) {
                              background: "transparent", border: 0, cursor: "pointer" }}>
               {t.label}
             </button>
+            )
           ))}
         </div>
 
@@ -477,7 +548,7 @@ function ConsoleScreen({ role }) {
         )}
         {tab === "events" && role.can.issue && <Events parties={parties} reload={loadParties} />}
         {tab === "team" && role.can.team && <Team />}
-        {tab === "requests" && <Requests />}
+        {tab === "requests" && <Requests role={role} party={party} />}
       </section>
       <Footer />
     </div>

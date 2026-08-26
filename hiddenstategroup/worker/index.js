@@ -595,6 +595,65 @@ async function handleApi(request, env, url) {
     return json({ ok: true });
   }
 
+  /*
+    Approving a request turns it into a real pass in one step: take a code,
+    create the pass, email it, and mark the request decided. Doing it as one
+    action means a guest can never end up approved but passless.
+  */
+  if (path.startsWith("/requests/") && method === "PATCH") {
+    const who = await readSession(env, request);
+    if (!who || !can(who.role, "issue")) return fail("Only the boss can decide requests.", 403);
+
+    const id = decodeURIComponent(path.slice(10));
+    const req = await env.DB.prepare("SELECT * FROM requests WHERE id = ?").bind(id).first();
+    if (!req) return fail("No such request.", 404);
+
+    if (body.decision === "DECLINED") {
+      await env.DB.prepare(
+        "UPDATE requests SET status = 'DECLINED', decided_at = ?, decided_by = ? WHERE id = ?"
+      ).bind(now(), who.username, id).run();
+      return json({ ok: true, status: "DECLINED" });
+    }
+
+    if (req.status === "APPROVED" && req.pass_code) {
+      return json({ ok: true, status: "APPROVED", code: req.pass_code, already: true });
+    }
+
+    const partyId = body.party || req.party_id;
+    if (!partyId) return fail("Which event is this for?");
+
+    const pooled = await env.DB.prepare(
+      "SELECT code FROM code_pool WHERE used = 0 ORDER BY RANDOM() LIMIT 1"
+    ).first();
+    if (!pooled) return fail("The code pool is empty.", 409);
+
+    await env.DB.batch([
+      env.DB.prepare("UPDATE code_pool SET used = 1, used_at = ? WHERE code = ?").bind(now(), pooled.code),
+      env.DB.prepare(
+        "INSERT INTO passes (code, party_id, name, email, phone, kind, note, id_required, issued_at, issued_by) " +
+        "VALUES (?, ?, ?, ?, ?, 'GUEST', ?, 1, ?, ?)"
+      ).bind(pooled.code, partyId, req.name, req.email, req.phone, req.note, now(), who.username),
+      env.DB.prepare(
+        "UPDATE requests SET status = 'APPROVED', pass_code = ?, decided_at = ?, decided_by = ? WHERE id = ?"
+      ).bind(pooled.code, now(), who.username, id),
+    ]);
+
+    const party = await env.DB.prepare(
+      "SELECT name, date_label, venue, minimum_age FROM parties WHERE id = ?"
+    ).bind(partyId).first();
+
+    const email = await sendPassEmail(env, {
+      to: req.email, name: req.name, code: pooled.code,
+      party: party || { name: partyId, date_label: "", venue: null, minimum_age: 16 },
+      kind: "GUEST",
+    });
+    if (email.sent) {
+      await env.DB.prepare("UPDATE passes SET emailed_at = ? WHERE code = ?").bind(now(), pooled.code).run();
+    }
+
+    return json({ ok: true, status: "APPROVED", code: pooled.code, email });
+  }
+
   if (path === "/requests" && method === "GET") {
     const who = await readSession(env, request);
     if (!who || !can(who.role, "seeList")) return fail("Not allowed.", 403);

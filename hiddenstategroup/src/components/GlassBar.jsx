@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info, Ticket, Shield } from "lucide-react";
+import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info,
+         Ticket, Shield, ScanLine, ClipboardList, LogIn } from "lucide-react";
 import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 import * as api from "../lib/api";
@@ -109,32 +110,33 @@ export default function GlassBar() {
     return () => { alive = false; };
   }, [location.pathname]);
 
-  // Team first: someone signed in as staff who also holds a pass should still
-  // land on the door tools, not their own ticket.
-  const extraTab = role
-    ? { href: "/console", key: "team", Icon: Shield }
+  /*
+    What the bar shows depends entirely on who is looking.
+
+      signed out  → a way in, nothing else
+      guest       → their own pass
+      door staff  → the scanner
+      management  → scanner, door list, console
+
+    A guest tab never appears for the team: someone working the door should
+    not be sent to their own ticket by mistake, and the two are one tap apart.
+  */
+  const teamTabs = [];
+  if (role) {
+    if (role.can.scan) teamTabs.push({ href: "/scan", key: "scanner", Icon: ScanLine });
+    if (role.can.seeList) teamTabs.push({ href: "/doorlist", key: "doorList", Icon: ClipboardList });
+    teamTabs.push({ href: "/console", key: "team", Icon: Shield });
+  }
+
+  const extraTabs = role
+    ? teamTabs
     : guestPass
-      ? { href: `/pass/${guestPass}`, key: "myPass", Icon: Ticket }
-      : null;
-
-  useEffect(() => { setOpen(false); }, [location.pathname]);
-
-  useEffect(() => {
-    if (!open || isDesktop) return;
-    let queued = false;
-    const onScroll = () => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(() => { queued = false; setOpen(false); });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [open, isDesktop]);
-
-  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current); }, []);
+      ? [{ href: `/pass/${guestPass}`, key: "myPass", Icon: Ticket }]
+      : [{ href: "/admins-staff-boss", key: "signIn", Icon: LogIn }];
 
   const handleTap = () => {
     if (tapTimer.current) {
+      // Second tap inside the window → home.
       clearTimeout(tapTimer.current);
       tapTimer.current = null;
       setOpen(false);
@@ -271,7 +273,7 @@ export default function GlassBar() {
                 scrolling — being able to see the whole map matters more than
                 a comfortable label size. */}
             <div className="flex relative" style={{ padding: "6px", gap: "2px" }}>
-              {[...TABS, ...(extraTab ? [extraTab] : [])].map(({ href, key, Icon }) => {
+              {[...TABS, ...extraTabs].map(({ href, key, Icon }) => {
                 const active = isActive(href);
                 return (
                   <Link
