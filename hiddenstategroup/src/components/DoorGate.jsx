@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, fontText, fontMasthead, theme } from "./Shared";
-import { signInWith, currentRole, signIn, signOut } from "../lib/access";
+import * as api from "../lib/api";
 
 /*
   DoorGate — wraps the scanner and the door list.
@@ -18,24 +18,34 @@ export default function DoorGate({ children }) {
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
+  const [ready, setReady] = useState(false);
 
-  useEffect(() => { setRole(currentRole()); }, []);
+  // A token in this tab means an existing session. Ask the server who it
+  // belongs to rather than trusting anything stored in the browser.
+  useEffect(() => {
+    const token = api.getToken();
+    if (!token) { setReady(true); return; }
+    api.listParties().then((res) => {
+      if (res.signedOut) api.setToken(null);
+      setReady(true);
+    });
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
     setError("");
     setChecking(true);
-    const found = await signInWith(user, pass);
+    const res = await api.login(user, pass);
     setChecking(false);
-    if (!found) {
+    if (!res.ok) {
       // Deliberately vague: saying which half was wrong would tell someone
       // guessing that a username exists.
-      setError("Those details weren't recognised.");
+      setError(res.error || "Those details weren't recognised.");
       setPass("");
       return;
     }
-    signIn(found);
-    setRole(found);
+    api.setToken(res.token);
+    setRole(res.user);
     setUser("");
     setPass("");
   };
@@ -50,8 +60,8 @@ export default function DoorGate({ children }) {
           <span className="px-3 py-1"
                 style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em",
                          background: theme.ink, color: theme.bg, pointerEvents: "auto" }}>
-            {(role.displayName || role.label).toUpperCase()}
-            <button onClick={() => { signOut(); setRole(null); }}
+            {(role.displayName || role.username || "").toUpperCase()}
+            <button onClick={() => { api.logout(); api.setToken(null); setRole(null); }}
                     style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em",
                              color: theme.bg, marginLeft: "12px", opacity: 0.7 }}>
               SIGN OUT

@@ -1,9 +1,10 @@
 import { usePageMeta } from "../lib/seo";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Nav, Footer, useGoogleFonts, Field, inputStyle,
          fontDisplay, fontUtility, fontText, fontMasthead, theme } from "../components/Shared";
-import { FORM_ENDPOINT, CONTACT_EMAIL } from "../lib/config";
-import { upcomingParties } from "../lib/passes";
+import { CONTACT_EMAIL } from "../lib/config";
+import * as api from "../lib/api";
+
 
 /*
   Guest list signup.
@@ -29,6 +30,18 @@ export default function Guestlist() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
+  // The event and its age limit come from the server, so changing them in the
+  // console changes this page too.
+  const [minimumAge, setMinimumAge] = useState(16);
+  const [partyId, setPartyId] = useState(null);
+  useEffect(() => {
+    api.nextParty().then((p) => {
+      if (!p) return;
+      setMinimumAge(p.minimum_age ?? 16);
+      setPartyId(p.id);
+    });
+  }, []);
+
   const update = (k) => (e) =>
     setForm((f) => ({ ...f, [k]: k === "age" ? e.target.checked : e.target.value }));
 
@@ -36,26 +49,16 @@ export default function Guestlist() {
     e.preventDefault();
     setError("");
     if (!form.age) {
-      setError(`You must confirm you are ${(upcomingParties()[0]?.minimumAge ?? 16)} or over.`);
-      return;
-    }
-    if (!FORM_ENDPOINT) {
-      setError(`This form isn't connected yet. Please email ${CONTACT_EMAIL}.`);
+      setError(`You must confirm you are ${minimumAge} or over.`);
       return;
     }
     setSending(true);
-    try {
-      const res = await fetch(FORM_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ ...form, _subject: `Guest list — ${form.name}` }),
-      });
-      if (!res.ok) throw new Error();
+    const res = await api.submitRequest({ ...form, party: partyId });
+    setSending(false);
+    if (res.ok) {
       setSent(true);
-    } catch {
-      setError(`Something went wrong. Please email ${CONTACT_EMAIL} instead.`);
-    } finally {
-      setSending(false);
+    } else {
+      setError(res.error || `Something went wrong. Please email ${CONTACT_EMAIL} instead.`);
     }
   };
 
@@ -112,7 +115,7 @@ export default function Guestlist() {
             <label className="flex items-start gap-3 pt-1" style={{ cursor: "pointer" }}>
               <input type="checkbox" checked={form.age} onChange={update("age")} style={{ marginTop: "3px" }} />
               <span style={{ ...fontText, fontSize: "16px", lineHeight: 1.5, color: theme.ink }}>
-                I confirm I am {(upcomingParties()[0]?.minimumAge ?? 16)} or over. ID may be requested at the door.
+                I confirm I am {minimumAge} or over. ID may be requested at the door.
               </span>
             </label>
 

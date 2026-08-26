@@ -35,6 +35,7 @@ const Scan = lazy(() => import("./pages/Scan"));
 const Guestlist = lazy(() => import("./pages/Guestlist"));
 const PassList = lazy(() => import("./pages/PassList"));
 const Admin = lazy(() => import("./pages/Admin"));
+const Console = lazy(() => import("./pages/Console"));
 const TeamLogin = lazy(() => import("./pages/TeamLogin"));
 
 // Scrolls to the top of the page on every route change — matches the
@@ -89,6 +90,7 @@ export default function App() {
               <Route path="/guestlist" element={<Guestlist />} />
               <Route path="/doorlist" element={<PassList />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/console" element={<Console />} />
               <Route path="/admins-staff-boss" element={<TeamLogin />} />
 
               {/* Unknown URLs get a real page, not a silent redirect to home. */}

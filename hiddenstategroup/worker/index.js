@@ -194,6 +194,17 @@ async function handleApi(request, env, url) {
     });
   }
 
+  // Public: the soonest event still open. The guest list form reads its age
+  // limit and event from here, so changing them in the console changes the
+  // public page too.
+  if (path === "/next-party" && method === "GET") {
+    const party = await env.DB.prepare(
+      "SELECT id, name, date_label, venue, minimum_age FROM parties " +
+      "WHERE archived = 0 AND doors_close_at > ? ORDER BY doors_close_at ASC LIMIT 1"
+    ).bind(now()).first();
+    return json({ ok: true, party: party || null });
+  }
+
   // ── the door ────────────────────────────────────────────────────────────
   if (path === "/scan" && method === "POST") {
     const who = await readSession(env, request);
