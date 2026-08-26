@@ -63,10 +63,21 @@ export const ROLES = {
 const SALT = "hidden-state-door-v1";
 
 const ACCOUNTS = [
-  { user: "stephanno", role: "OWNER", name: "Stephanno Jr.", hash: "b64e2a670d592d811893d3f30de7490ffde81de039cc4f1360d0f1a4efe6425f" },
-  { user: "manager", role: "OWNER", name: "Management", hash: "2f733ad873e480697cebc1e936c9b3ec03c52b8d334f013e49b0cbd21b6501c1" },
-  { user: "door", role: "STAFF", name: "Door staff", hash: "d8979a54888af958d253508c7d71df8cb07f3631872a70c93ec6a1f5696bdcc0" },
-  { user: "door2", role: "STAFF", name: "Door staff 2", hash: "8fa8ddbd3fd0f9ee0f740be434eea70538bf10c428c6692c4b02d39f9566dfe5" }
+  { user: "admin1", role: "OWNER", name: "Admin 1", hash: "0063809b713b9fe9273e42dc2cb8a5e2378365ee88202517eade6367f86398d7" },
+  { user: "admin2", role: "OWNER", name: "Admin 2", hash: "a9f2b9bd1da6e0f630fa15d90af16c931c51a10e1019aaa483ef25410bcd1669" },
+  { user: "admin3", role: "OWNER", name: "Admin 3", hash: "db3c7bba95a37bd7c35dd564b40855b1321de83d54875d0a4eca343f7278dc23" },
+  { user: "admin4", role: "OWNER", name: "Admin 4", hash: "d45c13068f98e1ec25304b124d5808813b55a8e4d71e9a4a9b39dee74e6f7925" },
+  { user: "admin5", role: "OWNER", name: "Admin 5", hash: "8e37f13ecfedca0c15a0e242611541d8d4b1eccf4896332649b6b697e4a3686f" },
+  { user: "staff1", role: "STAFF", name: "Staff 1", hash: "41efe25f023ce0ce436b04ca03b0c2bb26527e48a81cdfafca56677b9e88e084" },
+  { user: "staff2", role: "STAFF", name: "Staff 2", hash: "629715ccaff3d08bd18ca8d7b3af01fafa00df8575f85cab279fda85fdf81754" },
+  { user: "staff3", role: "STAFF", name: "Staff 3", hash: "5526045073a2765c5b6c53a1614cda5c65993bdea256d78f100068b2292c85d7" },
+  { user: "staff4", role: "STAFF", name: "Staff 4", hash: "a557f7d5c8d8adb599abacffb5a06a3d0fbb5d8d569dbcce5a675974091737a2" },
+  { user: "staff5", role: "STAFF", name: "Staff 5", hash: "64c7715189d386c09585a0bf86b06d00e0ce3d71183cea0474e7609e99127f30" },
+  { user: "staff6", role: "STAFF", name: "Staff 6", hash: "e1f1b9324f2e5895c052c4e8b3ca0054c037daa2aa12c185e9c0545a63caec2f" },
+  { user: "staff7", role: "STAFF", name: "Staff 7", hash: "ed242894a3d7a7e33e647c095f383a202b4c8e71729e6f5c8eedcbc8368ac5a4" },
+  { user: "staff8", role: "STAFF", name: "Staff 8", hash: "b63403b76e755a4ed06ff7c3585d542e36798b0acf5273679d1b10b47e216ab1" },
+  { user: "staff9", role: "STAFF", name: "Staff 9", hash: "dcdd77990f4fe054bee29347a2be710245429b0bbed1fca09d8a05692e7605cf" },
+  { user: "staff10", role: "STAFF", name: "Staff 10", hash: "ca532fa9b4eaef50aba2bcc9585036a86a62102c4bcfea7bae4f5a19f8f74451" }
 ];
 
 const SESSION_KEY = "hs-door-role";
