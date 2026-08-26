@@ -25,7 +25,7 @@
 // You rarely need to: Vite already fingerprints JS and CSS filenames, so a
 // changed file is automatically a new file. This is for the rare case of
 // clearing something stubborn.
-const CACHE_VERSION = "hidden-state-v2";
+const CACHE_VERSION = "hidden-state-v3";
 const OFFLINE_URL = "/";
 
 const PRECACHE = [
@@ -74,7 +74,16 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
 
   if (request.method !== "GET") return;
-  if (new URL(request.url).origin !== self.location.origin) return;
+  const target = new URL(request.url);
+  if (target.origin !== self.location.origin) return;
+
+  /*
+    Never touch the API. A cached /api/ response is worse than no response:
+    the door would keep showing a guest list from an hour ago, and a page
+    loaded from cache would look like the API is missing entirely. These
+    always go straight to the network.
+  */
+  if (target.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
