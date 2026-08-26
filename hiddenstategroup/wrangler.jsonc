@@ -3,21 +3,36 @@
   "name": "hiddenstategroup1",
   "compatibility_date": "2026-08-16",
 
-  // The Worker now handles /api/* itself and hands everything else to the
-  // static site. Without this entry point there is nowhere for the API to live.
+  // The Worker handles /api/* and hands everything else to the static site.
   "main": "worker/index.js",
 
   "assets": {
     // Where `npm run build` puts the finished site.
     "directory": "./dist/",
+
     // Serves index.html for any unmatched path, so React Router handles
     // /records, /artists/1 etc. — this is what stops a refresh 404-ing.
     "not_found_handling": "single-page-application",
+
     // Lets the Worker fall through to the files via env.ASSETS.
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+
+    /*
+      THIS LINE IS WHY THE API APPEARED TO BE MISSING.
+
+      By default the asset layer answers first. Combined with the
+      single-page-application fallback above, a request for /api/anything was
+      being handed index.html before the Worker ever ran — so a browser got
+      the website's 404 page while curl, which does not ask for HTML, fell
+      through to the Worker and worked.
+
+      run_worker_first sends these paths to the Worker before assets are
+      considered.
+    */
+    "run_worker_first": ["/api/*"]
   },
 
-  // The D1 database. The id is the one from your Cloudflare dashboard.
+  // The D1 database.
   "d1_databases": [
     {
       "binding": "DB",
