@@ -6,7 +6,7 @@ import {
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
 import DoorGate from "../components/DoorGate";
-import { passStatuses, clearUsed, PARTIES } from "../lib/passes";
+import * as api from "../lib/api";
 
 /*
   The organiser's view of the door.
@@ -44,18 +44,43 @@ function PassListScreen({ role }) {
   usePageMeta({ title: "Door list", description: "Hidden State pass status." });
 
   const [rows, setRows] = useState([]);
-  const party = PARTIES[0];
+  const [party, setParty] = useState(null);
+  const [msg, setMsg] = useState("");
 
+  /*
+    Read from the server every few seconds, so this is the same list every
+    phone on the door sees. It used to read the scanning device's own storage,
+    which meant a second phone knew nothing about the first.
+  */
   useEffect(() => {
-    const refresh = () => setRows(passStatuses());
-    refresh();
-    const id = setInterval(refresh, 2000);
-    return () => clearInterval(id);
+    let alive = true;
+
+    const load = async () => {
+      const p = await api.listParties();
+      if (!alive || !p.ok || !p.parties?.length) return;
+      const current = p.parties[0];
+      setParty(current);
+      const res = await api.listPasses(current.id);
+      if (!alive) return;
+      if (res.ok) setRows(res.passes || []);
+      else setMsg(res.error || "Couldn't load the list.");
+    };
+
+    load();
+    const id = setInterval(load, 4000);
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
-  const admitted = rows.filter((r) => r.state === "ADMITTED").length;
-  const refused = rows.filter((r) => r.state === "REFUSED").length;
-  const waiting = rows.filter((r) => r.state === "AWAITING").length;
+  // The server returns raw facts; the three states are worked out here.
+  const stateOf = (r) =>
+    r.status === "REVOKED" ? "REVOKED"
+      : r.admitted_at ? "ADMITTED"
+        : r.refusals > 0 ? "REFUSED"
+          : "AWAITING";
+
+  const admitted = rows.filter((r) => stateOf(r) === "ADMITTED").length;
+  const refused = rows.filter((r) => stateOf(r) === "REFUSED").length;
+  const waiting = rows.filter((r) => stateOf(r) === "AWAITING").length;
 
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
@@ -93,7 +118,8 @@ function PassListScreen({ role }) {
 
         <div className="mt-7" style={{ borderTop: "1px solid " + theme.ink }}>
           {rows.map((r) => {
-            const s = STATE[r.state];
+            const st = stateOf(r);
+            const s = STATE[st] || STATE.AWAITING;
             return (
               <div key={r.code} className="flex items-center gap-3 py-3.5"
                    style={{ borderBottom: "1px solid " + theme.rule }}>
@@ -108,8 +134,8 @@ function PassListScreen({ role }) {
                   </span>
                   <span className="block" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink2 }}>
                     {r.ticket ? r.ticket.ref : r.type}
-                    {role.can.seeReasons && r.state === "REFUSED" && r.reason ? ` · ${REASON[r.reason] || r.reason}` : ""}
-                    {r.tries > 1 ? ` · ${r.tries} attempts` : ""}
+                    {role.can.seeReasons && st === "REFUSED" && r.last_reason ? ` · ${REASON[r.last_reason] || r.last_reason}` : ""}
+                    {r.refusals > 1 ? ` · ${r.refusals} attempts` : ""}
                   </span>
                 </span>
 
@@ -117,9 +143,9 @@ function PassListScreen({ role }) {
                   <span className="block" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em", color: s.fg }}>
                     {s.label}
                   </span>
-                  {r.at && (
+                  {r.admitted_at && (
                     <span className="block" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.1em", color: theme.ink2 }}>
-                      {new Date(r.at).toLocaleTimeString()}
+                      {new Date(r.admitted_at).toLocaleTimeString()}
                     </span>
                   )}
                 </span>
@@ -141,7 +167,7 @@ function PassListScreen({ role }) {
           </Link>
           {role.can.reset && (
           <button
-            onClick={() => { if (window.confirm("Clear tonight's record and start fresh?")) { clearUsed(); setRows(passStatuses()); } }}
+            onClick={() => window.alert("The record now lives on the server and is kept as history. Cancel individual passes from the console instead.")}
             style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
                      color: theme.ink2, borderBottom: "1px solid " + theme.rule }}
           >

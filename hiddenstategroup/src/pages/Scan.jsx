@@ -2,8 +2,7 @@ import { usePageMeta } from "../lib/seo";
 import React, { useEffect, useRef, useState } from "react";
 import { Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, fontText, fontMasthead, theme } from "../components/Shared";
 import DoorGate from "../components/DoorGate";
-import { verifyPayload, findPass, partyOf, partyIsUpcoming,
-         readUsed, markUsed, markRefused, clearUsed, upcomingParties } from "../lib/passes";
+import * as api from "../lib/api";
 
 /*
   Door scanner. Opened on one phone at the entrance.
@@ -41,31 +40,42 @@ function ScanScreen({ role }) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
   const [manual, setManual] = useState("");
-  const [used, setUsed] = useState({});
+  const [admitted, setAdmitted] = useState(0);
   const [error, setError] = useState("");
 
-  useEffect(() => { setUsed(readUsed()); }, []);
 
+
+  /*
+    Everything is decided by the server: whether the code is live, whether the
+    pass was already admitted, whether the night is over. The door phone only
+    reports what it read and shows the answer.
+
+    That is what makes two phones on one door possible — they share one record
+    rather than each keeping their own.
+  */
   const handle = async (payload) => {
-    const check = await verifyPayload(payload);
+    const res = await api.scan(payload);
 
-    if (!check.ok) {
-      if (check.pass) markRefused(check.pass.code, check.pass.name, check.reason);
-      setResult({ tone: TONE[check.reason] || TONE.NOT_A_PASS, name: check.pass?.name || null });
+    if (res.signedOut) {
+      setResult({ tone: TONE.NOT_A_PASS, name: null, note: "Signed out — sign in again" });
       return;
     }
-    const already = readUsed()[check.pass.code];
-    if (already) {
-      markRefused(check.pass.code, check.pass.name, "USED");
+    if (!res.ok) {
       setResult({
-        tone: TONE.USED,
-        name: check.pass.name,
-        note: `Admitted ${new Date(already.at).toLocaleTimeString()}`,
+        tone: TONE[res.reason] || TONE.NOT_A_PASS,
+        name: res.name || null,
+        note: res.at ? `Admitted ${new Date(res.at).toLocaleTimeString()}` : res.note || null,
       });
       return;
     }
-    setUsed(markUsed(check.pass.code, check.pass.name));
-    setResult({ tone: TONE.VALID, name: check.pass.name, note: check.pass.type });
+
+    setAdmitted((n) => n + 1);
+    setResult({
+      tone: TONE.VALID,
+      name: res.name,
+      note: res.ticketRef ? `${res.tier || res.kind} · ${res.ticketRef}` : res.kind,
+      checkId: !!res.idRequired,
+    });
     if (navigator.vibrate) navigator.vibrate(40);
   };
 
@@ -127,7 +137,7 @@ function ScanScreen({ role }) {
     requestAnimationFrame(step);
   };
 
-  const admitted = Object.keys(used).length;
+
 
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
@@ -140,7 +150,7 @@ function ScanScreen({ role }) {
         <div className="flex justify-between py-1.5 mt-2"
              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
                       borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
-          <span>{upcomingParties()[0] ? upcomingParties()[0].name : "NO PARTY SET"}</span>
+          <span>DOOR</span>
           <span>{admitted} ADMITTED</span>
         </div>
 
@@ -215,21 +225,17 @@ function ScanScreen({ role }) {
                        color: theme.ink, padding: "12px", fontSize: "17px", letterSpacing: "0.1em" }}
             />
             <button
-              onClick={() => {
-                const p = findPass(manual.trim());
-                if (!p) { setResult({ tone: TONE.UNKNOWN }); return; }
-                const party = partyOf(p);
-                if (!partyIsUpcoming(party)) {
-                  setResult({ tone: TONE.PARTY_OVER, name: p.name,
-                              note: party ? party.name : "unlinked" });
-                  return;
-                }
-                const already = readUsed()[p.code];
-                if (already) {
-                  setResult({ tone: TONE.USED, name: p.name, note: `Admitted ${new Date(already.at).toLocaleTimeString()}` });
+              onClick={async () => {
+                const typed = manual.trim();
+                if (!typed) return;
+                // A typed entry may be either the pass code or the number on
+                // screen; the server works out which.
+                const res = await api.scanByCode(typed);
+                if (res.ok) {
+                  setAdmitted((n) => n + 1);
+                  setResult({ tone: TONE.VALID, name: res.name, note: `${res.kind} · checked by code`, checkId: !!res.idRequired });
                 } else {
-                  setUsed(markUsed(p.code, p.name));
-                  setResult({ tone: TONE.VALID, name: p.name, note: p.type + " · checked by code" });
+                  setResult({ tone: TONE[res.reason] || TONE.UNKNOWN, name: res.name || null });
                 }
                 setManual("");
               }}
@@ -246,30 +252,14 @@ function ScanScreen({ role }) {
           </p>
         </div>
 
-        {role.can.seeList && admitted > 0 && (
-          <div className="mt-7 pt-5" style={{ borderTop: "1px solid " + theme.rule }}>
-            <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-              ADMITTED TONIGHT
-            </p>
-            {Object.entries(used).map(([code, info]) => (
-              <div key={code} className="flex justify-between py-2"
-                   style={{ borderBottom: "1px solid " + theme.rule }}>
-                <span style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{info.name}</span>
-                <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.14em", color: theme.ink2 }}>
-                  {new Date(info.at).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
-            <button
-              onClick={() => { if (window.confirm("Clear the admitted list for a fresh night?")) { clearUsed(); setUsed({}); } }}
-              className="mt-4 pb-0.5"
-              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em",
-                       color: theme.ink2, borderBottom: "1px solid " + theme.rule }}
-            >
-              RESET FOR A NEW NIGHT
-            </button>
-          </div>
+        {role.can.seeList && (
+          <p className="m-0 mt-7 pt-5" style={{ ...fontText, fontSize: "15px", color: theme.ink2,
+                                                borderTop: `1px solid ${theme.rule}` }}>
+            The full list of who came in is on the door list, which every phone
+            shares.
+          </p>
         )}
+
       </section>
 
       <Footer />

@@ -82,7 +82,7 @@ function Passes({ role, parties, party, setParty }) {
     const res = await api.issuePass({ ...form, party });
     setBusy(false);
     if (!res.ok) { setMsg(res.error || "Couldn't issue that pass."); return; }
-    setIssued(res.code);
+    setIssued({ code: res.code, email: res.email });
     setForm({ name: "", email: "", phone: "", kind: "TICKET", tier: "STANDARD", ticketRef: "", note: "" });
     load();
   };
@@ -156,11 +156,26 @@ function Passes({ role, parties, party, setParty }) {
                 WRITE THIS ON THE TICKET
               </p>
               <p className="m-0 mt-2" style={{ ...fontDisplay, fontSize: "34px", letterSpacing: "0.14em", color: theme.ink }}>
-                {issued}
+                {issued.code}
               </p>
-              <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", color: theme.ink2 }}>
-                Their pass: hiddenstategroup.com/pass/{issued}
+
+              {/* Say plainly whether it was emailed. Silence here would leave
+                  you assuming a guest has their pass when they do not. */}
+              <p className="m-0 mt-3" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
+                                               color: issued.email?.sent ? "#1E4620" : "#7A5A2E" }}>
+                {issued.email?.sent ? "EMAILED" : `NOT EMAILED — ${issued.email?.reason || "send it yourself"}`}
               </p>
+
+              <p className="m-0 mt-3" style={{ ...fontText, fontSize: "14px", color: theme.ink2, wordBreak: "break-all" }}>
+                hiddenstategroup.com/pass/{issued.code}
+              </p>
+              <button
+                onClick={() => navigator.clipboard?.writeText(`https://hiddenstategroup.com/pass/${issued.code}`)}
+                className="mt-3"
+                style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.ink,
+                         background: "transparent", border: `1px solid ${theme.ink}`, padding: "9px 16px", cursor: "pointer" }}>
+                COPY THE LINK
+              </button>
             </div>
           )}
           <Notice message={msg} />

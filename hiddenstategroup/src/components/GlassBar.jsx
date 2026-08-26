@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info, Ticket, Shield } from "lucide-react";
 import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
-import { currentRole } from "../lib/access";
+import * as api from "../lib/api";
 
 /*
   GlassBar — floating navigation on phones.
@@ -78,13 +78,44 @@ export default function GlassBar() {
     without a reload.
   */
   const [role, setRole] = useState(null);
-  useEffect(() => { setRole(currentRole()); }, [location.pathname]);
+  const [guestPass, setGuestPass] = useState(null);
 
-  const extraTab = !role
-    ? null
-    : role.can.ownPass
-      ? { href: `/pass/${role.passCode}`, key: "myPass", Icon: Ticket }
-      : { href: "/admin", key: "team", Icon: Shield };
+  /*
+    Ask the server who is signed in, rather than trusting anything the browser
+    holds. Re-checked on every route change so signing in or out updates the
+    bar straight away.
+
+    A guest is different: they hold a pass code, not an account, so their code
+    is remembered locally and turned into a tab without any server call.
+  */
+  useEffect(() => {
+    let alive = true;
+
+    if (api.getToken()) {
+      api.me().then((res) => {
+        if (!alive) return;
+        setRole(res.ok ? res.user : null);
+      });
+    } else {
+      setRole(null);
+    }
+
+    try {
+      setGuestPass(localStorage.getItem("hs-guest-pass"));
+    } catch {
+      setGuestPass(null);
+    }
+
+    return () => { alive = false; };
+  }, [location.pathname]);
+
+  // Team first: someone signed in as staff who also holds a pass should still
+  // land on the door tools, not their own ticket.
+  const extraTab = role
+    ? { href: "/console", key: "team", Icon: Shield }
+    : guestPass
+      ? { href: `/pass/${guestPass}`, key: "myPass", Icon: Ticket }
+      : null;
 
   useEffect(() => { setOpen(false); }, [location.pathname]);
 

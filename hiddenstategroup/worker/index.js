@@ -84,6 +84,105 @@ async function rotatingCode(secret, code, window) {
   return String(num % 1000000).padStart(6, "0");
 }
 
+// ─── email ─────────────────────────────────────────────────────────────────
+
+/*
+  Sending a pass.
+
+  The key lives as a Worker secret, never in the code and never in the
+  browser. If it is missing, issuing still works and simply reports that
+  nothing was sent — a pass that exists but was not emailed is a small
+  problem; a pass that failed to be created because email was down is a real
+  one.
+*/
+async function sendPassEmail(env, { to, name, code, party, kind }) {
+  if (!env.RESEND_API_KEY) return { sent: false, reason: "no key configured" };
+  if (!to) return { sent: false, reason: "no address" };
+
+  const url = `https://hiddenstategroup.com/pass/${code}`;
+  const isInvite = kind === "INVITATION";
+
+  const text = [
+    `${name},`,
+    "",
+    isInvite
+      ? `You're invited to ${party.name}.`
+      : `Your pass for ${party.name} is ready.`,
+    "",
+    `Date: ${party.date_label}`,
+    party.venue ? `Venue: ${party.venue}` : "Venue: to be announced",
+    "",
+    "Open your pass here:",
+    url,
+    "",
+    "Keep this link. At the door it shows a number that changes every thirty",
+    "seconds, so a screenshot will not work — open the page when you arrive.",
+    "",
+    `${party.minimum_age}+. Bring ID matching the name on the pass.`,
+    "",
+    "Hidden State",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Georgia,serif;color:#16130E;background:#F3EBD9;padding:32px">
+      <div style="max-width:480px;margin:0 auto">
+        <p style="font-family:Helvetica,sans-serif;font-size:10px;letter-spacing:.2em;color:#8A6A28;margin:0">
+          ${isInvite ? "YOU'RE INVITED" : "YOUR PASS"}
+        </p>
+        <div style="border-top:2px solid #16130E;margin-top:10px"></div>
+        <div style="border-top:1px solid #16130E;margin-top:3px"></div>
+        <h1 style="font-size:30px;font-weight:400;margin:24px 0 6px">${party.name}</h1>
+        <p style="font-family:Helvetica,sans-serif;font-size:11px;letter-spacing:.16em;color:#463F35;margin:0">
+          ${party.date_label}${party.venue ? " · " + party.venue : ""}
+        </p>
+        <p style="font-size:17px;line-height:1.6;margin:24px 0 0">
+          ${name}, your pass is ready.
+        </p>
+        <p style="margin:24px 0">
+          <a href="${url}" style="display:inline-block;background:#16130E;color:#F3EBD9;
+             font-family:Helvetica,sans-serif;font-size:11px;letter-spacing:.2em;
+             padding:14px 28px;text-decoration:none">OPEN YOUR PASS</a>
+        </p>
+        <p style="font-size:15px;line-height:1.6;color:#463F35;margin:0">
+          Keep this link. At the door it shows a number that changes every
+          thirty seconds, so a screenshot will not work — open the page when
+          you arrive.
+        </p>
+        <p style="font-family:Helvetica,sans-serif;font-size:10px;letter-spacing:.16em;color:#463F35;margin:24px 0 0">
+          ${party.minimum_age}+ · BRING ID MATCHING THE NAME
+        </p>
+      </div>
+    </div>`;
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Hidden State <passes@hiddenstategroup.com>",
+        to: [to],
+        subject: isInvite
+          ? `You're invited — ${party.name}`
+          : `Your pass — ${party.name}`,
+        text,
+        html,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      console.error("Resend refused:", res.status, detail);
+      return { sent: false, reason: `email service returned ${res.status}` };
+    }
+    return { sent: true };
+  } catch (err) {
+    console.error("Email failed:", err && err.message);
+    return { sent: false, reason: "could not reach the email service" };
+  }
+}
+
 // ─── sessions ──────────────────────────────────────────────────────────────
 
 const SESSION_HOURS = 12;   // a shift, not a fortnight
@@ -324,7 +423,25 @@ async function handleApi(request, env, url) {
       ),
     ]);
 
-    return json({ ok: true, code: pooled.code });
+    // Email is best effort. The pass exists either way, and the console shows
+    // the link so it can always be sent by hand.
+    let email = { sent: false, reason: "no address" };
+    if (body.email) {
+      const party = await env.DB.prepare(
+        "SELECT name, date_label, venue, minimum_age FROM parties WHERE id = ?"
+      ).bind(body.party).first();
+      email = await sendPassEmail(env, {
+        to: body.email, name: body.name, code: pooled.code,
+        party: party || { name: body.party, date_label: "", venue: null, minimum_age: 16 },
+        kind: body.kind,
+      });
+      if (email.sent) {
+        await env.DB.prepare("UPDATE passes SET emailed_at = ? WHERE code = ?")
+          .bind(now(), pooled.code).run();
+      }
+    }
+
+    return json({ ok: true, code: pooled.code, email });
   }
 
   // ── cancelling one ──────────────────────────────────────────────────────
