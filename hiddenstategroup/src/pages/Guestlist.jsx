@@ -24,7 +24,7 @@ export default function Guestlist() {
     description: "Request a place on the Hidden State guest list.",
   });
 
-  const [form, setForm] = useState({ name: "", email: "", phone: "", age: false });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", note: "", age: false });
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -92,6 +92,21 @@ export default function Guestlist() {
             </Field>
             <Field label="Phone">
               <input required type="tel" style={inputStyle} value={form.phone} onChange={update("phone")} />
+            </Field>
+
+            <Field label="Anything we should know">
+              <textarea
+                rows={3}
+                maxLength={150}
+                value={form.note}
+                onChange={update("note")}
+                placeholder="Birthday, plus-one, press, working the night — anything useful."
+                style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }}
+              />
+              <span className="block text-right mt-1"
+                    style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink2 }}>
+                {150 - form.note.length} LEFT
+              </span>
             </Field>
 
             <label className="flex items-start gap-3 pt-1" style={{ cursor: "pointer" }}>

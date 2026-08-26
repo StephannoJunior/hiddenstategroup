@@ -22,18 +22,45 @@
 */
 
 export const ROLES = {
+  BOSS: {
+    id: "BOSS",
+    label: "Boss",
+    // Everything management can do, plus issuing, cancelling and revoking
+    // passes, and creating or removing team accounts. Deliberately one
+    // person: these actions cannot be undone from the door.
+    can: {
+      scan: true, seeList: true, seeReasons: true, reset: true, ownPass: false,
+      issuePasses: true, revokePasses: true, manageTeam: true, seeContacts: true,
+    },
+  },
+  GUEST: {
+    id: "GUEST",
+    label: "Guest",
+    // A guest signs in with the pass code they were sent. No password exists,
+    // so there is nothing of theirs to store and nothing to leak.
+    can: {
+      scan: false, seeList: false, seeReasons: false, reset: false, ownPass: true,
+      issuePasses: false, revokePasses: false, manageTeam: false, seeContacts: false,
+    },
+  },
   STAFF: {
     id: "STAFF",
     label: "Door staff",
     // Scan and admit. Nothing else — a phone on the door gets lost or
     // borrowed, and it should not be able to wipe the night's record.
-    can: { scan: true, seeList: false, seeReasons: false, reset: false },
+    can: {
+      scan: true, seeList: false, seeReasons: false, reset: false, ownPass: false,
+      issuePasses: false, revokePasses: false, manageTeam: false, seeContacts: false,
+    },
   },
   OWNER: {
     id: "OWNER",
     label: "Hidden State",
     // Everything: the full list, why people were turned away, and reset.
-    can: { scan: true, seeList: true, seeReasons: true, reset: true },
+    can: {
+      scan: true, seeList: true, seeReasons: true, reset: true, ownPass: false,
+      issuePasses: false, revokePasses: false, manageTeam: false, seeContacts: true,
+    },
   },
 };
 
@@ -63,6 +90,7 @@ export const ROLES = {
 const SALT = "hidden-state-door-v1";
 
 const ACCOUNTS = [
+  { user: "hiddenstateboss_stephannojunior", role: "BOSS", name: "Stephanno Jr.", hash: "52e2b8af85bb71203eda846cbaf2d9764ddd62e86b30952416c4ee9e7dfeaec0" },
   { user: "admin1", role: "OWNER", name: "Admin 1", hash: "0063809b713b9fe9273e42dc2cb8a5e2378365ee88202517eade6367f86398d7" },
   { user: "admin2", role: "OWNER", name: "Admin 2", hash: "a9f2b9bd1da6e0f630fa15d90af16c931c51a10e1019aaa483ef25410bcd1669" },
   { user: "admin3", role: "OWNER", name: "Admin 3", hash: "db3c7bba95a37bd7c35dd564b40855b1321de83d54875d0a4eca343f7278dc23" },
@@ -140,6 +168,56 @@ export function signIn(role) {
 export function signOut() {
   try {
     sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* nothing useful to do */
+  }
+}
+
+/*
+  Guest sign-in.
+
+  Deliberately NOT a username and password. A guest already holds something
+  unique to them — the pass code they were sent — and treating that as the
+  credential means no password of theirs is ever stored, on a site that has
+  nowhere safe to store one.
+
+  It also works on any device: open the site anywhere, enter the code, and the
+  pass is there.
+*/
+export function signInGuest(pass) {
+  const role = {
+    ...ROLES.GUEST,
+    user: pass.code,
+    displayName: pass.name,
+    passCode: pass.code,
+  };
+  signIn(role);
+  return role;
+}
+
+// Guests keep their session across visits — being asked for the code every
+// time would be tiresome. Staff sessions still end with the tab.
+const GUEST_KEY = "hs-guest-pass";
+
+export function rememberGuest(code) {
+  try {
+    localStorage.setItem(GUEST_KEY, code);
+  } catch {
+    /* private browsing blocks this; the session still holds for this visit */
+  }
+}
+
+export function rememberedGuest() {
+  try {
+    return localStorage.getItem(GUEST_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function forgetGuest() {
+  try {
+    localStorage.removeItem(GUEST_KEY);
   } catch {
     /* nothing useful to do */
   }

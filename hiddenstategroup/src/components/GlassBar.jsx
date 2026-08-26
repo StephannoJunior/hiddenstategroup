@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info } from "lucide-react";
+import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info, Ticket, Shield } from "lucide-react";
 import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
+import { currentRole } from "../lib/access";
 
 /*
   GlassBar — floating navigation on phones.
@@ -66,6 +67,24 @@ export default function GlassBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useLang();
+
+  /*
+    The bar gains one extra tab depending on who is signed in:
+      guest  → their own pass
+      team   → the door tools
+    Signed out, neither appears — a visitor sees no trace of them.
+
+    Re-read on every route change, so signing in or out updates the bar
+    without a reload.
+  */
+  const [role, setRole] = useState(null);
+  useEffect(() => { setRole(currentRole()); }, [location.pathname]);
+
+  const extraTab = !role
+    ? null
+    : role.can.ownPass
+      ? { href: `/pass/${role.passCode}`, key: "myPass", Icon: Ticket }
+      : { href: "/admin", key: "team", Icon: Shield };
 
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
@@ -221,7 +240,7 @@ export default function GlassBar() {
                 scrolling — being able to see the whole map matters more than
                 a comfortable label size. */}
             <div className="flex relative" style={{ padding: "6px", gap: "2px" }}>
-              {TABS.map(({ href, key, Icon }) => {
+              {[...TABS, ...(extraTab ? [extraTab] : [])].map(({ href, key, Icon }) => {
                 const active = isActive(href);
                 return (
                   <Link

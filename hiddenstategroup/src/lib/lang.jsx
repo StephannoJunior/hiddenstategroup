@@ -24,6 +24,7 @@ export const LANGS = [
 
 export const STRINGS = {
   en: {
+    myPass: "MY PASS", team: "TEAM", signIn: "SIGN IN", signOut: "SIGN OUT",
     days: "DAYS", hours: "HOURS", minutes: "MINUTES", seconds: "SECONDS", theNightIsHere: "The night is here.", countdownTo: "COUNTING DOWN TO",
     listen: "LISTEN",
     share: "SHARE", linkCopied: "LINK COPIED", backToTop: "BACK TO TOP", minRead: "MIN READ", previous: "PREVIOUS", next: "NEXT",
@@ -50,6 +51,7 @@ export const STRINGS = {
     saveHint: "Press and hold any picture to save it to your phone, or use the download button on each one. You can also take the whole set at once.",
   },
   ro: {
+    myPass: "BILETUL MEU", team: "ECHIPĂ", signIn: "INTRĂ", signOut: "IEȘI",
     days: "ZILE", hours: "ORE", minutes: "MINUTE", seconds: "SECUNDE", theNightIsHere: "A sosit noaptea.", countdownTo: "NUMĂRĂTOARE INVERSĂ",
     listen: "ASCULTĂ",
     share: "DISTRIBUIE", linkCopied: "LINK COPIAT", backToTop: "SUS", minRead: "MIN CITIRE", previous: "ANTERIOR", next: "URMĂTOR",
@@ -76,6 +78,7 @@ export const STRINGS = {
     saveHint: "Ține apăsat pe orice fotografie ca să o salvezi pe telefon, sau folosește butonul de descărcare de pe fiecare. Poți lua și tot setul deodată.",
   },
   es: {
+    myPass: "MI PASE", team: "EQUIPO", signIn: "ENTRAR", signOut: "SALIR",
     days: "DÍAS", hours: "HORAS", minutes: "MINUTOS", seconds: "SEGUNDOS", theNightIsHere: "La noche ha llegado.", countdownTo: "CUENTA ATRÁS HASTA",
     listen: "ESCUCHAR",
     share: "COMPARTIR", linkCopied: "ENLACE COPIADO", backToTop: "ARRIBA", minRead: "MIN DE LECTURA", previous: "ANTERIOR", next: "SIGUIENTE",
@@ -102,6 +105,7 @@ export const STRINGS = {
     saveHint: "Mantén pulsada cualquier foto para guardarla en tu teléfono, o usa el botón de descarga de cada una. También puedes llevarte el set completo.",
   },
   de: {
+    myPass: "MEIN PASS", team: "TEAM", signIn: "ANMELDEN", signOut: "ABMELDEN",
     days: "TAGE", hours: "STUNDEN", minutes: "MINUTEN", seconds: "SEKUNDEN", theNightIsHere: "Die Nacht ist da.", countdownTo: "COUNTDOWN BIS",
     listen: "ANHÖREN",
     share: "TEILEN", linkCopied: "LINK KOPIERT", backToTop: "NACH OBEN", minRead: "MIN LESEZEIT", previous: "ZURÜCK", next: "WEITER",
@@ -128,6 +132,7 @@ export const STRINGS = {
     saveHint: "Halte ein Foto gedrückt, um es zu speichern, oder nutze den Download-Button. Du kannst auch alle auf einmal laden.",
   },
   fr: {
+    myPass: "MON PASS", team: "ÉQUIPE", signIn: "CONNEXION", signOut: "DÉCONNEXION",
     days: "JOURS", hours: "HEURES", minutes: "MINUTES", seconds: "SECONDES", theNightIsHere: "La nuit est arrivée.", countdownTo: "COMPTE À REBOURS",
     listen: "ÉCOUTER",
     share: "PARTAGER", linkCopied: "LIEN COPIÉ", backToTop: "HAUT DE PAGE", minRead: "MIN DE LECTURE", previous: "PRÉCÉDENT", next: "SUIVANT",

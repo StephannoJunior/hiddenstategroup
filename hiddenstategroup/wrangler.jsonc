@@ -2,11 +2,27 @@
   // Must match the Worker name in your Cloudflare dashboard.
   "name": "hiddenstategroup1",
   "compatibility_date": "2026-08-16",
+
+  // The Worker now handles /api/* itself and hands everything else to the
+  // static site. Without this entry point there is nowhere for the API to live.
+  "main": "worker/index.js",
+
   "assets": {
     // Where `npm run build` puts the finished site.
     "directory": "./dist/",
     // Serves index.html for any unmatched path, so React Router handles
     // /records, /artists/1 etc. — this is what stops a refresh 404-ing.
-    "not_found_handling": "single-page-application"
-  }
+    "not_found_handling": "single-page-application",
+    // Lets the Worker fall through to the files via env.ASSETS.
+    "binding": "ASSETS"
+  },
+
+  // The D1 database. The id is the one from your Cloudflare dashboard.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hiddenstate",
+      "database_id": "027625da-d133-4ff3-b289-5bf3aae07e09"
+    }
+  ]
 }

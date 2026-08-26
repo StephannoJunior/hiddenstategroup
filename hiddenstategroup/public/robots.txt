@@ -1,4 +1,9 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /admins-staff-boss
+Disallow: /scan
+Disallow: /doorlist
+Disallow: /pass/
 
 Sitemap: https://hiddenstategroup.com/sitemap.xml
