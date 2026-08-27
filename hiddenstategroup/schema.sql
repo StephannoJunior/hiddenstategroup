@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS parties (
   venue          TEXT,                      -- null while undisclosed
   doors_close_at TEXT NOT NULL,             -- ISO. After this, passes stop working
   minimum_age    INTEGER NOT NULL DEFAULT 16,
+  capacity       INTEGER,                    -- room limit, so the door knows when full
   rotating       INTEGER NOT NULL DEFAULT 1,-- 1 = code refreshes, 0 = fixed
   archived       INTEGER NOT NULL DEFAULT 0,-- hidden from the picker, never deleted
   created_at     TEXT NOT NULL,
@@ -30,7 +31,8 @@ CREATE TABLE IF NOT EXISTS passes (
   email       TEXT,
   phone       TEXT,
   kind        TEXT NOT NULL DEFAULT 'TICKET', -- TICKET | INVITATION | GUEST | PRESS | ARTIST | STAFF
-  tier        TEXT,                         -- EARLY | STANDARD | null
+  tier        TEXT,                         -- EARLY | STANDARD | VIP | null
+  admits      INTEGER NOT NULL DEFAULT 1,   -- 2 for a couple, more for family
   ticket_ref  TEXT,                         -- printed on the physical ticket
   note        TEXT,                         -- the guest's own 150 characters
   id_required INTEGER NOT NULL DEFAULT 1,
@@ -41,6 +43,7 @@ CREATE TABLE IF NOT EXISTS passes (
   issued_at   TEXT NOT NULL,
   issued_by   TEXT NOT NULL,
   emailed_at  TEXT,
+  reminded_at TEXT,                         -- so a reminder is never sent twice
   FOREIGN KEY (party_id) REFERENCES parties(id)
 );
 
@@ -126,3 +129,16 @@ CREATE TABLE IF NOT EXISTS code_pool (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pool_used ON code_pool(used);
+
+-- ─── LOGIN ATTEMPTS ────────────────────────────────────────────────────────
+-- Counted per address so passwords cannot be tried at machine speed.
+-- Old rows are harmless; only recent failures are looked at.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip       TEXT NOT NULL,
+  username TEXT,
+  ok       INTEGER NOT NULL,
+  at       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attempts_ip ON login_attempts(ip, at);

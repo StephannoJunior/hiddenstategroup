@@ -9,13 +9,14 @@ import {
   Nav, Footer, useGoogleFonts,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
-import { getArticle, ARTICLES } from "../lib/news";
+import { getArticle, ARTICLES, localised } from "../lib/news";
 
 export default function NewsArticle() {
   useGoogleFonts();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { slug } = useParams();
-  const a = getArticle(slug);
+  const aRaw = getArticle(slug);
+  const a = localised(aRaw, lang);
   usePageMeta({ title: a ? a.headline : "Story", description: a ? a.summary : "Hidden State news.", image: a ? (a.photo || a.poster) : null, type: "article" });
 
   if (!a) {

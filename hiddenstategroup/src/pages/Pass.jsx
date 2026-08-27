@@ -25,6 +25,8 @@ export default function Pass() {
   const [state, setState] = useState({ loading: true });
   const [left, setLeft] = useState(30);
   const [qr, setQr] = useState(null);
+  const [recoverEmail, setRecoverEmail] = useState("");
+  const [recoverMsg, setRecoverMsg] = useState("");
 
   usePageMeta({
     title: state.pass ? `Pass — ${state.pass.name}` : "Pass",
@@ -101,6 +103,41 @@ export default function Pass() {
             ? "Speak to whoever issued it."
             : state.error || "Check the link, or ask whoever sent it to resend."}
         </p>
+        {/* Someone who followed a broken link is exactly the person who needs
+            this, so it belongs here rather than buried elsewhere. */}
+        <div className="mt-8 pt-6 mx-auto" style={{ borderTop: `1px solid ${theme.rule}`, maxWidth: "360px" }}>
+          <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
+            LOST YOUR PASS?
+          </p>
+          <p className="m-0 mb-3" style={{ ...fontText, fontSize: "15px", lineHeight: 1.5, color: theme.ink2 }}>
+            Enter the email you gave us and we'll send it again.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={recoverEmail}
+              onChange={(e) => setRecoverEmail(e.target.value)}
+              placeholder="you@example.com"
+              style={{ flex: 1, background: "transparent", border: `1px solid ${theme.rule}`,
+                       color: theme.ink, padding: "11px", fontSize: "16px" }}
+            />
+            <button
+              onClick={async () => {
+                const res = await api.resendPass(recoverEmail);
+                setRecoverMsg(res.message || "Check your inbox.");
+              }}
+              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em",
+                       background: theme.ink, color: theme.bg, border: 0, padding: "0 18px", cursor: "pointer" }}>
+              SEND
+            </button>
+          </div>
+          {recoverMsg && (
+            <p className="m-0 mt-3" style={{ ...fontText, fontSize: "15px", color: theme.ink }}>
+              {recoverMsg}
+            </p>
+          )}
+        </div>
+
         <Link to="/" className="inline-block mt-7 pb-0.5"
               style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
                        color: theme.ink, borderBottom: `1px solid ${theme.brass}` }}>
@@ -191,6 +228,40 @@ export default function Pass() {
           </>
         )}
       </div>
+
+      {/* One tap and the night is in their own calendar, with a reminder
+          three hours before set by the phone itself. */}
+      <p className="text-center mt-5 m-0">
+        <a
+          href={`/api/calendar/${pass.code}.ics`}
+          className="inline-block pb-0.5"
+          style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
+                   color: theme.ink, borderBottom: `1px solid ${theme.brass}` }}
+        >
+          ADD TO YOUR CALENDAR
+        </a>
+      </p>
+
+      {party.lineup?.length > 0 && (
+        <div className="mt-7">
+          <p className="m-0 mb-2 text-center"
+             style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.brass }}>
+            SET TIMES
+          </p>
+          <div style={{ borderTop: `1px solid ${theme.ink}` }}>
+            {party.lineup.map((slot, i) => (
+              <div key={i} className="flex justify-between py-2.5"
+                   style={{ borderBottom: `1px solid ${theme.rule}` }}>
+                <span style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.14em", color: theme.ink2,
+                               fontVariantNumeric: "tabular-nums lining-nums" }}>
+                  {slot.time}
+                </span>
+                <span style={{ ...fontText, fontSize: "16.5px", color: theme.ink }}>{slot.artist}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <p className="text-center mt-6 m-0" style={{ ...fontText, fontSize: "16px", lineHeight: 1.55, color: theme.ink2 }}>
         {party.rotating

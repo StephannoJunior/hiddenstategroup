@@ -79,6 +79,11 @@ export const logout = () => call("/logout", { method: "POST" });
 export const me = () => call("/me");
 
 // ── a guest's own pass ──────────────────────────────────────────────────────
+// "I lost my link." Public, and deliberately gives the same answer whether
+// the address is on the list or not.
+export const resendPass = (email) =>
+  call("/resend", { method: "POST", body: { email }, auth: false });
+
 export const fetchPass = (code) =>
   call(`/pass/${encodeURIComponent(code)}`, { auth: false });
 
@@ -86,11 +91,31 @@ export const fetchPass = (code) =>
 export const scan = (payload) => call("/scan", { method: "POST", body: { payload } });
 export const scanByCode = (code) => call("/scan", { method: "POST", body: { code } });
 
+// The door's own copy of the guest list, for working without signal.
+export const fetchRoster = (party) => call(`/roster?party=${encodeURIComponent(party)}`);
+
+// Admissions made while offline, sent up once signal returns.
+export const syncAdmissions = (entries) => call("/sync", { method: "POST", body: { entries } });
+
 // ── passes ──────────────────────────────────────────────────────────────────
 export const listPasses = (party) => call(`/passes?party=${encodeURIComponent(party)}`);
 export const issuePass = (pass) => call("/passes", { method: "POST", body: pass });
+export const issueBulk = (party, names, kind, tier) =>
+  call("/passes/bulk", { method: "POST", body: { party, names, kind, tier } });
+
+// Warn before issuing a second pass to someone already on the list.
+export const checkDuplicate = (party, name, email) =>
+  call("/passes/check", { method: "POST", body: { party, name, email } });
+
+export const fetchStats = (party) => call(`/stats?party=${encodeURIComponent(party)}`);
+
 export const revokePass = (code, reason) =>
   call(`/passes/${encodeURIComponent(code)}`, { method: "PATCH", body: { status: "REVOKED", reason } });
+// Edit an issued pass. Only the fields passed are changed; the code itself
+// can never be — it may already be printed on a ticket in someone's hand.
+export const editPass = (code, changes) =>
+  call(`/passes/${encodeURIComponent(code)}`, { method: "PATCH", body: changes });
+
 export const restorePass = (code) =>
   call(`/passes/${encodeURIComponent(code)}`, { method: "PATCH", body: { status: "ACTIVE" } });
 

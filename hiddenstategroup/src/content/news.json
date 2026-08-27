@@ -28,7 +28,18 @@
     ],
     "footnote": null,
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "13.12.2026",
+      "summary": "O dată, cinci siluete și nimic altceva. Locația nedezvăluită, line-up-ul sigilat.",
+      "body": [
+        "O singură dată a fost stabilită: 13 decembrie 2026. Nimic altceva nu a fost anunțat.",
+        "Locația rămâne nedezvăluită, iar line-up-ul rămâne sigilat până mai aproape de noapte. Ce este confirmat este cine se află în spate — Hidden State, No Problem și SJ.",
+        "Actualizările vor apărea mai întâi aici."
+      ],
+      "kicker": "13.12.2026",
+      "signoff": "Locație nedezvăluită. Line-up sigilat."
+    }
   },
   {
     "slug": "claire-cruz-joins-hidden-state",
@@ -60,7 +71,18 @@
     ],
     "footnote": null,
     "link": "https://www.youtube.com/watch?v=uJR9jclSYMU",
-    "linkLabel": "LISTEN TO PEARL OF SAND"
+    "linkLabel": "LISTEN TO PEARL OF SAND",
+    "ro": {
+      "headline": "Claire Cruz se alătură Hidden State",
+      "summary": "DJ-ul și producătoarea din Dubai aduce Afro House, techno melodic și elemente tribale — și un prim single, „Pearl of Sand”.",
+      "body": [
+        "O nouă colaborare o aduce pe Claire Cruz în rețeaua Hidden State, încă un pas către o prezență internațională mai puternică și către conectarea talentelor noi cu oportunități noi.",
+        "Filipineză-spaniolă și stabilită în Dubai, este DJ și producătoare și fondatoarea Impact Studio FZE și InfluencersDubai.AE. A intrat în muzică după o carieră în evenimente, marketing și management de influenceri.",
+        "Primul ei single, „Pearl of Sand”, introduce un sunet care îmbină Afro House, techno melodic și elemente tribale într-o atmosferă întunecată și hipnotică. După debut, își duce muzica dincolo de Dubai, România marcând prima ei apariție la un festival în Europa și în afara Emiratelor."
+      ],
+      "kicker": "Un capitol nou",
+      "signoff": "„Pearl of Sand” este doar începutul."
+    }
   },
   {
     "slug": "tess-wich-joins-hidden-state",
@@ -91,7 +113,17 @@
     ],
     "footnote": null,
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "Tess Wich se alătură Hidden State",
+      "summary": "Hard techno australian — atmosfere întunecate, groove-uri hipnotice și seturi construite pentru ringul de dans.",
+      "body": [
+        "Tess Wich se alătură rosterului Hidden State. DJ și artistă de muzică electronică din Australia, care evoluează sub numele Tech Wich, este cunoscută pentru un sunet puternic de hard techno, peak-time, hard bounce și rave.",
+        "Seturile ei aduc atmosfere întunecate, groove-uri hipnotice și energie ridicată, construite pentru ringul de dans, nu pentru căști. Cu o identitate vizuală distinctă și o prezență internațională în creștere, își face rapid loc pe scena techno globală."
+      ],
+      "kicker": "Tech Wich",
+      "signoff": "Atmosfere întunecate. Groove-uri hipnotice. Construite pentru ring."
+    }
   },
   {
     "slug": "creamfields-2026",
@@ -130,7 +162,12 @@
     ],
     "footnote": null,
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "Creamfields, Marea Britanie — 27–30 august 2026",
+      "summary": "Patru zile, unul dintre cele mai mari festivaluri de muzică electronică din lume.",
+      "kicker": "Creamfields"
+    }
   },
   {
     "slug": "black-coffee-hi-ibiza",
@@ -160,7 +197,12 @@
     ],
     "footnote": null,
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "Black Coffee la Hï Ibiza",
+      "summary": "Rezidența Black Coffee continuă la Hï Ibiza.",
+      "kicker": "Hï Ibiza"
+    }
   },
   {
     "slug": "indira-paganotto-hi-ibiza",
@@ -190,7 +232,12 @@
     ],
     "footnote": null,
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "Indira Paganotto la Hï Ibiza",
+      "summary": "Indira Paganotto la Hï Ibiza.",
+      "kicker": "Hï Ibiza"
+    }
   },
   {
     "slug": "miss-monique-hi-ibiza",
@@ -220,7 +267,12 @@
     ],
     "footnote": null,
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "Miss Monique la Hï Ibiza",
+      "summary": "Miss Monique la Hï Ibiza.",
+      "kicker": "Hï Ibiza"
+    }
   },
   {
     "slug": "b-mike-joins-hidden-state",
@@ -253,7 +305,12 @@
     ],
     "footnote": null,
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "B.MIKE se alătură Hidden State",
+      "summary": "Heartbeat Vibes — B.MIKE intră în rosterul Hidden State.",
+      "kicker": "Heartbeat Vibes"
+    }
   },
   {
     "slug": "dj-tengu-joins-hidden-state",
@@ -284,7 +341,12 @@
     ],
     "footnote": "Some sounds are heard. Others are remembered.",
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "DJ Tengu se alătură Hidden State",
+      "summary": "Hip-hop și R&B din anii '90, funk clasic din anii '80–'90.",
+      "kicker": "DJ Tengu"
+    }
   },
   {
     "slug": "astryon-festival-launch-party",
@@ -339,7 +401,15 @@
     ],
     "footnote": null,
     "link": null,
-    "linkLabel": null
+    "linkLabel": null,
+    "ro": {
+      "headline": "Petrecerea de lansare Astryon Festival",
+      "summary": "Hidden State la lansarea Astryon Festival.",
+      "body": [
+        "Stephanno Jr. a mixat la petrecerea de lansare a Astryon Festival, marcând începutul drumului către festivalul de pe litoralul Mării Negre."
+      ],
+      "kicker": "Astryon"
+    }
   },
   {
     "slug": "dj-mario-fill-and-dance",
@@ -372,6 +442,11 @@
     ],
     "footnote": "Available now on YouTube.",
     "link": "https://www.youtube.com/watch?v=oxJ0M7Qin5s",
-    "linkLabel": "LISTEN TO THE SET"
+    "linkLabel": "LISTEN TO THE SET",
+    "ro": {
+      "headline": "Mario Daniel — Fill & Dance",
+      "summary": "Un nou set de la Mario Daniel.",
+      "kicker": "Fill & Dance"
+    }
   }
 ]

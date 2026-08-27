@@ -7,7 +7,7 @@ import {
   Nav, Footer, useGoogleFonts, Instagram,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
-import { ARTICLES } from "../lib/news";
+import { ARTICLES, localised } from "../lib/news";
 import { SOCIAL } from "../lib/social";
 
 /*
@@ -17,8 +17,9 @@ import { SOCIAL } from "../lib/social";
 
 const CATS = ["ALL", "NEWS", "ARTISTS", "MUSIC", "RECORDS", "EVENTS", "INTERVIEWS", "INDUSTRY"];
 
-function Issue({ a }) {
+function Issue({ a: raw, lang }) {
   const { t } = useLang();
+  const a = localised(raw, lang);
   return (
     <Link to={`/news/${a.slug}`} className="block group">
       <article className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 py-8"
@@ -53,7 +54,7 @@ function Issue({ a }) {
 
 export default function News() {
   useGoogleFonts();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   usePageMeta({ title: "News", description: "Announcements, signings and dispatches from inside Hidden State." });
   const [active, setActive] = useState("ALL");
   const inTab = (a, tab) =>
@@ -97,7 +98,7 @@ export default function News() {
             {active} — NOTHING FILED YET
           </div>
         ) : (
-          shown.map((a) => <Issue key={a.slug} a={a} />)
+          shown.map((a) => <Issue key={a.slug} a={a} lang={lang} />)
         )}
       </div>
 

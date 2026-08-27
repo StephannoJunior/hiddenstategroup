@@ -95,7 +95,7 @@ async function rotatingCode(secret, code, window) {
   problem; a pass that failed to be created because email was down is a real
   one.
 */
-async function sendPassEmail(env, { to, name, code, party, kind }) {
+async function sendPassEmail(env, { to, name, code, party, kind, reminder = false }) {
   // Log every reason for not sending. A silent skip is the worst outcome:
   // nothing arrives, nothing appears in the logs, and there is nothing to
   // act on.
@@ -111,6 +111,7 @@ async function sendPassEmail(env, { to, name, code, party, kind }) {
 
   const url = `https://hiddenstategroup.com/pass/${code}`;
   const isInvite = kind === "INVITATION";
+  const heading = reminder ? "TOMORROW" : isInvite ? "YOU'RE INVITED" : "YOUR PASS";
 
   const text = [
     `${name},`,
@@ -137,7 +138,7 @@ async function sendPassEmail(env, { to, name, code, party, kind }) {
     <div style="font-family:Georgia,serif;color:#16130E;background:#F3EBD9;padding:32px">
       <div style="max-width:480px;margin:0 auto">
         <p style="font-family:Helvetica,sans-serif;font-size:10px;letter-spacing:.2em;color:#8A6A28;margin:0">
-          ${isInvite ? "YOU'RE INVITED" : "YOUR PASS"}
+          ${heading}
         </p>
         <div style="border-top:2px solid #16130E;margin-top:10px"></div>
         <div style="border-top:1px solid #16130E;margin-top:3px"></div>
@@ -174,9 +175,11 @@ async function sendPassEmail(env, { to, name, code, party, kind }) {
       body: JSON.stringify({
         from: "Hidden State <passes@hiddenstategroup.com>",
         to: [to],
-        subject: isInvite
-          ? `You're invited — ${party.name}`
-          : `Your pass — ${party.name}`,
+        subject: reminder
+          ? `Tomorrow — ${party.name}`
+          : isInvite
+            ? `You're invited — ${party.name}`
+            : `Your pass — ${party.name}`,
         text,
         html,
       }),
@@ -295,8 +298,36 @@ async function handleApi(request, env, url, ctx) {
   const method = request.method;
   const body = method === "POST" || method === "PATCH" ? await request.json().catch(() => ({})) : {};
 
+  /*
+    Login attempts are counted per address. Without this, someone could try
+    passwords at machine speed and nothing would stop them.
+
+    Failures are what count, and they expire — a member of staff mistyping
+    twice at the start of a shift should not be locked out an hour later.
+  */
+  const LOGIN_WINDOW_MIN = 15;
+  const LOGIN_MAX_FAILS = 8;
+
+  async function loginBlocked(ip) {
+    const since = new Date(Date.now() - LOGIN_WINDOW_MIN * 60000).toISOString();
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM login_attempts WHERE ip = ? AND ok = 0 AND at > ?"
+    ).bind(ip, since).first();
+    return (row ? row.n : 0) >= LOGIN_MAX_FAILS;
+  }
+
+  async function recordAttempt(ip, username, ok) {
+    await env.DB.prepare(
+      "INSERT INTO login_attempts (ip, username, ok, at) VALUES (?, ?, ?, ?)"
+    ).bind(ip, username || null, ok ? 1 : 0, now()).run();
+  }
+
   // ── team sign in ────────────────────────────────────────────────────────
   if (path === "/login" && method === "POST") {
+    const ip = request.headers.get("cf-connecting-ip") || "unknown";
+    if (await loginBlocked(ip)) {
+      return fail("Too many attempts. Wait a few minutes and try again.", 429);
+    }
     const username = String(body.username || "").trim().toLowerCase();
     const member = await env.DB.prepare(
       "SELECT * FROM team WHERE username = ? AND active = 1"
@@ -307,9 +338,11 @@ async function handleApi(request, env, url, ctx) {
     const salt = member ? member.salt : "no-such-account";
     const attempt = await hashPassword(String(body.password || ""), salt);
     if (!member || !safeEqual(attempt, member.password_hash)) {
+      await recordAttempt(ip, username, false);
       return fail("Those details weren't recognised.", 401);
     }
 
+    await recordAttempt(ip, username, true);
     const { token, expires } = await createSession(env, member);
     return json({
       ok: true, token, expires,
@@ -340,7 +373,7 @@ async function handleApi(request, env, url, ctx) {
   if (path.startsWith("/pass/") && method === "GET") {
     const code = decodeURIComponent(path.slice(6)).toUpperCase();
     const pass = await env.DB.prepare(
-      "SELECT p.*, y.name AS party_name, y.date_label, y.venue, y.doors_close_at, y.minimum_age, y.rotating " +
+      "SELECT p.*, y.name AS party_name, y.date_label, y.venue, y.doors_close_at, y.minimum_age, y.rotating, y.starts_at, y.lineup " +
       "FROM passes p JOIN parties y ON y.id = p.party_id WHERE p.code = ?"
     ).bind(code).first();
 
@@ -363,6 +396,9 @@ async function handleApi(request, env, url, ctx) {
       party: {
         name: pass.party_name, date: pass.date_label, venue: pass.venue,
         minimumAge: pass.minimum_age, rotating: !!pass.rotating, over,
+        startsAt: pass.starts_at,
+        // Stored as JSON text; parsed here so the page never has to.
+        lineup: (() => { try { return JSON.parse(pass.lineup || "[]"); } catch { return []; } })(),
       },
       code: over ? null : code6,
       // Seconds until the number changes, so the page can show a countdown
@@ -405,6 +441,94 @@ async function handleApi(request, env, url, ctx) {
       "WHERE archived = 0 AND doors_close_at > ? ORDER BY doors_close_at ASC LIMIT 1"
     ).bind(now()).first();
     return json({ ok: true, party: party || null });
+  }
+
+  /*
+    "I've lost my link."
+
+    This will be the most common message you ever get. Someone deletes the
+    email, changes phone, or simply cannot find it an hour before doors.
+
+    Public on purpose — asking someone to prove who they are before you will
+    resend to an address you already hold is theatre. But it never REVEALS
+    anything: the reply is identical whether the address is on the list or
+    not, so it cannot be used to find out who is coming.
+  */
+  if (path === "/resend" && method === "POST") {
+    const email = String(body.email || "").trim().toLowerCase();
+    const sameAnswer = json({
+      ok: true,
+      message: "If that address is on the list, the pass is on its way.",
+    });
+    if (!email) return sameAnswer;
+
+    const pass = await env.DB.prepare(
+      "SELECT p.*, y.name AS party_name, y.date_label, y.venue, y.minimum_age, y.doors_close_at " +
+      "FROM passes p JOIN parties y ON y.id = p.party_id " +
+      "WHERE LOWER(p.email) = ? AND p.status = 'ACTIVE' AND y.doors_close_at > ? " +
+      "ORDER BY y.doors_close_at ASC LIMIT 1"
+    ).bind(email, now()).first();
+
+    if (pass) {
+      await sendPassEmail(env, {
+        to: pass.email, name: pass.name, code: pass.code,
+        party: { name: pass.party_name, date_label: pass.date_label,
+                 venue: pass.venue, minimum_age: pass.minimum_age },
+        kind: pass.kind,
+      });
+    }
+    return sameAnswer;
+  }
+
+  /*
+    A calendar file for the guest's own phone.
+
+    Served as a real .ics download rather than a Google link, because that
+    works on every phone and every calendar app rather than assuming which
+    one someone uses.
+  */
+  if (path.startsWith("/calendar/") && method === "GET") {
+    const code = decodeURIComponent(path.slice(10)).toUpperCase().replace(/\.ics$/i, "");
+    const pass = await env.DB.prepare(
+      "SELECT p.name, p.code, y.name AS party_name, y.date_label, y.venue, y.doors_close_at, y.starts_at " +
+      "FROM passes p JOIN parties y ON y.id = p.party_id WHERE p.code = ? AND p.status = 'ACTIVE'"
+    ).bind(code).first();
+    if (!pass) return fail("No such pass.", 404);
+
+    // Calendars want UTC in this exact shape, with no punctuation.
+    const stamp = (iso) => new Date(iso).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const start = pass.starts_at || pass.doors_close_at;
+
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Hidden State//Pass//EN",
+      "CALSCALE:GREGORIAN",
+      "BEGIN:VEVENT",
+      `UID:${pass.code}@hiddenstategroup.com`,
+      `DTSTAMP:${stamp(new Date().toISOString())}`,
+      `DTSTART:${stamp(start)}`,
+      `DTEND:${stamp(pass.doors_close_at)}`,
+      `SUMMARY:${pass.party_name} — Hidden State`,
+      `LOCATION:${pass.venue || "To be announced"}`,
+      `DESCRIPTION:Your pass: https://hiddenstategroup.com/pass/${pass.code}`,
+      `URL:https://hiddenstategroup.com/pass/${pass.code}`,
+      // A reminder three hours before, set by the calendar itself.
+      "BEGIN:VALARM",
+      "TRIGGER:-PT3H",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${pass.party_name} tonight`,
+      "END:VALARM",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    return new Response(ics, {
+      headers: {
+        "content-type": "text/calendar; charset=utf-8",
+        "content-disposition": `attachment; filename="hidden-state-${pass.code}.ics"`,
+      },
+    });
   }
 
   // ── the door ────────────────────────────────────────────────────────────
@@ -469,7 +593,76 @@ async function handleApi(request, env, url, ctx) {
     return json({
       ok: true, name: pass.name, kind: pass.kind, tier: pass.tier,
       ticketRef: pass.ticket_ref, idRequired: !!pass.id_required, note: pass.note,
+      admits: pass.admits || 1,
     });
+  }
+
+  /*
+    The roster — everything the door needs to keep working without signal.
+
+    Club basements kill reception, and a scanner that stops at 11pm with a
+    queue outside is the worst possible failure. The door downloads this when
+    it opens, then can admit people from its own copy.
+
+    Note what is NOT here: the secret that generates the rotating numbers.
+    Offline the door verifies the PASS CODE only. That is weaker, and it is
+    the right trade — a door that works with a simpler check beats a door
+    that has stopped.
+  */
+  if (path === "/roster" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who.role, "scan")) return fail("Not allowed.", 401);
+
+    const partyId = url.searchParams.get("party");
+    if (!partyId) return fail("Which event?");
+
+    const rows = await env.DB.prepare(
+      "SELECT p.code, p.name, p.kind, p.tier, p.ticket_ref, p.id_required, p.status, p.admits, " +
+      "  (SELECT scanned_at FROM scans s WHERE s.code = p.code AND s.result = 'ADMITTED' LIMIT 1) AS admitted_at " +
+      "FROM passes p WHERE p.party_id = ?"
+    ).bind(partyId).all();
+
+    const party = await env.DB.prepare(
+      "SELECT id, name, date_label, doors_close_at, capacity FROM parties WHERE id = ?"
+    ).bind(partyId).first();
+
+    return json({ ok: true, party, passes: rows.results, fetchedAt: now() });
+  }
+
+  /*
+    Admissions recorded while the door was offline, sent up together once
+    signal returns. Duplicates are expected — the same pass may have been
+    queued twice — so each is checked against what is already recorded rather
+    than blindly inserted.
+  */
+  if (path === "/sync" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who.role, "scan")) return fail("Not allowed.", 401);
+
+    const entries = Array.isArray(body.entries) ? body.entries.slice(0, 500) : [];
+    let recorded = 0;
+    const conflicts = [];
+
+    for (const e of entries) {
+      if (!e.code || !e.party) continue;
+      const already = await env.DB.prepare(
+        "SELECT scanned_at FROM scans WHERE code = ? AND party_id = ? AND result = 'ADMITTED'"
+      ).bind(e.code, e.party).first();
+
+      if (already) {
+        // Someone was admitted twice — once offline, once elsewhere. Worth
+        // surfacing rather than silently dropping.
+        conflicts.push({ code: e.code, at: already.scanned_at });
+        continue;
+      }
+      await env.DB.prepare(
+        "INSERT INTO scans (code, party_id, result, reason, scanned_by, scanned_at) " +
+        "VALUES (?, ?, 'ADMITTED', 'offline', ?, ?)"
+      ).bind(e.code, e.party, who.username, e.at || now()).run();
+      recorded += 1;
+    }
+
+    return json({ ok: true, recorded, conflicts });
   }
 
   // ── the door list ───────────────────────────────────────────────────────
@@ -479,7 +672,7 @@ async function handleApi(request, env, url, ctx) {
 
     const partyId = url.searchParams.get("party");
     const rows = await env.DB.prepare(
-      "SELECT p.code, p.name, p.kind, p.tier, p.ticket_ref, p.note, p.status, p.email, " +
+      "SELECT p.code, p.name, p.kind, p.tier, p.ticket_ref, p.note, p.status, p.email, p.admits, " +
       "  (SELECT scanned_at FROM scans s WHERE s.code = p.code AND s.result = 'ADMITTED' LIMIT 1) AS admitted_at, " +
       "  (SELECT COUNT(*) FROM scans s WHERE s.code = p.code AND s.result = 'REFUSED') AS refusals, " +
       "  (SELECT reason FROM scans s WHERE s.code = p.code AND s.result = 'REFUSED' ORDER BY s.id DESC LIMIT 1) AS last_reason " +
@@ -516,12 +709,15 @@ async function handleApi(request, env, url, ctx) {
     await env.DB.batch([
       env.DB.prepare("UPDATE code_pool SET used = 1, used_at = ? WHERE code = ?").bind(now(), pooled.code),
       env.DB.prepare(
-        "INSERT INTO passes (code, party_id, name, email, phone, kind, tier, ticket_ref, note, id_required, issued_at, issued_by) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO passes (code, party_id, name, email, phone, kind, tier, ticket_ref, note, id_required, admits, issued_at, issued_by) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         pooled.code, body.party, body.name, body.email || null, body.phone || null,
         body.kind || "TICKET", body.tier || null, body.ticketRef || null, body.note || null,
-        body.kind === "INVITATION" ? 0 : 1, now(), who.username
+        body.kind === "INVITATION" ? 0 : 1,
+        // A couple ticket admits two, a family four unless told otherwise.
+        body.admits || (body.kind === "COUPLE" ? 2 : body.kind === "FAMILY" ? 4 : 1),
+        now(), who.username
       ),
     ]);
 
@@ -546,20 +742,136 @@ async function handleApi(request, env, url, ctx) {
     return json({ ok: true, code: pooled.code, email });
   }
 
+  /*
+    Issuing in bulk. One name per line, and a pass for each.
+
+    Everything is done in a single pass over the list so a failure halfway
+    through does not leave you unsure which names got through.
+  */
+  if (path === "/passes/bulk" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who.role, "issue")) return fail("Only the boss can issue passes.", 403);
+
+    const lines = String(body.names || "").split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 200);
+    if (!lines.length) return fail("No names given.");
+    if (!body.party) return fail("Which event?");
+
+    ctx.waitUntil(topUpPool(env));
+    const issued = [];
+    const failed = [];
+
+    for (const line of lines) {
+      // "Name, email" or just a name.
+      const [name, email] = line.split(",").map((x) => (x || "").trim());
+      if (!name) continue;
+
+      const pooled = await env.DB.prepare(
+        "SELECT code FROM code_pool WHERE used = 0 ORDER BY RANDOM() LIMIT 1"
+      ).first();
+      if (!pooled) { failed.push({ name, reason: "no codes left" }); continue; }
+
+      try {
+        await env.DB.batch([
+          env.DB.prepare("UPDATE code_pool SET used = 1, used_at = ? WHERE code = ?").bind(now(), pooled.code),
+          env.DB.prepare(
+            "INSERT INTO passes (code, party_id, name, email, kind, tier, id_required, admits, issued_at, issued_by) " +
+            "VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)"
+          ).bind(pooled.code, body.party, name, email || null,
+                 body.kind || "GUEST", body.tier || null, now(), who.username),
+        ]);
+        issued.push({ name, email: email || null, code: pooled.code });
+      } catch (err) {
+        failed.push({ name, reason: "could not be saved" });
+      }
+    }
+
+    return json({ ok: true, issued, failed });
+  }
+
+  /*
+    Is this name or address already on the list? Called before issuing, so a
+    second pass to the same person is caught rather than discovered at the
+    door.
+  */
+  if (path === "/passes/check" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who.role, "issue")) return fail("Not allowed.", 403);
+
+    const rows = await env.DB.prepare(
+      "SELECT code, name, email, status FROM passes WHERE party_id = ? AND " +
+      "(LOWER(name) = LOWER(?) OR (email IS NOT NULL AND LOWER(email) = LOWER(?)))"
+    ).bind(body.party, body.name || "", body.email || "").all();
+
+    return json({ ok: true, matches: rows.results });
+  }
+
   // ── cancelling one ──────────────────────────────────────────────────────
   if (path.startsWith("/passes/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "revoke")) return fail("Only the boss can cancel passes.", 403);
+    if (!who || !can(who.role, "revoke")) return fail("Only the boss can change passes.", 403);
 
     const code = decodeURIComponent(path.slice(8)).toUpperCase();
-    // Cancelling never deletes. The row stays so the history of a night is
-    // still readable afterwards.
-    const status = body.status === "ACTIVE" ? "ACTIVE" : "REVOKED";
-    await env.DB.prepare(
-      "UPDATE passes SET status = ?, revoked_at = ?, revoked_by = ?, revoke_note = ? WHERE code = ?"
-    ).bind(status, status === "REVOKED" ? now() : null, who.username, body.reason || null, code).run();
+    const existing = await env.DB.prepare("SELECT * FROM passes WHERE code = ?").bind(code).first();
+    if (!existing) return fail("No such pass.", 404);
 
-    return json({ ok: true, code, status });
+    /*
+      Cancelling and editing share this route but are different actions.
+
+      Cancelling never deletes: the row stays so the history of a night is
+      still readable afterwards, and a mistake can be undone.
+    */
+    if (body.status === "REVOKED" || body.status === "ACTIVE") {
+      const status = body.status;
+      await env.DB.prepare(
+        "UPDATE passes SET status = ?, revoked_at = ?, revoked_by = ?, revoke_note = ? WHERE code = ?"
+      ).bind(status, status === "REVOKED" ? now() : null, who.username, body.reason || null, code).run();
+      return json({ ok: true, code, status });
+    }
+
+    /*
+      Editing. Only the fields actually sent are touched, so changing a name
+      cannot silently blank an email that was left out of the request.
+
+      The CODE is deliberately not editable. It is printed on a physical
+      ticket and may already be in a guest's hands; changing it would strip
+      someone of the pass they are holding.
+    */
+    const map = {
+      name: "name", email: "email", phone: "phone", kind: "kind", tier: "tier",
+      ticketRef: "ticket_ref", note: "note", admits: "admits",
+      idRequired: "id_required", party: "party_id",
+    };
+    const fields = [];
+    const values = [];
+    for (const [key, column] of Object.entries(map)) {
+      if (body[key] === undefined) continue;
+      fields.push(`${column} = ?`);
+      values.push(typeof body[key] === "boolean" ? (body[key] ? 1 : 0) : body[key]);
+    }
+    if (!fields.length) return fail("Nothing to change.");
+
+    values.push(code);
+    await env.DB.prepare(`UPDATE passes SET ${fields.join(", ")} WHERE code = ?`).bind(...values).run();
+
+    // Resend if asked, so a corrected name or a fixed address can go out
+    // without issuing a second pass.
+    let email = { sent: false, reason: "not requested" };
+    if (body.resend) {
+      const updated = await env.DB.prepare("SELECT * FROM passes WHERE code = ?").bind(code).first();
+      const party = await env.DB.prepare(
+        "SELECT name, date_label, venue, minimum_age FROM parties WHERE id = ?"
+      ).bind(updated.party_id).first();
+      email = await sendPassEmail(env, {
+        to: updated.email, name: updated.name, code,
+        party: party || { name: updated.party_id, date_label: "", venue: null, minimum_age: 16 },
+        kind: updated.kind,
+      });
+      if (email.sent) {
+        await env.DB.prepare("UPDATE passes SET emailed_at = ? WHERE code = ?").bind(now(), code).run();
+      }
+    }
+
+    return json({ ok: true, code, email });
   }
 
   // ── events ──────────────────────────────────────────────────────────────
@@ -581,12 +893,12 @@ async function handleApi(request, env, url, ctx) {
       return fail("An id, a name and a closing time are required.");
     }
     await env.DB.prepare(
-      "INSERT INTO parties (id, name, date_label, venue, doors_close_at, minimum_age, rotating, created_at, created_by) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO parties (id, name, date_label, venue, doors_close_at, minimum_age, rotating, capacity, created_at, created_by) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       body.id, body.name, body.dateLabel || body.name, body.venue || null,
       body.doorsCloseAt, body.minimumAge ?? 16, body.rotating === false ? 0 : 1,
-      now(), who.username
+      body.capacity || null, now(), who.username
     ).run();
     return json({ ok: true, id: body.id });
   }
@@ -600,8 +912,9 @@ async function handleApi(request, env, url, ctx) {
     const values = [];
     const map = {
       name: "name", dateLabel: "date_label", venue: "venue",
-      doorsCloseAt: "doors_close_at", minimumAge: "minimum_age",
-      rotating: "rotating", archived: "archived",
+      doorsCloseAt: "doors_close_at", startsAt: "starts_at",
+      minimumAge: "minimum_age", rotating: "rotating",
+      archived: "archived", capacity: "capacity", lineup: "lineup",
     };
     for (const [key, column] of Object.entries(map)) {
       if (body[key] !== undefined) {
@@ -623,6 +936,48 @@ async function handleApi(request, env, url, ctx) {
     const id = decodeURIComponent(path.slice(9));
     await env.DB.prepare("UPDATE parties SET archived = 1 WHERE id = ?").bind(id).run();
     return json({ ok: true, id, archived: true });
+  }
+
+  /*
+    The night in numbers, once it is over — or as it happens.
+
+    Arrival times are the useful part: they tell you whether to open earlier
+    or move the headline, which no amount of ticket counting will.
+  */
+  if (path === "/stats" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who.role, "seeList")) return fail("Not allowed.", 403);
+
+    const partyId = url.searchParams.get("party");
+    if (!partyId) return fail("Which event?");
+
+    const totals = await env.DB.prepare(
+      "SELECT " +
+      "  (SELECT COUNT(*) FROM passes WHERE party_id = ?1) AS issued, " +
+      "  (SELECT COUNT(*) FROM passes WHERE party_id = ?1 AND status = 'REVOKED') AS cancelled, " +
+      "  (SELECT COALESCE(SUM(p.admits),0) FROM passes p JOIN scans s ON s.code = p.code " +
+      "     WHERE p.party_id = ?1 AND s.result = 'ADMITTED') AS admitted, " +
+      "  (SELECT COUNT(*) FROM scans WHERE party_id = ?1 AND result = 'REFUSED') AS refusals"
+    ).bind(partyId).first();
+
+    // Arrivals by hour, so the shape of the night is visible.
+    const byHour = await env.DB.prepare(
+      "SELECT substr(scanned_at, 12, 2) AS hour, COUNT(*) AS n FROM scans " +
+      "WHERE party_id = ? AND result = 'ADMITTED' GROUP BY hour ORDER BY hour"
+    ).bind(partyId).all();
+
+    const byKind = await env.DB.prepare(
+      "SELECT kind, COUNT(*) AS n FROM passes WHERE party_id = ? GROUP BY kind ORDER BY n DESC"
+    ).bind(partyId).all();
+
+    const noShows = (totals?.issued || 0) - (totals?.cancelled || 0) - (totals?.admitted || 0);
+
+    return json({
+      ok: true,
+      totals: { ...totals, noShows: Math.max(0, noShows) },
+      byHour: byHour.results,
+      byKind: byKind.results,
+    });
   }
 
   // ── team accounts ───────────────────────────────────────────────────────
@@ -769,7 +1124,50 @@ async function handleApi(request, env, url, ctx) {
   return fail("No such endpoint.", 404);
 }
 
+/*
+  The reminder.
+
+  Runs once a day. Anyone holding an active pass for an event happening
+  tomorrow gets their link again — which does more to cut no-shows than
+  anything else, because the commonest reason people miss a night is simply
+  forgetting.
+
+  Each pass is marked once sent, so a second run cannot send twice.
+*/
+async function sendReminders(env) {
+  const tomorrow = new Date(Date.now() + 24 * 3600 * 1000);
+  const dayStart = new Date(tomorrow); dayStart.setUTCHours(0, 0, 0, 0);
+  const dayEnd = new Date(tomorrow); dayEnd.setUTCHours(23, 59, 59, 999);
+
+  const rows = await env.DB.prepare(
+    "SELECT p.code, p.name, p.email, p.kind, y.name AS party_name, y.date_label, y.venue, y.minimum_age " +
+    "FROM passes p JOIN parties y ON y.id = p.party_id " +
+    "WHERE p.status = 'ACTIVE' AND p.email IS NOT NULL AND p.reminded_at IS NULL " +
+    "AND y.archived = 0 AND y.starts_at BETWEEN ? AND ?"
+  ).bind(dayStart.toISOString(), dayEnd.toISOString()).all();
+
+  let sent = 0;
+  for (const r of rows.results) {
+    const res = await sendPassEmail(env, {
+      to: r.email, name: r.name, code: r.code,
+      party: { name: r.party_name, date_label: r.date_label, venue: r.venue, minimum_age: r.minimum_age },
+      kind: r.kind, reminder: true,
+    });
+    if (res.sent) {
+      await env.DB.prepare("UPDATE passes SET reminded_at = ? WHERE code = ?").bind(now(), r.code).run();
+      sent += 1;
+    }
+  }
+  console.log(`Reminders: ${sent} of ${rows.results.length} sent.`);
+  return sent;
+}
+
 export default {
+  // Cloudflare calls this on the schedule in wrangler.jsonc.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sendReminders(env));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 

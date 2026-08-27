@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, fontText, fontMasthead, theme } from "../components/Shared";
 import DoorGate from "../components/DoorGate";
 import * as api from "../lib/api";
+import * as door from "../lib/door";
 
 /*
   Door scanner. Opened on one phone at the entrance.
@@ -41,6 +42,57 @@ function ScanScreen({ role }) {
   const [result, setResult] = useState(null);
   const [manual, setManual] = useState("");
   const [admitted, setAdmitted] = useState(0);
+  const [offline, setOffline] = useState(false);
+  const [roster, setRoster] = useState(null);
+  const [queued, setQueued] = useState(0);
+
+  /*
+    Pull the guest list down when the door opens, and again whenever signal
+    returns. Anything admitted while offline is sent up at the same moment,
+    so the record catches up without anyone having to remember to do it.
+  */
+  useEffect(() => {
+    let alive = true;
+
+    const refresh = async () => {
+      const parties = await api.listParties();
+      if (!alive || !parties.ok || !parties.parties?.length) { setOffline(true); return; }
+      const partyId = parties.parties[0].id;
+
+      const res = await api.fetchRoster(partyId);
+      if (!alive) return;
+      if (res.ok) {
+        door.saveRoster(res);
+        setRoster(res);
+        setOffline(false);
+        setAdmitted(door.localAdmittedCount());
+
+        const pending = door.getQueue();
+        if (pending.length) {
+          const sync = await api.syncAdmissions(pending);
+          if (sync.ok) {
+            door.clearQueue();
+            setQueued(0);
+            if (sync.conflicts?.length) {
+              setError(`${sync.conflicts.length} of those were already admitted elsewhere.`);
+            }
+          }
+        }
+      } else {
+        setOffline(true);
+      }
+    };
+
+    // Use whatever was downloaded last time until the fresh copy lands.
+    const cached = door.getRoster();
+    if (cached) { setRoster(cached); setAdmitted(door.localAdmittedCount()); }
+    setQueued(door.getQueue().length);
+
+    refresh();
+    window.addEventListener("online", refresh);
+    const id = setInterval(refresh, 60000);
+    return () => { alive = false; window.removeEventListener("online", refresh); clearInterval(id); };
+  }, []);
   const [error, setError] = useState("");
 
 
@@ -54,7 +106,33 @@ function ScanScreen({ role }) {
     rather than each keeping their own.
   */
   const handle = async (payload) => {
-    const res = await api.scan(payload);
+    let res = await api.scan(payload);
+
+    /*
+      No connection: check against the downloaded copy instead of refusing.
+      The result says OFFLINE so nobody mistakes a weaker check for a full
+      one — offline the rotating number cannot be verified.
+    */
+    if (res.error && /connection/i.test(res.error)) {
+      setOffline(true);
+      const local = door.checkOffline(payload);
+      if (local.ok) {
+        const partyId = roster?.party?.id;
+        door.queueAdmission(local.name && payload.split("|")[1] ? payload.split("|")[1] : payload, partyId);
+        setQueued(door.getQueue().length);
+        setAdmitted((n) => n + 1);
+        setResult({ tone: TONE.VALID, name: local.name,
+                    note: `${local.kind}${local.tier ? " · " + local.tier : ""} · OFFLINE`,
+                    checkId: !!local.idRequired });
+        if (navigator.vibrate) navigator.vibrate(40);
+        return;
+      }
+      setResult({ tone: TONE[local.reason] || TONE.NOT_A_PASS, name: local.name || null,
+                  note: local.reason === "NO_ROSTER" ? "No list downloaded" : "OFFLINE" });
+      return;
+    }
+
+    setOffline(false);
 
     if (res.signedOut) {
       setResult({ tone: TONE.NOT_A_PASS, name: null, note: "Signed out — sign in again" });
@@ -150,8 +228,10 @@ function ScanScreen({ role }) {
         <div className="flex justify-between py-1.5 mt-2"
              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
                       borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
-          <span>DOOR</span>
-          <span>{admitted} ADMITTED</span>
+          <span>{offline ? "OFFLINE" : "ONLINE"}{queued > 0 ? ` · ${queued} TO SYNC` : ""}</span>
+          <span>
+            {admitted} IN{roster?.party?.capacity ? ` / ${roster.party.capacity}` : ""}
+          </span>
         </div>
 
         {result && (
@@ -162,6 +242,13 @@ function ScanScreen({ role }) {
             {result.name && (
               <p className="m-0 mt-2" style={{ ...fontDisplay, fontSize: "30px", color: result.tone.fg }}>
                 {result.name}
+              </p>
+            )}
+            {result.admits > 1 && (
+              <p className="m-0 mt-3 py-2.5"
+                 style={{ ...fontDisplay, fontSize: "22px", color: result.tone.fg,
+                          border: `1px solid rgba(243,235,217,0.55)` }}>
+                ADMITS {result.admits}
               </p>
             )}
             {result.checkId && (

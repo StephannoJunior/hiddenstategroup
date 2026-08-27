@@ -36,6 +36,7 @@ const TABS = [
   { id: "events",   label: "EVENTS",   need: "issue" },
   { id: "team",     label: "TEAM",     need: "team" },
   { id: "requests", label: "REQUESTS", need: "seeList" },
+  { id: "stats",    label: "THE NIGHT", need: "seeList" },
 ];
 
 function Notice({ message, tone = "bad" }) {
@@ -70,7 +71,7 @@ const ghost = { ...btn, background: "transparent", color: theme.ink, border: `1p
 
 function Passes({ role, parties, party, setParty }) {
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", kind: "TICKET", tier: "STANDARD", ticketRef: "", note: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", kind: "TICKET", tier: "STANDARD", admits: 1, ticketRef: "", note: "" });
   const [issued, setIssued] = useState(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,12 +89,50 @@ function Passes({ role, parties, party, setParty }) {
     e.preventDefault();
     setMsg(""); setIssued(null);
     if (!form.name.trim()) { setMsg("A name is required — it's what stops the ticket being resold."); return; }
+    // Catch a second pass to the same person before it exists, rather than
+    // discovering it at the door.
+    const dup = await api.checkDuplicate(party, form.name, form.email);
+    if (dup.ok && dup.matches?.length) {
+      const who = dup.matches.map((m) => `${m.name} (${m.code})`).join(", ");
+      if (!window.confirm(`Already on this list: ${who}.\n\nIssue another anyway?`)) return;
+    }
+
     setBusy(true);
     const res = await api.issuePass({ ...form, party });
     setBusy(false);
     if (!res.ok) { setMsg(res.error || "Couldn't issue that pass."); return; }
     setIssued({ code: res.code, email: res.email });
-    setForm({ name: "", email: "", phone: "", kind: "TICKET", tier: "STANDARD", ticketRef: "", note: "" });
+    setForm({ name: "", email: "", phone: "", kind: "TICKET", tier: "STANDARD", admits: 1, ticketRef: "", note: "" });
+    load();
+  };
+
+  /*
+    Editing opens in place rather than on another screen. At a desk with a
+    guest on the phone, losing the list to go and edit one row is exactly the
+    wrong shape.
+  */
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [resend, setResend] = useState(false);
+
+  const startEdit = (r) => {
+    setEditing(r.code);
+    setResend(false);
+    setEditForm({
+      name: r.name || "", email: r.email || "", phone: r.phone || "",
+      kind: r.kind || "TICKET", tier: r.tier || "", ticketRef: r.ticket_ref || "",
+      note: r.note || "", admits: r.admits || 1,
+    });
+  };
+
+  const saveEdit = async () => {
+    setMsg("");
+    const res = await api.editPass(editing, { ...editForm, resend });
+    if (!res.ok) { setMsg(res.error || "Couldn't save that."); return; }
+    setMsg(resend
+      ? (res.email?.sent ? "Saved and emailed." : `Saved. Not emailed: ${res.email?.reason || "unknown"}.`)
+      : "Saved.");
+    setEditing(null);
     load();
   };
 
@@ -111,7 +150,87 @@ function Passes({ role, parties, party, setParty }) {
     load();
   };
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [query, setQuery] = useState("");
+  const [bulk, setBulk] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
+
+  const issueBulk = async () => {
+    setMsg(""); setBulkResult(null);
+    if (!bulk.trim()) { setMsg("Add some names first."); return; }
+    setBulkBusy(true);
+    const res = await api.issueBulk(party, bulk, form.kind, form.tier);
+    setBulkBusy(false);
+    if (!res.ok) { setMsg(res.error || "Couldn't issue those."); return; }
+    setBulkResult(res);
+    setBulk("");
+    load();
+  };
+
+  const shown = rows.filter((r) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return [r.name, r.email, r.code].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
+  });
+
+  /*
+    A spreadsheet of the list. Quoted properly, because a name containing a
+    comma would otherwise split into two columns and quietly corrupt the file.
+  */
+  const exportCsv = () => {
+    const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [
+      ["Code", "Name", "Email", "Phone", "Kind", "Tier", "Admits", "Ticket", "Status", "Admitted"].join(","),
+      ...rows.map((r) => [r.code, r.name, r.email, r.phone, r.kind, r.tier, r.admits,
+                          r.ticket_ref, r.status, r.admitted_at].map(cell).join(",")),
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `hidden-state-${party}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /*
+    A paper list. The last line of defence: phones die, both scanners break,
+    and a printed sheet has saved more nights than any software.
+  */
+  const printList = () => {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const live = rows.filter((r) => r.status !== "REVOKED")
+                     .sort((a, b) => a.name.localeCompare(b.name));
+    win.document.write(`
+      <html><head><title>Door list</title><style>
+        body{font-family:Georgia,serif;padding:28px;color:#000}
+        h1{font-size:20px;margin:0 0 4px}
+        p.sub{font-size:11px;letter-spacing:.1em;margin:0 0 18px;color:#555}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th{text-align:left;font-size:9px;letter-spacing:.14em;border-bottom:2px solid #000;padding:6px 4px}
+        td{padding:7px 4px;border-bottom:1px solid #ccc}
+        .box{display:inline-block;width:12px;height:12px;border:1px solid #000}
+        @media print{ @page { margin:14mm } }
+      </style></head><body>
+      <h1>Door list — ${live.length} passes</h1>
+      <p class="sub">PRINTED ${new Date().toLocaleString().toUpperCase()}</p>
+      <table><thead><tr><th>IN</th><th>NAME</th><th>CODE</th><th>KIND</th><th>ADMITS</th></tr></thead><tbody>
+      ${live.map((r) => `<tr><td><span class="box"></span></td><td>${r.name}</td>
+        <td>${r.code}</td><td>${r.kind}${r.tier ? " / " + r.tier : ""}</td><td>${r.admits || 1}</td></tr>`).join("")}
+      </tbody></table></body></html>`);
+    win.document.close();
+    win.print();
+  };
+
+  const set = (k) => (e) => {
+    const value = e.target.value;
+    setForm((f) => {
+      const next = { ...f, [k]: value };
+      // Suggest the usual number when the kind changes, still editable.
+      if (k === "kind") next.admits = value === "COUPLE" ? 2 : value === "FAMILY" ? 4 : 1;
+      return next;
+    });
+  };
 
   return (
     <>
@@ -132,6 +251,8 @@ function Passes({ role, parties, party, setParty }) {
               <Field label="Kind">
                 <select style={inputStyle} value={form.kind} onChange={set("kind")}>
                   <option value="TICKET">Sold ticket</option>
+                  <option value="COUPLE">Couple ticket (admits 2)</option>
+                  <option value="FAMILY">Family ticket (admits 4)</option>
                   <option value="INVITATION">Invitation (free)</option>
                   <option value="GUEST">Guest list</option>
                   <option value="PRESS">Press</option>
@@ -144,9 +265,18 @@ function Passes({ role, parties, party, setParty }) {
                   <option value="">—</option>
                   <option value="EARLY">Early</option>
                   <option value="STANDARD">Standard</option>
+                  <option value="VIP">VIP</option>
                 </select>
               </Field>
             </div>
+
+            {(form.kind === "COUPLE" || form.kind === "FAMILY") && (
+              <Field label="How many people it admits">
+                <input type="number" min="1" max="12" style={inputStyle}
+                       value={form.admits}
+                       onChange={set("admits")} />
+              </Field>
+            )}
 
             <Field label="Number on the physical ticket">
               <input style={inputStyle} value={form.ticketRef} onChange={set("ticketRef")} placeholder="Optional" />
@@ -192,16 +322,75 @@ function Passes({ role, parties, party, setParty }) {
         </Section>
       )}
 
+      {role.can.issue && (
+        <Section title="ISSUE SEVERAL AT ONCE">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "15px", lineHeight: 1.5, color: theme.ink2 }}>
+            One per line. Add an email after a comma if you have it, and each
+            person gets their pass sent.
+          </p>
+          <textarea
+            rows={5}
+            value={bulk}
+            onChange={(e) => setBulk(e.target.value)}
+            placeholder={"Ana Popescu, ana@example.com\nMihai Ionescu\nElena Radu, elena@example.com"}
+            style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }}
+          />
+          <button onClick={issueBulk} disabled={bulkBusy}
+                  style={{ ...btn, marginTop: "12px", opacity: bulkBusy ? 0.6 : 1 }}>
+            {bulkBusy ? "ISSUING…" : "ISSUE THEM ALL"}
+          </button>
+
+          {bulkResult && (
+            <div className="mt-4 p-4" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
+              <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
+                {bulkResult.issued.length} ISSUED{bulkResult.failed.length ? ` · ${bulkResult.failed.length} FAILED` : ""}
+              </p>
+              {bulkResult.issued.map((i) => (
+                <p key={i.code} className="m-0" style={{ ...fontText, fontSize: "15px", color: theme.ink }}>
+                  {i.code} — {i.name}
+                </p>
+              ))}
+              {bulkResult.failed.map((f, n) => (
+                <p key={n} className="m-0" style={{ ...fontText, fontSize: "15px", color: "#7A2E2E" }}>
+                  {f.name} — {f.reason}
+                </p>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+
       <Section title={`ISSUED — ${rows.length}`}>
+        {/* At 500 passes, scrolling is not a way to find someone. */}
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name, email or code"
+          style={{ ...inputStyle, width: "100%", marginBottom: "14px" }}
+        />
+
+        <div className="flex flex-wrap gap-4 mb-4">
+          <button onClick={exportCsv}
+                  style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", color: theme.ink2,
+                           background: "transparent", border: 0, borderBottom: `1px solid ${theme.rule}`, cursor: "pointer" }}>
+            EXPORT AS SPREADSHEET
+          </button>
+          <button onClick={printList}
+                  style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", color: theme.ink2,
+                           background: "transparent", border: 0, borderBottom: `1px solid ${theme.rule}`, cursor: "pointer" }}>
+            PRINT THE DOOR LIST
+          </button>
+        </div>
         {rows.length === 0 && (
           <p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>
             Nothing issued for this event yet.
           </p>
         )}
-        {rows.map((r) => {
+        {shown.map((r) => {
           const dead = r.status === "REVOKED";
           return (
-            <div key={r.code} className="flex items-center gap-3 py-3"
+            <div key={r.code}>
+            <div className="flex items-center gap-3 py-3"
                  style={{ borderBottom: `1px solid ${theme.rule}`, opacity: dead ? 0.5 : 1 }}>
               <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.1em", color: theme.ink2, width: "78px" }}>
                 {r.code}
@@ -218,12 +407,99 @@ function Passes({ role, parties, party, setParty }) {
                 </span>
               </span>
               {role.can.revoke && (
+                <button onClick={() => (editing === r.code ? setEditing(null) : startEdit(r))}
+                        style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                                 color: theme.ink2, background: "transparent", border: 0, cursor: "pointer" }}>
+                  {editing === r.code ? "CLOSE" : "EDIT"}
+                </button>
+              )}
+              {role.can.revoke && (
                 <button onClick={() => (dead ? restore(r.code) : revoke(r.code, r.name))}
                         style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
                                  color: dead ? theme.brass : "#7A2E2E", background: "transparent", border: 0, cursor: "pointer" }}>
                   {dead ? "RESTORE" : "CANCEL"}
                 </button>
               )}
+            </div>
+
+            {editing === r.code && (
+              <div className="px-3 py-4 mb-3" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
+                <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em", color: theme.brass }}>
+                  EDITING {r.code} — THE CODE ITSELF CANNOT CHANGE
+                </p>
+
+                <div className="space-y-3">
+                  <Field label="Full name">
+                    <input style={inputStyle} value={editForm.name}
+                           onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+                  </Field>
+                  <Field label="Email">
+                    <input style={inputStyle} value={editForm.email}
+                           onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} />
+                  </Field>
+                  <Field label="Phone">
+                    <input style={inputStyle} value={editForm.phone}
+                           onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} />
+                  </Field>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Kind">
+                      <select style={inputStyle} value={editForm.kind}
+                              onChange={(e) => setEditForm((f) => ({
+                                ...f, kind: e.target.value,
+                                admits: e.target.value === "COUPLE" ? 2 : e.target.value === "FAMILY" ? 4 : 1,
+                              }))}>
+                        <option value="TICKET">Sold ticket</option>
+                        <option value="COUPLE">Couple ticket</option>
+                        <option value="FAMILY">Family ticket</option>
+                        <option value="INVITATION">Invitation (free)</option>
+                        <option value="GUEST">Guest list</option>
+                        <option value="PRESS">Press</option>
+                        <option value="ARTIST">Artist</option>
+                        <option value="STAFF">Staff</option>
+                      </select>
+                    </Field>
+                    <Field label="Tier">
+                      <select style={inputStyle} value={editForm.tier}
+                              onChange={(e) => setEditForm((f) => ({ ...f, tier: e.target.value }))}>
+                        <option value="">—</option>
+                        <option value="EARLY">Early</option>
+                        <option value="STANDARD">Standard</option>
+                        <option value="VIP">VIP</option>
+                      </select>
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Admits">
+                      <input type="number" min="1" max="12" style={inputStyle} value={editForm.admits}
+                             onChange={(e) => setEditForm((f) => ({ ...f, admits: e.target.value }))} />
+                    </Field>
+                    <Field label="Ticket number">
+                      <input style={inputStyle} value={editForm.ticketRef}
+                             onChange={(e) => setEditForm((f) => ({ ...f, ticketRef: e.target.value }))} />
+                    </Field>
+                  </div>
+
+                  <Field label="Note">
+                    <input maxLength={150} style={inputStyle} value={editForm.note}
+                           onChange={(e) => setEditForm((f) => ({ ...f, note: e.target.value }))} />
+                  </Field>
+
+                  <label className="flex items-center gap-2.5" style={{ cursor: "pointer" }}>
+                    <input type="checkbox" checked={resend} onChange={(e) => setResend(e.target.checked)} />
+                    <span style={{ ...fontText, fontSize: "15px", color: theme.ink }}>
+                      Send them the pass again after saving
+                    </span>
+                  </label>
+
+                  <div className="flex gap-3">
+                    <button onClick={saveEdit} style={btn}>SAVE</button>
+                    <button onClick={() => setEditing(null)} style={ghost}>CANCEL</button>
+                  </div>
+                </div>
+              </div>
+            )}
             </div>
           );
         })}
@@ -235,9 +511,17 @@ function Passes({ role, parties, party, setParty }) {
 // ── EVENTS ──────────────────────────────────────────────────────────────────
 
 function Events({ parties, reload }) {
-  const [form, setForm] = useState({ id: "", name: "", dateLabel: "", venue: "", doorsCloseAt: "", minimumAge: 16 });
+  const [form, setForm] = useState({ id: "", name: "", dateLabel: "", venue: "", doorsCloseAt: "", startsAt: "", startsAtLocal: "", lineupText: "", minimumAge: 16 });
   const [msg, setMsg] = useState("");
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k) => (e) => {
+    const value = e.target.value;
+    setForm((f) => {
+      const next = { ...f, [k]: value };
+      // Suggest the usual number when the kind changes, still editable.
+      if (k === "kind") next.admits = value === "COUPLE" ? 2 : value === "FAMILY" ? 4 : 1;
+      return next;
+    });
+  };
 
   const add = async (e) => {
     e.preventDefault();
@@ -246,9 +530,16 @@ function Events({ parties, reload }) {
       setMsg("An id, a name and a closing time are needed.");
       return;
     }
-    const res = await api.createParty(form);
+    // "23:00 Artist" per line becomes the stored list.
+    const lineup = String(form.lineupText || "").split("\n").map((l) => l.trim()).filter(Boolean)
+      .map((line) => {
+        const m = line.match(/^(\d{1,2}[:.]\d{2})\s+(.*)$/);
+        return m ? { time: m[1].replace(".", ":"), artist: m[2] } : { time: "", artist: line };
+      });
+
+    const res = await api.createParty({ ...form, lineup: JSON.stringify(lineup) });
     if (!res.ok) { setMsg(res.error || "Couldn't add that event."); return; }
-    setForm({ id: "", name: "", dateLabel: "", venue: "", doorsCloseAt: "", minimumAge: 16 });
+    setForm({ id: "", name: "", dateLabel: "", venue: "", doorsCloseAt: "", startsAt: "", startsAtLocal: "", lineupText: "", minimumAge: 16 });
     reload();
   };
 
@@ -269,6 +560,13 @@ function Events({ parties, reload }) {
           </div>
           <Field label="Date as shown"><input style={inputStyle} value={form.dateLabel} onChange={set("dateLabel")} placeholder="7 March 2027" /></Field>
           <Field label="Venue"><input style={inputStyle} value={form.venue} onChange={set("venue")} placeholder="Leave empty if undisclosed" /></Field>
+          <Field label="Doors open">
+            <input type="datetime-local" style={inputStyle} value={form.startsAtLocal || ""}
+                   onChange={(e) => setForm((f) => ({
+                     ...f, startsAtLocal: e.target.value,
+                     startsAt: e.target.value ? e.target.value + ":00+02:00" : "",
+                   }))} />
+          </Field>
           <Field label="Doors close">
             <input type="datetime-local" style={inputStyle} value={form.doorsCloseAt}
                    onChange={(e) => setForm((f) => ({ ...f, doorsCloseAt: e.target.value + ":00+02:00" }))} />
@@ -278,6 +576,18 @@ function Events({ parties, reload }) {
             working at this moment, and anyone arriving late would be refused by
             their own ticket.
           </p>
+          {/* Set times, one per line. Shown on every guest's pass, so they
+              know when to arrive rather than guessing. */}
+          <Field label="Set times">
+            <textarea
+              rows={4}
+              value={form.lineupText || ""}
+              onChange={(e) => setForm((f) => ({ ...f, lineupText: e.target.value }))}
+              placeholder={"23:00 Stephanno Jr.\n00:30 Mario Daniel\n02:00 CEASE"}
+              style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }}
+            />
+          </Field>
+
           <button type="submit" style={btn}>ADD EVENT</button>
         </form>
         <Notice message={msg} />
@@ -318,7 +628,15 @@ function Team() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k) => (e) => {
+    const value = e.target.value;
+    setForm((f) => {
+      const next = { ...f, [k]: value };
+      // Suggest the usual number when the kind changes, still editable.
+      if (k === "kind") next.admits = value === "COUPLE" ? 2 : value === "FAMILY" ? 4 : 1;
+      return next;
+    });
+  };
 
   const add = async (e) => {
     e.preventDefault();
@@ -487,6 +805,81 @@ function Requests({ role, party }) {
   );
 }
 
+// ── THE NIGHT ───────────────────────────────────────────────────────────────
+
+function Stats({ party }) {
+  const [data, setData] = useState(null);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (!party) return;
+    api.fetchStats(party).then((res) => {
+      if (res.ok) setData(res);
+      else setMsg(res.error || "Couldn't load the numbers.");
+    });
+  }, [party]);
+
+  if (!data) return <><Notice message={msg} /><Section title="THE NIGHT"><p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>Loading…</p></Section></>;
+
+  const t = data.totals || {};
+  const peak = (data.byHour || []).reduce((best, h) => (h.n > (best?.n || 0) ? h : best), null);
+  const maxHour = Math.max(1, ...(data.byHour || []).map((h) => h.n));
+
+  return (
+    <>
+      <Section title="THE NIGHT">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { n: t.issued || 0, label: "ISSUED" },
+            { n: t.admitted || 0, label: "CAME IN" },
+            { n: t.noShows || 0, label: "NO-SHOWS" },
+            { n: t.refusals || 0, label: "REFUSED" },
+          ].map((b) => (
+            <div key={b.label} className="text-center py-4" style={{ border: `1px solid ${theme.rule}` }}>
+              <p className="m-0" style={{ ...fontDisplay, fontWeight: 300, fontSize: "32px", color: theme.ink,
+                                          fontVariantNumeric: "tabular-nums lining-nums" }}>{b.n}</p>
+              <p className="m-0 mt-1" style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.16em", color: theme.ink2 }}>
+                {b.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* Arrival times are the useful part — they tell you whether to open
+          earlier or move the headline. */}
+      {data.byHour?.length > 0 && (
+        <Section title={`WHEN THEY ARRIVED${peak ? ` — BUSIEST AT ${peak.hour}:00` : ""}`}>
+          {data.byHour.map((h) => (
+            <div key={h.hour} className="flex items-center gap-3 py-1.5">
+              <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.1em", color: theme.ink2, width: "42px" }}>
+                {h.hour}:00
+              </span>
+              <span style={{ flex: 1, height: "14px", background: theme.rule }}>
+                <span style={{ display: "block", height: "100%", width: `${(h.n / maxHour) * 100}%`, background: theme.ink }} />
+              </span>
+              <span style={{ ...fontUtility, fontSize: "9px", color: theme.ink2, width: "34px", textAlign: "right" }}>
+                {h.n}
+              </span>
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {data.byKind?.length > 0 && (
+        <Section title="BY KIND">
+          {data.byKind.map((k) => (
+            <div key={k.kind} className="flex justify-between py-2.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+              <span style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{k.kind}</span>
+              <span style={{ ...fontUtility, fontSize: "10px", color: theme.ink2 }}>{k.n}</span>
+            </div>
+          ))}
+        </Section>
+      )}
+    </>
+  );
+}
+
 // ── the console itself ──────────────────────────────────────────────────────
 
 function ConsoleScreen({ role }) {
@@ -551,6 +944,7 @@ function ConsoleScreen({ role }) {
         {tab === "events" && role.can.issue && <Events parties={parties} reload={loadParties} />}
         {tab === "team" && role.can.team && <Team />}
         {tab === "requests" && <Requests role={role} party={party} />}
+        {tab === "stats" && <Stats party={party} />}
       </section>
       <Footer />
     </div>
