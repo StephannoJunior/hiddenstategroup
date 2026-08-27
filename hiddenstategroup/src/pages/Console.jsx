@@ -37,6 +37,22 @@ const TABS = [
   { id: "team",     label: "TEAM",     need: "team" },
   { id: "requests", label: "REQUESTS", need: "seeList" },
   { id: "stats",    label: "THE NIGHT", need: "seeList" },
+  { id: "settings", label: "SETTINGS",  need: "team" },
+];
+
+/*
+  What each permission actually means, in plain words. The names in the code
+  are short; the person granting them should not have to guess.
+*/
+const PERMISSIONS = [
+  { key: "scan",         label: "Scan at the door" },
+  { key: "seeList",      label: "See the full door list" },
+  { key: "seeReasons",   label: "See why someone was refused" },
+  { key: "reset",        label: "Reset the night" },
+  { key: "issuePasses",  label: "Issue passes and manage events" },
+  { key: "revokePasses", label: "Cancel and edit passes" },
+  { key: "manageTeam",   label: "Create and edit team accounts" },
+  { key: "seeContacts",  label: "See guests' email and phone" },
 ];
 
 function Notice({ message, tone = "bad" }) {
@@ -618,7 +634,7 @@ function Events({ parties, reload }) {
 
 function Team() {
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState({ username: "", password: "", role: "STAFF", displayName: "", email: "", phone: "" });
+  const [form, setForm] = useState({ username: "", password: "", role: "STAFF", displayName: "", email: "", phone: "", permissions: { scan: true } });
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
@@ -627,6 +643,35 @@ function Team() {
     else setMsg(res.error || "Couldn't load the team.");
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  /*
+    Four random words and a number. Long enough to be strong, and typeable at
+    a dark door — a string of symbols gets written on a hand and mistyped,
+    which ends with staff sharing one login.
+  */
+  // Picking a role fills in its usual permissions, still editable.
+  const ROLE_DEFAULTS = {
+    STAFF: { scan: true },
+    OWNER: { scan: true, seeList: true, seeReasons: true, reset: true, seeContacts: true },
+  };
+
+  const setRole = (e) => {
+    const role = e.target.value;
+    setForm((f) => ({ ...f, role, permissions: { ...(ROLE_DEFAULTS[role] || {}) } }));
+  };
+
+  const makePassword = () => {
+    const words = ["amber","anchor","basalt","beacon","bronze","cedar","cipher","cobalt","comet",
+                   "copper","coral","delta","ember","falcon","flint","forge","garnet","granite",
+                   "harbor","indigo","ivory","jasper","lantern","linen","lunar","marble","mica",
+                   "nectar","nickel","north","obsidian","onyx","orbit","pewter","pillar","prism",
+                   "quartz","quill","raven","relic","ripple","river","sable","signal","silver",
+                   "slate","spruce","summit","tempest","thistle","timber","topaz","tundra",
+                   "umber","velvet","vessel","willow","zenith"];
+    const pick = () => words[crypto.getRandomValues(new Uint32Array(1))[0] % words.length];
+    const digits = 1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000);
+    setForm((f) => ({ ...f, password: `${pick()}-${pick()}-${pick()}-${pick()}-${digits}` }));
+  };
 
   const set = (k) => (e) => {
     const value = e.target.value;
@@ -647,8 +692,36 @@ function Team() {
     }
     const res = await api.createMember(form);
     if (!res.ok) { setMsg(res.error || "Couldn't create that account."); return; }
-    setMsg(`Created ${form.username}. Send them their password yourself — it isn't stored anywhere readable.`);
-    setForm({ username: "", password: "", role: "STAFF", displayName: "", email: "", phone: "" });
+    setMsg(res.email?.sent
+      ? `Created ${form.username} — their details have been emailed.`
+      : `Created ${form.username}. NOT emailed (${res.email?.reason || "no address"}) — send the password yourself. It isn't stored anywhere readable.`);
+    setForm({ username: "", password: "", role: "STAFF", displayName: "", email: "", phone: "", permissions: { scan: true } });
+    load();
+  };
+
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
+  const startEdit = (m) => {
+    setEditing(m.username);
+    let perms = {};
+    try { perms = m.permissions ? JSON.parse(m.permissions) : {}; } catch { perms = {}; }
+    setEditForm({
+      displayName: m.display_name || "", email: m.email || "", phone: m.phone || "",
+      role: m.role, password: "", permissions: { ...(ROLE_DEFAULTS[m.role] || {}), ...perms },
+    });
+  };
+
+  const saveEdit = async () => {
+    setMsg("");
+    const payload = { ...editForm };
+    if (!payload.password) delete payload.password;   // only change it if asked
+    const res = await api.editMember(editing, payload);
+    if (!res.ok) { setMsg(res.error || "Couldn't save."); return; }
+    setMsg(payload.password
+      ? (res.email?.sent ? "Saved — new details emailed." : `Saved. Not emailed: ${res.email?.reason || "no address"}.`)
+      : "Saved.");
+    setEditing(null);
     load();
   };
 
@@ -672,7 +745,7 @@ function Team() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Username"><input style={inputStyle} value={form.username} onChange={set("username")} autoCapitalize="none" /></Field>
             <Field label="Role">
-              <select style={inputStyle} value={form.role} onChange={set("role")}>
+              <select style={inputStyle} value={form.role} onChange={setRole}>
                 <option value="STAFF">Door staff</option>
                 <option value="OWNER">Management</option>
               </select>
@@ -681,7 +754,36 @@ function Team() {
           <Field label="Their name"><input style={inputStyle} value={form.displayName} onChange={set("displayName")} /></Field>
           <Field label="Email"><input type="email" style={inputStyle} value={form.email} onChange={set("email")} /></Field>
           <Field label="Phone"><input type="tel" style={inputStyle} value={form.phone} onChange={set("phone")} /></Field>
-          <Field label="Password"><input style={inputStyle} value={form.password} onChange={set("password")} /></Field>
+          {/* What this account may do. Defaults follow the role, and every
+              box can be changed — a door supervisor can be given the list
+              without being promoted to management. */}
+          <div className="pt-1">
+            <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
+              WHAT THIS ACCOUNT CAN DO
+            </p>
+            {PERMISSIONS.map((perm) => (
+              <label key={perm.key} className="flex items-center gap-2.5 py-1.5" style={{ cursor: "pointer" }}>
+                <input type="checkbox"
+                       checked={!!(form.permissions || {})[perm.key]}
+                       onChange={(e) => setForm((f) => ({
+                         ...f, permissions: { ...(f.permissions || {}), [perm.key]: e.target.checked },
+                       }))} />
+                <span style={{ ...fontText, fontSize: "15.5px", color: theme.ink }}>{perm.label}</span>
+              </label>
+            ))}
+          </div>
+
+          <Field label="Password">
+            <div className="flex gap-2">
+              <input style={{ ...inputStyle, flex: 1 }} value={form.password} onChange={set("password")} />
+              <button type="button" onClick={makePassword}
+                      style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.14em", color: theme.ink,
+                               background: "transparent", border: `1px solid ${theme.ink}`,
+                               padding: "0 14px", cursor: "pointer" }}>
+                GENERATE
+              </button>
+            </div>
+          </Field>
           <button type="submit" style={btn}>CREATE ACCOUNT</button>
         </form>
         <Notice message={msg} tone={msg.startsWith("Created") ? "good" : "bad"} />
@@ -689,7 +791,8 @@ function Team() {
 
       <Section title={`TEAM — ${rows.length}`}>
         {rows.map((m) => (
-          <div key={m.username} className="flex items-center gap-3 py-3"
+          <div key={m.username}>
+          <div className="flex items-center gap-3 py-3"
                style={{ borderBottom: `1px solid ${theme.rule}`, opacity: m.active ? 1 : 0.5 }}>
             <span className="flex-1 min-w-0">
               <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
@@ -701,6 +804,11 @@ function Team() {
             </span>
             {m.role !== "BOSS" && (
               <>
+                <button onClick={() => (editing === m.username ? setEditing(null) : startEdit(m))}
+                        style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                                 color: theme.ink, background: "transparent", border: 0, cursor: "pointer" }}>
+                  {editing === m.username ? "CLOSE" : "EDIT"}
+                </button>
                 <button onClick={() => suspend(m.username, !m.active)}
                         style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
                                  color: theme.ink2, background: "transparent", border: 0, cursor: "pointer" }}>
@@ -713,6 +821,82 @@ function Team() {
                 </button>
               </>
             )}
+          </div>
+
+          {editing === m.username && (
+            <div className="px-3 py-4 mb-3" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
+              <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em", color: theme.brass }}>
+                EDITING {m.username} — THE USERNAME ITSELF CANNOT CHANGE
+              </p>
+
+              <div className="space-y-3">
+                <Field label="Their name">
+                  <input style={inputStyle} value={editForm.displayName}
+                         onChange={(e) => setEditForm((f) => ({ ...f, displayName: e.target.value }))} />
+                </Field>
+                <Field label="Email">
+                  <input style={inputStyle} value={editForm.email}
+                         onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} />
+                </Field>
+                <Field label="Phone">
+                  <input style={inputStyle} value={editForm.phone}
+                         onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} />
+                </Field>
+                <Field label="Role">
+                  <select style={inputStyle} value={editForm.role}
+                          onChange={(e) => setEditForm((f) => ({
+                            ...f, role: e.target.value,
+                            permissions: { ...(ROLE_DEFAULTS[e.target.value] || {}) },
+                          }))}>
+                    <option value="STAFF">Door staff</option>
+                    <option value="OWNER">Management</option>
+                  </select>
+                </Field>
+
+                <div>
+                  <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
+                    WHAT THEY CAN DO
+                  </p>
+                  {PERMISSIONS.map((perm) => (
+                    <label key={perm.key} className="flex items-center gap-2.5 py-1.5" style={{ cursor: "pointer" }}>
+                      <input type="checkbox"
+                             checked={!!(editForm.permissions || {})[perm.key]}
+                             onChange={(e) => setEditForm((f) => ({
+                               ...f, permissions: { ...(f.permissions || {}), [perm.key]: e.target.checked },
+                             }))} />
+                      <span style={{ ...fontText, fontSize: "15.5px", color: theme.ink }}>{perm.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <Field label="New password (leave empty to keep theirs)">
+                  <div className="flex gap-2">
+                    <input style={{ ...inputStyle, flex: 1 }} value={editForm.password}
+                           onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))} />
+                    <button type="button"
+                            onClick={() => {
+                              makePassword();
+                              setEditForm((f) => ({ ...f, password: form.password }));
+                            }}
+                            style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.14em", color: theme.ink,
+                                     background: "transparent", border: `1px solid ${theme.ink}`,
+                                     padding: "0 14px", cursor: "pointer" }}>
+                      GENERATE
+                    </button>
+                  </div>
+                </Field>
+                <p className="m-0" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+                  Setting a password signs them out everywhere and emails them
+                  the new details.
+                </p>
+
+                <div className="flex gap-3">
+                  <button onClick={saveEdit} style={btn}>SAVE</button>
+                  <button onClick={() => setEditing(null)} style={ghost}>CANCEL</button>
+                </div>
+              </div>
+            </div>
+          )}
           </div>
         ))}
       </Section>
@@ -880,6 +1064,227 @@ function Stats({ party }) {
   );
 }
 
+// ── SETTINGS ────────────────────────────────────────────────────────────────
+
+function Settings({ parties }) {
+  const [values, setValues] = useState(null);
+  const [defaults, setDefaults] = useState({});
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.fetchSettings().then((res) => {
+      if (res.ok) { setValues(res.settings); setDefaults(res.defaults || {}); }
+      else setMsg(res.error || "Couldn't load the settings.");
+    });
+  }, []);
+
+  const save = async () => {
+    setBusy(true);
+    const res = await api.saveSettings(values);
+    setBusy(false);
+    setMsg(res.ok ? "Saved. Changes apply straight away." : (res.error || "Couldn't save."));
+  };
+
+  if (!values) return <><Notice message={msg} /><Section title="SETTINGS"><p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>Loading…</p></Section></>;
+
+  const set = (k, v) => setValues((s) => ({ ...s, [k]: v }));
+
+  const rows = [
+    { key: "scanCooldown", label: "Scan cooldown", unit: "seconds",
+      help: "How long the same pass is ignored after being read, so a camera left pointing at it doesn't report a refusal." },
+    { key: "codeDrift", label: "Clock tolerance", unit: "windows",
+      help: "How far a guest's clock may be out and still be accepted. Each window is 30 seconds." },
+    { key: "sessionHours", label: "Session length", unit: "hours",
+      help: "How long a team member stays signed in. A shift, not a fortnight." },
+    { key: "loginMaxFails", label: "Failed logins allowed", unit: "attempts",
+      help: "Wrong passwords from one address before a pause." },
+    { key: "loginWindowMinutes", label: "Login pause window", unit: "minutes",
+      help: "How long those failures are counted for." },
+    { key: "poolLowWater", label: "Top up codes below", unit: "codes",
+      help: "More codes are generated automatically when fewer than this remain." },
+    { key: "capacityWarnAt", label: "Capacity warning at", unit: "%",
+      help: "The door turns amber at this share of the room, so a full night is seen coming rather than hit blind." },
+    { key: "reminderHoursBefore", label: "Reminder sent", unit: "hours before",
+      help: "How far ahead guests get their pass again. Set to 0 to stop sending reminders." },
+    { key: "autoCloseAfterMinutes", label: "Refuse entry after", unit: "min from open",
+      help: "An earlier cut-off than the event's closing time, so late arrivals are refused by the system rather than by a judgement call. 0 means no cut-off." },
+  ];
+
+  return (
+    <>
+      <Notice message={msg} tone={msg.startsWith("Saved") ? "good" : "bad"} />
+
+      <Section title="THE DOOR">
+        {rows.map((r) => (
+          <div key={r.key} className="py-3.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+            <div className="flex items-center gap-3">
+              <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+                {r.label}
+              </span>
+              <input
+                type="number"
+                value={values[r.key]}
+                onChange={(e) => set(r.key, Number(e.target.value))}
+                style={{ ...inputStyle, width: "90px", textAlign: "right" }}
+              />
+              <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink2, width: "62px" }}>
+                {r.unit}
+              </span>
+            </div>
+            <p className="m-0 mt-1" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              {r.help}
+              {defaults[r.key] !== undefined && ` Default: ${defaults[r.key]}.`}
+            </p>
+          </div>
+        ))}
+      </Section>
+
+      <Section title="ACCESS">
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.staffSeeDoorList} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("staffSeeDoorList", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Door staff can see the full door list
+            </span>
+            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Useful when one person works the door alone. Turn it off and they
+              can scan but not browse who is coming.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.guestListOpen} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("guestListOpen", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              The guest list form is open
+            </span>
+            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Turn it off between events and the public form stops accepting
+              requests, rather than collecting ones nobody will read.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.idOnEveryPass} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("idOnEveryPass", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Ask for ID on every pass
+            </span>
+            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Normally only sold tickets prompt for ID. This makes the door ask
+              for every pass, including guest list and press.
+            </span>
+          </span>
+        </label>
+
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            Copy new accounts to
+          </p>
+          <input value={values.accountCopyTo}
+                 onChange={(e) => set("accountCopyTo", e.target.value)}
+                 style={{ ...inputStyle, width: "100%" }} />
+          <p className="m-0 mt-1" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+            Every new account's details are blind-copied here, so there is
+            always a second record of who was given access.
+          </p>
+        </div>
+      </Section>
+
+      <button onClick={save} disabled={busy} style={{ ...btn, marginTop: "8px", opacity: busy ? 0.6 : 1 }}>
+        {busy ? "SAVING…" : "SAVE SETTINGS"}
+      </button>
+
+      <Maintenance parties={parties} />
+    </>
+  );
+}
+
+/*
+  Maintenance. Everything here is destructive, so each action makes you type
+  the phrase back before it will run. A misplaced tap should not be able to
+  delete a night's guest list.
+*/
+function Maintenance({ parties }) {
+  const [msg, setMsg] = useState("");
+  const [tone, setTone] = useState("good");
+  const [party, setParty] = useState(parties?.[0]?.id || "");
+  const [count, setCount] = useState(1000);
+
+  const run = async (action, phrase, extra = {}) => {
+    if (phrase) {
+      const typed = window.prompt(`This cannot be undone.\n\nType ${phrase} to continue.`);
+      if (typed !== phrase) { setTone("bad"); setMsg("Not confirmed — nothing was changed."); return; }
+    }
+    const res = await api.maintenance(action, { confirm: phrase, ...extra });
+    setTone(res.ok ? "good" : "bad");
+    if (!res.ok) { setMsg(res.error || "That didn't work."); return; }
+    if (res.added !== undefined) setMsg(`Added ${res.added} codes. ${res.unused} unused now.`);
+    else if (res.removed !== undefined) setMsg(`Replaced ${res.removed} codes. ${res.unused} unused now.`);
+    else setMsg(`Done — ${res.deleted} removed.`);
+  };
+
+  const row = (label, help, onClick, danger) => (
+    <div className="py-3.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+      <div className="flex items-center gap-3">
+        <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{label}</span>
+        <button onClick={onClick}
+                style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
+                         color: danger ? "#7A2E2E" : theme.ink,
+                         background: "transparent", border: `1px solid ${danger ? "#C08A8A" : theme.ink}`,
+                         padding: "9px 14px", cursor: "pointer" }}>
+          RUN
+        </button>
+      </div>
+      <p className="m-0 mt-1" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+        {help}
+      </p>
+    </div>
+  );
+
+  return (
+    <>
+      <Section title="CODES">
+        <div className="flex items-center gap-3 pb-3">
+          <input type="number" value={count} onChange={(e) => setCount(Number(e.target.value))}
+                 style={{ ...inputStyle, width: "110px" }} />
+          <button onClick={() => run("codes.add", null, { count })} style={btn}>ADD CODES</button>
+        </div>
+        {row("Delete unused codes",
+             "Clears the pool of codes nobody holds yet. Used codes are never touched — a pass points at each one.",
+             () => run("codes.purgeUnused", "DELETE UNUSED CODES"), true)}
+        {row("Replace all unused codes",
+             "Deletes the unused pool and generates a fresh one. Anyone already holding a pass is unaffected.",
+             () => run("codes.regenerate", "REGENERATE ALL CODES"), true)}
+      </Section>
+
+      <Section title="A NIGHT'S DATA">
+        <select value={party} onChange={(e) => setParty(e.target.value)}
+                style={{ ...inputStyle, width: "100%", marginBottom: "10px" }}>
+          {(parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {row("Clear the door record",
+             "Wipes who was admitted and refused, leaving the passes themselves. Useful after a rehearsal.",
+             () => run("scans.clearForParty", "CLEAR THE DOOR RECORD", { party }), true)}
+        {row("Delete every pass for this event",
+             "Removes the passes and the door record together. The codes stay used, so old links never point at someone new.",
+             () => run("passes.deleteForParty", "DELETE ALL PASSES", { party }), true)}
+        {row("Clear decided requests",
+             "Removes approved and declined guest list requests. Anything still waiting is kept.",
+             () => run("requests.clearDecided", "CLEAR DECIDED REQUESTS"), true)}
+      </Section>
+
+      <Notice message={msg} tone={tone} />
+    </>
+  );
+}
+
 // ── the console itself ──────────────────────────────────────────────────────
 
 function ConsoleScreen({ role }) {
@@ -945,6 +1350,7 @@ function ConsoleScreen({ role }) {
         {tab === "team" && role.can.team && <Team />}
         {tab === "requests" && <Requests role={role} party={party} />}
         {tab === "stats" && <Stats party={party} />}
+        {tab === "settings" && role.can.manageTeam && <Settings parties={parties} />}
       </section>
       <Footer />
     </div>

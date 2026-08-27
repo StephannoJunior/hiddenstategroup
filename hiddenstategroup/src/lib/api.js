@@ -129,6 +129,18 @@ export const archiveParty = (id) =>
 
 // ── team ────────────────────────────────────────────────────────────────────
 export const listTeam = () => call("/team");
+
+// Anything the boss can change without a deploy.
+// Destructive work. Each needs its confirmation phrase typed back.
+export const maintenance = (action, extra = {}) =>
+  call("/maintenance", { method: "POST", body: { action, ...extra } });
+
+export const fetchSettings = () => call("/settings");
+export const saveSettings = (settings) => call("/settings", { method: "PATCH", body: { settings } });
+
+// Edit an account: name, contact, role, what it can do, or a new password.
+export const editMember = (username, changes) =>
+  call(`/team/${encodeURIComponent(username)}`, { method: "PATCH", body: changes });
 export const createMember = (member) => call("/team", { method: "POST", body: member });
 export const setMemberActive = (username, active) =>
   call(`/team/${encodeURIComponent(username)}`, { method: "PATCH", body: { active } });

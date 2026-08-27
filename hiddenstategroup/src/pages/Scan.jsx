@@ -47,6 +47,16 @@ function ScanScreen({ role }) {
   const [queued, setQueued] = useState(0);
 
   /*
+    The camera reads the same QR many times a second. Without this, one pass
+    held up for three seconds becomes twenty scans — and the second one
+    reports ALREADY USED, which looks to staff like a refusal.
+
+    So the same code is ignored entirely for a few seconds after it is read.
+  */
+  const lastScan = useRef({ code: null, at: 0 });
+  const COOLDOWN_MS = 4000;
+
+  /*
     Pull the guest list down when the door opens, and again whenever signal
     returns. Anything admitted while offline is sent up at the same moment,
     so the record catches up without anyone having to remember to do it.
@@ -106,6 +116,11 @@ function ScanScreen({ role }) {
     rather than each keeping their own.
   */
   const handle = async (payload) => {
+    const code = String(payload || "").split("|")[1] || String(payload || "");
+    const since = Date.now() - lastScan.current.at;
+    if (lastScan.current.code === code && since < COOLDOWN_MS) return;
+    lastScan.current = { code, at: Date.now() };
+
     let res = await api.scan(payload);
 
     /*
@@ -205,8 +220,9 @@ function ScanScreen({ role }) {
         const found = jsQR(img.data, img.width, img.height);
         if (found?.data) {
           handle(found.data);
-          // Pause briefly so one pass is not read twenty times in a second.
-          setTimeout(() => requestAnimationFrame(step), 1800);
+          // Keep looking, but the cooldown above stops the same pass being
+          // reported twice.
+          setTimeout(() => requestAnimationFrame(step), 700);
           return;
         }
       }
@@ -229,7 +245,15 @@ function ScanScreen({ role }) {
              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
                       borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
           <span>{offline ? "OFFLINE" : "ONLINE"}{queued > 0 ? ` · ${queued} TO SYNC` : ""}</span>
-          <span>
+          <span style={{
+            // Amber near the limit, red at it — a full room should be seen
+            // coming, not discovered.
+            color: roster?.party?.capacity
+              ? (admitted >= roster.party.capacity ? "#7A2E2E"
+                : admitted >= roster.party.capacity * ((roster.capacityWarnAt ?? 90) / 100) ? "#7A5A2E"
+                : theme.ink2)
+              : theme.ink2,
+          }}>
             {admitted} IN{roster?.party?.capacity ? ` / ${roster.party.capacity}` : ""}
           </span>
         </div>

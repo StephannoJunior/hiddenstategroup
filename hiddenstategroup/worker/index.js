@@ -95,7 +95,7 @@ async function rotatingCode(secret, code, window) {
   problem; a pass that failed to be created because email was down is a real
   one.
 */
-async function sendPassEmail(env, { to, name, code, party, kind, reminder = false }) {
+async function sendPassEmail(env, { to, name, code, party, kind, reminder = false, signoff = "Hidden State" }) {
   // Log every reason for not sending. A silent skip is the worst outcome:
   // nothing arrives, nothing appears in the logs, and there is nothing to
   // act on.
@@ -204,13 +204,122 @@ async function sendPassEmail(env, { to, name, code, party, kind, reminder = fals
   }
 }
 
+/*
+  Account details for a new team member.
+
+  The password is sent once, here, and never stored anywhere readable — the
+  database holds only its hash. If it is lost, the only path is to set a new
+  one, which is the correct trade.
+*/
+async function sendAccountEmail(env, { to, displayName, username, password, role, copyTo }) {
+  if (!env.RESEND_API_KEY) {
+    console.error("Account email skipped: RESEND_API_KEY is not set.");
+    return { sent: false, reason: "no key configured" };
+  }
+  if (!to) return { sent: false, reason: "no address" };
+
+  const what = role === "STAFF"
+    ? "You can scan passes at the door."
+    : "You can scan passes, see the door list, and review guest list requests.";
+
+  const text = [
+    `${displayName},`,
+    "",
+    "Your Hidden State door account is ready.",
+    "",
+    `  Username: ${username}`,
+    `  Password: ${password}`,
+    "",
+    "Sign in at https://hiddenstategroup.com/admins-staff-boss",
+    "",
+    what,
+    "",
+    "Keep this to yourself. Nobody else should use your login — the door",
+    "record shows who admitted whom, and that only works if each person",
+    "signs in as themselves.",
+    "",
+    "Hidden State",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Georgia,serif;color:#16130E;background:#F3EBD9;padding:32px">
+      <div style="max-width:480px;margin:0 auto">
+        <p style="font-family:Helvetica,sans-serif;font-size:10px;letter-spacing:.2em;color:#8A6A28;margin:0">
+          YOUR DOOR ACCOUNT
+        </p>
+        <div style="border-top:2px solid #16130E;margin-top:10px"></div>
+        <div style="border-top:1px solid #16130E;margin-top:3px"></div>
+
+        <h1 style="font-size:28px;font-weight:400;margin:24px 0 6px">${displayName}</h1>
+        <p style="font-size:17px;line-height:1.6;margin:0 0 22px">
+          Your Hidden State door account is ready.
+        </p>
+
+        <table style="border-collapse:collapse;font-family:Helvetica,sans-serif;font-size:14px">
+          <tr><td style="padding:6px 18px 6px 0;color:#463F35">Username</td>
+              <td style="padding:6px 0"><strong>${username}</strong></td></tr>
+          <tr><td style="padding:6px 18px 6px 0;color:#463F35">Password</td>
+              <td style="padding:6px 0"><strong>${password}</strong></td></tr>
+        </table>
+
+        <p style="margin:24px 0">
+          <a href="https://hiddenstategroup.com/admins-staff-boss"
+             style="display:inline-block;background:#16130E;color:#F3EBD9;
+             font-family:Helvetica,sans-serif;font-size:11px;letter-spacing:.2em;
+             padding:14px 28px;text-decoration:none">SIGN IN</a>
+        </p>
+
+        <p style="font-size:15px;line-height:1.6;color:#463F35;margin:0">
+          ${what}
+        </p>
+        <p style="font-size:15px;line-height:1.6;color:#463F35;margin:14px 0 0">
+          Keep this to yourself. The door record shows who admitted whom, and
+          that only works if each person signs in as themselves.
+        </p>
+      </div>
+    </div>`;
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Hidden State <passes@hiddenstategroup.com>",
+        to: [to],
+        // Blind copy: the new member should not see an internal address.
+        bcc: copyTo && copyTo !== to ? [copyTo] : undefined,
+        subject: "Your Hidden State door account",
+        text,
+        html,
+      }),
+    });
+    const detail = await res.text();
+    if (!res.ok) {
+      console.error("Account email refused:", res.status, detail);
+      let reason = `email service returned ${res.status}`;
+      try {
+        const parsed = JSON.parse(detail);
+        if (parsed.message) reason = parsed.message;
+      } catch { /* status alone will do */ }
+      return { sent: false, reason };
+    }
+    return { sent: true };
+  } catch (err) {
+    console.error("Account email failed:", err && err.message);
+    return { sent: false, reason: "could not reach the email service" };
+  }
+}
+
 // ─── sessions ──────────────────────────────────────────────────────────────
 
-const SESSION_HOURS = 12;   // a shift, not a fortnight
-
-async function createSession(env, member) {
+async function createSession(env, member, hours) {
   const token = randomHex(32);
-  const expires = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
+  // Comes from settings, so changing it in the console actually takes effect.
+  const span = Number(hours) > 0 ? Number(hours) : DEFAULT_SETTINGS.sessionHours;
+  const expires = new Date(Date.now() + span * 3600 * 1000).toISOString();
   await env.DB.prepare(
     "INSERT INTO sessions (token_hash, username, role, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
   ).bind(await sha256Hex(token), member.username, member.role, now(), expires).run();
@@ -223,7 +332,7 @@ async function readSession(env, request) {
   if (!token) return null;
 
   const row = await env.DB.prepare(
-    "SELECT s.username, s.role, s.expires_at, t.display_name, t.active " +
+    "SELECT s.username, s.role, s.expires_at, t.display_name, t.active, t.permissions " +
     "FROM sessions s JOIN team t ON t.username = s.username WHERE s.token_hash = ?"
   ).bind(await sha256Hex(token)).first();
 
@@ -232,7 +341,76 @@ async function readSession(env, request) {
   // Suspending someone takes effect immediately, without waiting for their
   // session to lapse.
   if (!row.active) return null;
-  return { username: row.username, role: row.role, displayName: row.display_name };
+  return {
+    username: row.username, role: row.role, displayName: row.display_name,
+    can: permissionsFor(row.role, row.permissions),
+  };
+}
+
+/*
+  SETTINGS. Anything worth changing on a night without waiting for a deploy.
+
+  Defaults are here; the database only holds what has been changed. That means
+  a fresh install works with no settings rows at all, and a bad value can be
+  fixed by deleting the row rather than by editing code.
+*/
+const DEFAULT_SETTINGS = {
+  // Seconds a code is ignored after a successful scan. Without this, a camera
+  // left pointing at the same pass re-reads it and reports ALREADY USED,
+  // which looks to staff like a refusal.
+  scanCooldown: 4,
+  // Windows either side accepted, for clock drift between phones.
+  codeDrift: 1,
+  // How long a team session lasts, in hours.
+  sessionHours: 12,
+  // Failed logins from one address before a pause, and how long that window is.
+  loginMaxFails: 8,
+  loginWindowMinutes: 15,
+  // Copy of every new team account, so there is always a second record.
+  accountCopyTo: "management@hiddenstategroup.com",
+  // Whether door staff may see the full door list.
+  staffSeeDoorList: true,
+  // Refill the code pool once fewer than this remain.
+  poolLowWater: 200,
+
+  // Go amber at this share of capacity, so a full room is seen coming
+  // rather than hit blind.
+  capacityWarnAt: 90,
+
+  // How long before the night the reminder goes out. 0 turns it off.
+  reminderHoursBefore: 24,
+
+  // Refuse everyone this many minutes after doors open. 0 means no cut-off
+  // and the event's own closing time still applies.
+  autoCloseAfterMinutes: 0,
+
+  // Whether the public guest list form accepts requests.
+  guestListOpen: true,
+
+  // Ask for ID on every pass, not only sold tickets.
+  idOnEveryPass: false,
+
+  // Shown at the foot of every email.
+  emailSignoff: "Hidden State",
+};
+
+async function getSettings(env) {
+  try {
+    const rows = await env.DB.prepare("SELECT key, value FROM settings").all();
+    const out = { ...DEFAULT_SETTINGS };
+    for (const r of rows.results) {
+      const fallback = DEFAULT_SETTINGS[r.key];
+      if (fallback === undefined) continue;
+      out[r.key] = typeof fallback === "number" ? Number(r.value)
+                 : typeof fallback === "boolean" ? r.value === "true"
+                 : r.value;
+    }
+    return out;
+  } catch (err) {
+    // A missing settings table must never stop the door working.
+    console.error("Settings unavailable, using defaults:", err && err.message);
+    return { ...DEFAULT_SETTINGS };
+  }
 }
 
 const CAN = {
@@ -241,7 +419,27 @@ const CAN = {
   STAFF: { scan: true, seeList: false, reset: false, issue: false, revoke: false, team: false },
 };
 
-const can = (role, action) => !!(CAN[role] && CAN[role][action]);
+/*
+  Permissions come from the role by default, but any account can override
+  them. That way a particular door supervisor can be given the door list
+  without promoting them to management.
+*/
+function permissionsFor(role, stored) {
+  const base = CAN[role] || CAN.STAFF;
+  if (!stored) return { ...base };
+  try {
+    return { ...base, ...JSON.parse(stored) };
+  } catch {
+    return { ...base };
+  }
+}
+
+const can = (who, action) => {
+  if (!who) return false;
+  // `who` may be a session (with its own permissions) or a bare role string.
+  if (typeof who === "string") return !!(CAN[who] && CAN[who][action]);
+  return !!(who.can && who.can[action]);
+};
 
 // ─── the code pool ─────────────────────────────────────────────────────────
 
@@ -259,7 +457,6 @@ const can = (role, action) => !!(CAN[role] && CAN[role][action]);
 // No O/0 or I/1: a code read aloud at a loud door should not be
 // guessable-wrong.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRTUVWXYZ2346789";
-const LOW_WATER = 200;     // top up once fewer than this remain
 const TOP_UP_BY = 1000;
 
 function makeCode() {
@@ -269,10 +466,11 @@ function makeCode() {
   return out;
 }
 
-async function topUpPool(env) {
+async function topUpPool(env, lowWater) {
   const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM code_pool WHERE used = 0").first();
   const spare = row ? row.n : 0;
-  if (spare >= LOW_WATER) return { added: 0, spare };
+  const threshold = Number(lowWater) > 0 ? Number(lowWater) : DEFAULT_SETTINGS.poolLowWater;
+  if (spare >= threshold) return { added: 0, spare };
 
   // INSERT OR IGNORE handles the rare case of generating one that already
   // exists, so a collision costs a row rather than an error.
@@ -305,8 +503,9 @@ async function handleApi(request, env, url, ctx) {
     Failures are what count, and they expire — a member of staff mistyping
     twice at the start of a shift should not be locked out an hour later.
   */
-  const LOGIN_WINDOW_MIN = 15;
-  const LOGIN_MAX_FAILS = 8;
+  const limits = await getSettings(env);
+  const LOGIN_WINDOW_MIN = limits.loginWindowMinutes;
+  const LOGIN_MAX_FAILS = limits.loginMaxFails;
 
   /*
     Both of these swallow their own errors on purpose.
@@ -360,10 +559,12 @@ async function handleApi(request, env, url, ctx) {
     }
 
     await recordAttempt(ip, username, true);
-    const { token, expires } = await createSession(env, member);
+    const settings = await getSettings(env);
+    const { token, expires } = await createSession(env, member, settings.sessionHours);
     return json({
       ok: true, token, expires,
-      user: { username: member.username, role: member.role, displayName: member.display_name, can: CAN[member.role] },
+      user: { username: member.username, role: member.role, displayName: member.display_name,
+              can: permissionsFor(member.role, member.permissions) },
     });
   }
 
@@ -372,7 +573,7 @@ async function handleApi(request, env, url, ctx) {
   if (path === "/me" && method === "GET") {
     const who = await readSession(env, request);
     if (!who) return fail("Not signed in.", 401);
-    return json({ ok: true, user: { ...who, can: CAN[who.role] } });
+    return json({ ok: true, user: who });
   }
 
   if (path === "/logout" && method === "POST") {
@@ -412,6 +613,7 @@ async function handleApi(request, env, url, ctx) {
       },
       party: {
         name: pass.party_name, date: pass.date_label, venue: pass.venue,
+        capacityWarnAt: undefined,
         minimumAge: pass.minimum_age, rotating: !!pass.rotating, over,
         startsAt: pass.starts_at,
         // Stored as JSON text; parsed here so the page never has to.
@@ -436,7 +638,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/health" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
 
     const present = (v) => (typeof v === "string" && v.length > 0);
     return json({
@@ -551,14 +753,15 @@ async function handleApi(request, env, url, ctx) {
   // ── the door ────────────────────────────────────────────────────────────
   if (path === "/scan" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "scan")) return fail("Not signed in.", 401);
+    if (!who || !can(who, "scan")) return fail("Not signed in.", 401);
+    const settings = await getSettings(env);
 
     const parts = String(body.payload || "").split("|");
     const code = (parts.length === 3 ? parts[1] : String(body.code || "")).toUpperCase();
     const given = parts.length === 3 ? parts[2] : null;
 
     const pass = await env.DB.prepare(
-      "SELECT p.*, y.name AS party_name, y.doors_close_at, y.rotating FROM passes p " +
+      "SELECT p.*, y.name AS party_name, y.doors_close_at, y.rotating, y.starts_at FROM passes p " +
       "JOIN parties y ON y.id = p.party_id WHERE p.code = ?"
     ).bind(code).first();
 
@@ -578,12 +781,25 @@ async function handleApi(request, env, url, ctx) {
       return json({ ok: false, reason: "PARTY_OVER", name: pass.name });
     }
 
+    // An optional earlier cut-off, so late arrivals are refused by the system
+    // rather than by a judgement call at the door.
+    if (settings.autoCloseAfterMinutes > 0 && pass.starts_at) {
+      const shutAt = new Date(pass.starts_at).getTime() + settings.autoCloseAfterMinutes * 60000;
+      if (Date.now() > shutAt) {
+        await record("REFUSED", "DOORS_CLOSED");
+        return json({ ok: false, reason: "DOORS_CLOSED", name: pass.name });
+      }
+    }
+
     // Rotating codes: accept the window either side for clock drift, then
     // look back ten minutes to tell a stale code from an invented one.
     if (pass.rotating && given !== null) {
       const w = currentWindow();
       let matched = false;
-      for (const win of [w, w - 1, w + 1]) {
+      const drift = Math.max(0, Math.min(5, settings.codeDrift));
+      const windows = [w];
+      for (let i = 1; i <= drift; i++) windows.push(w - i, w + i);
+      for (const win of windows) {
         if (await rotatingCode(env.PASS_SECRET, code, win) === given) { matched = true; break; }
       }
       if (!matched) {
@@ -602,6 +818,21 @@ async function handleApi(request, env, url, ctx) {
     ).bind(code, pass.party_id).first();
 
     if (already) {
+      /*
+        A camera left pointing at the same pass reads it again a moment later.
+        Reporting ALREADY USED there looks to staff like a refusal, and they
+        turn away someone they just admitted.
+
+        So within the cooldown, the same code simply repeats the original
+        result instead of counting as a second attempt.
+      */
+      const secondsSince = (Date.now() - new Date(already.scanned_at).getTime()) / 1000;
+      if (secondsSince <= settings.scanCooldown) {
+        return json({
+          ok: true, repeat: true, name: pass.name, kind: pass.kind, tier: pass.tier,
+          ticketRef: pass.ticket_ref, idRequired: !!pass.id_required, admits: pass.admits || 1,
+        });
+      }
       await record("REFUSED", "USED");
       return json({ ok: false, reason: "USED", name: pass.name, at: already.scanned_at });
     }
@@ -609,7 +840,11 @@ async function handleApi(request, env, url, ctx) {
     await record("ADMITTED", null);
     return json({
       ok: true, name: pass.name, kind: pass.kind, tier: pass.tier,
-      ticketRef: pass.ticket_ref, idRequired: !!pass.id_required, note: pass.note,
+      ticketRef: pass.ticket_ref,
+      // The night-wide switch wins: if ID is required for everyone, the door
+      // asks regardless of what the individual pass says.
+      idRequired: settings.idOnEveryPass || !!pass.id_required,
+      note: pass.note,
       admits: pass.admits || 1,
     });
   }
@@ -628,7 +863,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/roster" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "scan")) return fail("Not allowed.", 401);
+    if (!who || !can(who, "scan")) return fail("Not allowed.", 401);
 
     const partyId = url.searchParams.get("party");
     if (!partyId) return fail("Which event?");
@@ -643,7 +878,13 @@ async function handleApi(request, env, url, ctx) {
       "SELECT id, name, date_label, doors_close_at, capacity FROM parties WHERE id = ?"
     ).bind(partyId).first();
 
-    return json({ ok: true, party, passes: rows.results, fetchedAt: now() });
+    // The door needs to know when to start warning, and it may go offline
+    // straight after this, so the threshold travels with the roster.
+    const cfg = await getSettings(env);
+    return json({
+      ok: true, party, passes: rows.results, fetchedAt: now(),
+      capacityWarnAt: cfg.capacityWarnAt,
+    });
   }
 
   /*
@@ -654,7 +895,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/sync" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "scan")) return fail("Not allowed.", 401);
+    if (!who || !can(who, "scan")) return fail("Not allowed.", 401);
 
     const entries = Array.isArray(body.entries) ? body.entries.slice(0, 500) : [];
     let recorded = 0;
@@ -685,7 +926,10 @@ async function handleApi(request, env, url, ctx) {
   // ── the door list ───────────────────────────────────────────────────────
   if (path === "/passes" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "seeList")) return fail("Not allowed.", 403);
+    const settings = await getSettings(env);
+    // Door staff can be allowed the list without being promoted.
+    const allowed = can(who, "seeList") || (settings.staffSeeDoorList && can(who, "scan"));
+    if (!who || !allowed) return fail("Not allowed.", 403);
 
     const partyId = url.searchParams.get("party");
     const rows = await env.DB.prepare(
@@ -702,13 +946,13 @@ async function handleApi(request, env, url, ctx) {
   // ── issuing a pass ──────────────────────────────────────────────────────
   if (path === "/passes" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "issue")) return fail("Only the boss can issue passes.", 403);
+    if (!who || !can(who, "issue")) return fail("Only the boss can issue passes.", 403);
     if (!body.name || !body.party) return fail("A name and an event are required.");
 
     // Take the next unused code from the pool rather than inventing one, so
     // two passes can never collide.
     // Refill in the background if we are running low, so issuing never stops.
-    ctx.waitUntil(topUpPool(env));
+    ctx.waitUntil(getSettings(env).then((cfg) => topUpPool(env, cfg.poolLowWater)));
 
     const pooled = await env.DB.prepare(
       "SELECT code FROM code_pool WHERE used = 0 ORDER BY RANDOM() LIMIT 1"
@@ -767,13 +1011,13 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/passes/bulk" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "issue")) return fail("Only the boss can issue passes.", 403);
+    if (!who || !can(who, "issue")) return fail("Only the boss can issue passes.", 403);
 
     const lines = String(body.names || "").split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 200);
     if (!lines.length) return fail("No names given.");
     if (!body.party) return fail("Which event?");
 
-    ctx.waitUntil(topUpPool(env));
+    ctx.waitUntil(getSettings(env).then((cfg) => topUpPool(env, cfg.poolLowWater)));
     const issued = [];
     const failed = [];
 
@@ -812,7 +1056,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/passes/check" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "issue")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "issue")) return fail("Not allowed.", 403);
 
     const rows = await env.DB.prepare(
       "SELECT code, name, email, status FROM passes WHERE party_id = ? AND " +
@@ -825,7 +1069,7 @@ async function handleApi(request, env, url, ctx) {
   // ── cancelling one ──────────────────────────────────────────────────────
   if (path.startsWith("/passes/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "revoke")) return fail("Only the boss can change passes.", 403);
+    if (!who || !can(who, "revoke")) return fail("Only the boss can change passes.", 403);
 
     const code = decodeURIComponent(path.slice(8)).toUpperCase();
     const existing = await env.DB.prepare("SELECT * FROM passes WHERE code = ?").bind(code).first();
@@ -905,7 +1149,7 @@ async function handleApi(request, env, url, ctx) {
 
   if (path === "/parties" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "issue")) return fail("Only the boss can add events.", 403);
+    if (!who || !can(who, "issue")) return fail("Only the boss can add events.", 403);
     if (!body.id || !body.name || !body.doorsCloseAt) {
       return fail("An id, a name and a closing time are required.");
     }
@@ -922,7 +1166,7 @@ async function handleApi(request, env, url, ctx) {
 
   if (path.startsWith("/parties/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "issue")) return fail("Only the boss can change events.", 403);
+    if (!who || !can(who, "issue")) return fail("Only the boss can change events.", 403);
 
     const id = decodeURIComponent(path.slice(9));
     const fields = [];
@@ -949,7 +1193,7 @@ async function handleApi(request, env, url, ctx) {
   // and every scan attached to it, losing the record of a night that happened.
   if (path.startsWith("/parties/") && method === "DELETE") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "issue")) return fail("Only the boss can remove events.", 403);
+    if (!who || !can(who, "issue")) return fail("Only the boss can remove events.", 403);
     const id = decodeURIComponent(path.slice(9));
     await env.DB.prepare("UPDATE parties SET archived = 1 WHERE id = ?").bind(id).run();
     return json({ ok: true, id, archived: true });
@@ -963,7 +1207,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/stats" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "seeList")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "seeList")) return fail("Not allowed.", 403);
 
     const partyId = url.searchParams.get("party");
     if (!partyId) return fail("Which event?");
@@ -1000,7 +1244,7 @@ async function handleApi(request, env, url, ctx) {
   // ── team accounts ───────────────────────────────────────────────────────
   if (path === "/team" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
     const rows = await env.DB.prepare(
       "SELECT username, role, display_name, email, phone, photo_url, active, created_at FROM team ORDER BY role, username"
     ).all();
@@ -1009,45 +1253,128 @@ async function handleApi(request, env, url, ctx) {
 
   if (path === "/team" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "team")) return fail("Only the boss can create accounts.", 403);
+    if (!who || !can(who, "team")) return fail("Only the boss can create accounts.", 403);
     if (!body.username || !body.password || !body.role) {
       return fail("A username, password and role are required.");
     }
     if (body.role === "BOSS") return fail("There can only be one boss account.", 400);
 
     const salt = randomHex(16);
+
+    // Permissions given at creation, filtered to the ones that exist.
+    let permissions = null;
+    if (body.permissions) {
+      const clean = {};
+      for (const key of Object.keys(CAN.BOSS)) {
+        if (body.permissions[key] !== undefined) clean[key] = !!body.permissions[key];
+      }
+      permissions = JSON.stringify(clean);
+    }
+
     await env.DB.prepare(
-      "INSERT INTO team (username, role, display_name, email, phone, photo_url, password_hash, salt, created_at, created_by) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO team (username, role, display_name, email, phone, photo_url, password_hash, salt, permissions, created_at, created_by) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       String(body.username).trim().toLowerCase(), body.role, body.displayName || body.username,
       body.email || null, body.phone || null, body.photoUrl || null,
-      await hashPassword(body.password, salt), salt, now(), who.username
+      await hashPassword(body.password, salt), salt, permissions, now(), who.username
     ).run();
 
-    return json({ ok: true, username: body.username });
+    // Best effort, as with passes: the account exists either way, and the
+    // console reports whether the details went out.
+    const settings = await getSettings(env);
+    const email = await sendAccountEmail(env, {
+      to: body.email,
+      displayName: body.displayName || body.username,
+      username: String(body.username).trim().toLowerCase(),
+      password: body.password,
+      role: body.role,
+      // A copy to management, so there is always a second record of who was
+      // given access and when.
+      copyTo: settings.accountCopyTo,
+    });
+
+    return json({ ok: true, username: body.username, email });
   }
 
   if (path.startsWith("/team/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
+
     const username = decodeURIComponent(path.slice(6)).toLowerCase();
-    if (username === who.username && body.active === false) {
-      return fail("You can't suspend your own account.", 400);
+    const target = await env.DB.prepare("SELECT * FROM team WHERE username = ?").bind(username).first();
+    if (!target) return fail("No such account.", 404);
+
+    // Guardrails on your own account, so a slip cannot lock you out of your
+    // own system.
+    if (username === who.username) {
+      if (body.active === false) return fail("You can't suspend your own account.", 400);
+      if (body.permissions) return fail("You can't change your own permissions.", 400);
+      if (body.role && body.role !== target.role) return fail("You can't change your own role.", 400);
     }
-    // Suspending drops their sessions immediately rather than letting them
+    if (target.role === "BOSS" && username !== who.username) {
+      return fail("The boss account can't be changed from here.", 403);
+    }
+
+    // Suspending drops their sessions at once rather than letting them
     // finish the shift.
     if (body.active === false) {
       await env.DB.prepare("DELETE FROM sessions WHERE username = ?").bind(username).run();
     }
-    await env.DB.prepare("UPDATE team SET active = ? WHERE username = ?")
-      .bind(body.active === false ? 0 : 1, username).run();
-    return json({ ok: true, username });
+
+    const map = {
+      displayName: "display_name", email: "email", phone: "phone",
+      photoUrl: "photo_url", role: "role", active: "active",
+    };
+    const fields = [];
+    const values = [];
+    for (const [key, column] of Object.entries(map)) {
+      if (body[key] === undefined) continue;
+      fields.push(`${column} = ?`);
+      values.push(typeof body[key] === "boolean" ? (body[key] ? 1 : 0) : body[key]);
+    }
+
+    // Permissions are stored as JSON, only the keys that actually exist.
+    if (body.permissions) {
+      const clean = {};
+      for (const key of Object.keys(CAN.BOSS)) {
+        if (body.permissions[key] !== undefined) clean[key] = !!body.permissions[key];
+      }
+      fields.push("permissions = ?");
+      values.push(JSON.stringify(clean));
+    }
+
+    // A new password, hashed here and never stored readably.
+    if (body.password) {
+      const salt = randomHex(16);
+      fields.push("password_hash = ?", "salt = ?");
+      values.push(await hashPassword(body.password, salt), salt);
+      // Changing a password ends every existing session for that person.
+      await env.DB.prepare("DELETE FROM sessions WHERE username = ?").bind(username).run();
+    }
+
+    if (!fields.length) return fail("Nothing to change.");
+    values.push(username);
+    await env.DB.prepare(`UPDATE team SET ${fields.join(", ")} WHERE username = ?`).bind(...values).run();
+
+    // Send the new details if a password was set and we have an address.
+    let email = { sent: false, reason: "not needed" };
+    if (body.password && (body.email || target.email)) {
+      const settings = await getSettings(env);
+      email = await sendAccountEmail(env, {
+        to: body.email || target.email,
+        displayName: body.displayName || target.display_name,
+        username, password: body.password, role: body.role || target.role,
+        copyTo: settings.accountCopyTo,
+      });
+    }
+
+    return json({ ok: true, username, email });
   }
 
   if (path.startsWith("/team/") && method === "DELETE") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
     const username = decodeURIComponent(path.slice(6)).toLowerCase();
     if (username === who.username) return fail("You can't delete your own account.", 400);
     await env.DB.batch([
@@ -1057,9 +1384,146 @@ async function handleApi(request, env, url, ctx) {
     return json({ ok: true, username });
   }
 
+  // ── settings ────────────────────────────────────────────────────────────
+  if (path === "/settings" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
+    return json({ ok: true, settings: await getSettings(env), defaults: DEFAULT_SETTINGS });
+  }
+
+  if (path === "/settings" && method === "PATCH") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "team")) return fail("Only the boss can change settings.", 403);
+
+    const changes = body.settings || {};
+    const statements = [];
+    for (const [key, value] of Object.entries(changes)) {
+      // Only known keys, so a typo cannot quietly create a setting that
+      // nothing reads.
+      if (!(key in DEFAULT_SETTINGS)) continue;
+      statements.push(
+        env.DB.prepare(
+          "INSERT INTO settings (key, value, updated_at, updated_by) VALUES (?, ?, ?, ?) " +
+          "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by"
+        ).bind(key, String(value), now(), who.username)
+      );
+    }
+    if (statements.length) await env.DB.batch(statements);
+    return json({ ok: true, settings: await getSettings(env) });
+  }
+
+  /*
+    MAINTENANCE. Destructive work, kept behind one route and one guard.
+
+    Each of these requires the caller to type a confirmation phrase that names
+    what is about to happen. A misplaced tap cannot delete a night's guest
+    list; someone has to have read the sentence and typed it back.
+  */
+  if (path === "/maintenance" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Only the boss can do this.", 403);
+
+    const action = String(body.action || "");
+    const confirm = String(body.confirm || "");
+
+    const requires = (phrase) => {
+      if (confirm !== phrase) {
+        return fail(`Type "${phrase}" to confirm.`, 400);
+      }
+      return null;
+    };
+
+    // ── codes ──────────────────────────────────────────────────────────────
+    if (action === "codes.add") {
+      const many = Math.min(10000, Math.max(1, Number(body.count) || 1000));
+      const statements = [];
+      for (let i = 0; i < many; i += 100) {
+        const values = [];
+        for (let j = 0; j < Math.min(100, many - i); j++) values.push(makeCode());
+        statements.push(
+          env.DB.prepare("INSERT OR IGNORE INTO code_pool (code) VALUES " +
+            values.map(() => "(?)").join(", ")).bind(...values)
+        );
+      }
+      await env.DB.batch(statements);
+      const left = await env.DB.prepare("SELECT COUNT(*) AS n FROM code_pool WHERE used = 0").first();
+      return json({ ok: true, added: many, unused: left ? left.n : 0 });
+    }
+
+    if (action === "codes.purgeUnused") {
+      const bad = requires("DELETE UNUSED CODES");
+      if (bad) return bad;
+      // Only unused ones. A used code must never be deleted: its pass points
+      // at it, and reusing it later would show one guest another's details.
+      const before = await env.DB.prepare("SELECT COUNT(*) AS n FROM code_pool WHERE used = 0").first();
+      await env.DB.prepare("DELETE FROM code_pool WHERE used = 0").run();
+      return json({ ok: true, deleted: before ? before.n : 0 });
+    }
+
+    if (action === "codes.regenerate") {
+      const bad = requires("REGENERATE ALL CODES");
+      if (bad) return bad;
+      const before = await env.DB.prepare("SELECT COUNT(*) AS n FROM code_pool WHERE used = 0").first();
+      await env.DB.prepare("DELETE FROM code_pool WHERE used = 0").run();
+      const cfg = await getSettings(env);
+      await topUpPool(env, Number.MAX_SAFE_INTEGER);   // force a full refill
+      const after = await env.DB.prepare("SELECT COUNT(*) AS n FROM code_pool WHERE used = 0").first();
+      return json({ ok: true, removed: before ? before.n : 0, unused: after ? after.n : 0 });
+    }
+
+    // ── passes ─────────────────────────────────────────────────────────────
+    if (action === "passes.deleteForParty") {
+      const bad = requires("DELETE ALL PASSES");
+      if (bad) return bad;
+      if (!body.party) return fail("Which event?");
+
+      const count = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM passes WHERE party_id = ?"
+      ).bind(body.party).first();
+
+      /*
+        Scans go too. Leaving them would mean a future pass on a recycled
+        code inheriting someone else's admission record — which would read as
+        "already used" for a person who has never been.
+      */
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM scans WHERE party_id = ?").bind(body.party),
+        env.DB.prepare("DELETE FROM passes WHERE party_id = ?").bind(body.party),
+      ]);
+      return json({ ok: true, deleted: count ? count.n : 0 });
+    }
+
+    if (action === "scans.clearForParty") {
+      const bad = requires("CLEAR THE DOOR RECORD");
+      if (bad) return bad;
+      if (!body.party) return fail("Which event?");
+      const count = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM scans WHERE party_id = ?"
+      ).bind(body.party).first();
+      await env.DB.prepare("DELETE FROM scans WHERE party_id = ?").bind(body.party).run();
+      return json({ ok: true, deleted: count ? count.n : 0 });
+    }
+
+    if (action === "requests.clearDecided") {
+      const bad = requires("CLEAR DECIDED REQUESTS");
+      if (bad) return bad;
+      const count = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM requests WHERE status != 'PENDING'"
+      ).first();
+      await env.DB.prepare("DELETE FROM requests WHERE status != 'PENDING'").run();
+      return json({ ok: true, deleted: count ? count.n : 0 });
+    }
+
+    return fail("Unknown action.", 400);
+  }
+
   // ── guest list requests ─────────────────────────────────────────────────
   if (path === "/requests" && method === "POST") {
     // Public. Anyone can ask; nobody is added by asking.
+    const cfg = await getSettings(env);
+    if (!cfg.guestListOpen) {
+      return fail("The guest list is closed at the moment.", 403);
+    }
     if (!body.name || !body.email) return fail("A name and email are required.");
     await env.DB.prepare(
       "INSERT INTO requests (party_id, name, email, phone, note, created_at) VALUES (?, ?, ?, ?, ?, ?)"
@@ -1077,7 +1541,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path.startsWith("/requests/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "issue")) return fail("Only the boss can decide requests.", 403);
+    if (!who || !can(who, "issue")) return fail("Only the boss can decide requests.", 403);
 
     const id = decodeURIComponent(path.slice(10));
     const req = await env.DB.prepare("SELECT * FROM requests WHERE id = ?").bind(id).first();
@@ -1131,7 +1595,7 @@ async function handleApi(request, env, url, ctx) {
 
   if (path === "/requests" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who.role, "seeList")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "seeList")) return fail("Not allowed.", 403);
     const rows = await env.DB.prepare(
       "SELECT * FROM requests ORDER BY created_at DESC LIMIT 500"
     ).all();
@@ -1152,7 +1616,12 @@ async function handleApi(request, env, url, ctx) {
   Each pass is marked once sent, so a second run cannot send twice.
 */
 async function sendReminders(env) {
-  const tomorrow = new Date(Date.now() + 24 * 3600 * 1000);
+  const cfg = await getSettings(env);
+  if (!cfg.reminderHoursBefore) {
+    console.log("Reminders are switched off.");
+    return 0;
+  }
+  const tomorrow = new Date(Date.now() + cfg.reminderHoursBefore * 3600 * 1000);
   const dayStart = new Date(tomorrow); dayStart.setUTCHours(0, 0, 0, 0);
   const dayEnd = new Date(tomorrow); dayEnd.setUTCHours(23, 59, 59, 999);
 
@@ -1168,7 +1637,7 @@ async function sendReminders(env) {
     const res = await sendPassEmail(env, {
       to: r.email, name: r.name, code: r.code,
       party: { name: r.party_name, date_label: r.date_label, venue: r.venue, minimum_age: r.minimum_age },
-      kind: r.kind, reminder: true,
+      kind: r.kind, reminder: true, signoff: cfg.emailSignoff,
     });
     if (res.sent) {
       await env.DB.prepare("UPDATE passes SET reminded_at = ? WHERE code = ?").bind(now(), r.code).run();

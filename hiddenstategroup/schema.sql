@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS team (
   photo_url     TEXT,
   password_hash TEXT NOT NULL,
   salt          TEXT NOT NULL,
+  permissions   TEXT,                        -- JSON. Overrides the role's defaults
   active        INTEGER NOT NULL DEFAULT 1, -- 0 suspends without deleting history
   created_at    TEXT NOT NULL,
   created_by    TEXT
@@ -142,3 +143,13 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_attempts_ip ON login_attempts(ip, at);
+
+-- ─── SETTINGS ──────────────────────────────────────────────────────────────
+-- Anything the boss can change without a deploy. Stored as text; the code
+-- knows what shape each value should be.
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT,
+  updated_by TEXT
+);
