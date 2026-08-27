@@ -308,18 +308,35 @@ async function handleApi(request, env, url, ctx) {
   const LOGIN_WINDOW_MIN = 15;
   const LOGIN_MAX_FAILS = 8;
 
+  /*
+    Both of these swallow their own errors on purpose.
+
+    Rate limiting protects the login; it must never BE the reason nobody can
+    log in. If the attempts table is missing or the write fails, the login
+    carries on unprotected rather than locking out the whole team — a smaller
+    problem than a door staff member stuck outside at midnight.
+  */
   async function loginBlocked(ip) {
-    const since = new Date(Date.now() - LOGIN_WINDOW_MIN * 60000).toISOString();
-    const row = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM login_attempts WHERE ip = ? AND ok = 0 AND at > ?"
-    ).bind(ip, since).first();
-    return (row ? row.n : 0) >= LOGIN_MAX_FAILS;
+    try {
+      const since = new Date(Date.now() - LOGIN_WINDOW_MIN * 60000).toISOString();
+      const row = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM login_attempts WHERE ip = ? AND ok = 0 AND at > ?"
+      ).bind(ip, since).first();
+      return (row ? row.n : 0) >= LOGIN_MAX_FAILS;
+    } catch (err) {
+      console.error("Rate-limit check skipped:", err && err.message);
+      return false;
+    }
   }
 
   async function recordAttempt(ip, username, ok) {
-    await env.DB.prepare(
-      "INSERT INTO login_attempts (ip, username, ok, at) VALUES (?, ?, ?, ?)"
-    ).bind(ip, username || null, ok ? 1 : 0, now()).run();
+    try {
+      await env.DB.prepare(
+        "INSERT INTO login_attempts (ip, username, ok, at) VALUES (?, ?, ?, ?)"
+      ).bind(ip, username || null, ok ? 1 : 0, now()).run();
+    } catch (err) {
+      console.error("Attempt not recorded:", err && err.message);
+    }
   }
 
   // ── team sign in ────────────────────────────────────────────────────────
