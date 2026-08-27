@@ -495,11 +495,13 @@ function ConsoleScreen({ role }) {
   const [parties, setParties] = useState([]);
   const [party, setParty] = useState("");
   const [msg, setMsg] = useState("");
+  const [codesLeft, setCodesLeft] = useState(null);
 
   const loadParties = useCallback(async () => {
     const res = await api.listParties();
     if (!res.ok) { setMsg(res.error || "Couldn't load the events."); return; }
     setParties(res.parties || []);
+    setCodesLeft(res.codesLeft ?? null);
     setParty((p) => p || (res.parties?.[0]?.id ?? ""));
   }, []);
 
@@ -518,7 +520,7 @@ function ConsoleScreen({ role }) {
              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
                       borderTop: `1px solid ${theme.ink}`, borderBottom: `1px solid ${theme.ink}` }}>
           <span>{(role.displayName || role.label || "").toUpperCase()}</span>
-          <span>{role.id}</span>
+          <span>{role.id}{codesLeft !== null ? " · " + codesLeft + " CODES" : ""}</span>
         </div>
 
         <div className="flex gap-5 mt-5 overflow-x-auto no-scrollbar">

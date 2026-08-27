@@ -240,9 +240,57 @@ const CAN = {
 
 const can = (role, action) => !!(CAN[role] && CAN[role][action]);
 
+// ─── the code pool ─────────────────────────────────────────────────────────
+
+/*
+  Codes are never reused.
+
+  Handing a finished event's code to someone new would mean an old guest who
+  kept their link could open it and read a stranger's name. There are 729
+  million possible codes, so there is no reason to recycle.
+
+  Instead the pool tops itself up. Whenever it runs low, more are generated
+  and inserted, so issuing never stops mid-night because a list ran out.
+*/
+
+// No O/0 or I/1: a code read aloud at a loud door should not be
+// guessable-wrong.
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRTUVWXYZ2346789";
+const LOW_WATER = 200;     // top up once fewer than this remain
+const TOP_UP_BY = 1000;
+
+function makeCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  let out = "HS-";
+  for (const b of bytes) out += CODE_ALPHABET[b % CODE_ALPHABET.length];
+  return out;
+}
+
+async function topUpPool(env) {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM code_pool WHERE used = 0").first();
+  const spare = row ? row.n : 0;
+  if (spare >= LOW_WATER) return { added: 0, spare };
+
+  // INSERT OR IGNORE handles the rare case of generating one that already
+  // exists, so a collision costs a row rather than an error.
+  const statements = [];
+  for (let i = 0; i < TOP_UP_BY; i += 100) {
+    const values = [];
+    for (let j = 0; j < 100; j++) values.push(makeCode());
+    statements.push(
+      env.DB.prepare(
+        "INSERT OR IGNORE INTO code_pool (code) VALUES " + values.map(() => "(?)").join(", ")
+      ).bind(...values)
+    );
+  }
+  await env.DB.batch(statements);
+  console.log(`Code pool topped up: ${spare} left, added about ${TOP_UP_BY}.`);
+  return { added: TOP_UP_BY, spare };
+}
+
 // ─── routes ────────────────────────────────────────────────────────────────
 
-async function handleApi(request, env, url) {
+async function handleApi(request, env, url, ctx) {
   const path = url.pathname.replace(/^\/api/, "");
   const method = request.method;
   const body = method === "POST" || method === "PATCH" ? await request.json().catch(() => ({})) : {};
@@ -449,10 +497,21 @@ async function handleApi(request, env, url) {
 
     // Take the next unused code from the pool rather than inventing one, so
     // two passes can never collide.
+    // Refill in the background if we are running low, so issuing never stops.
+    ctx.waitUntil(topUpPool(env));
+
     const pooled = await env.DB.prepare(
       "SELECT code FROM code_pool WHERE used = 0 ORDER BY RANDOM() LIMIT 1"
     ).first();
-    if (!pooled) return fail("The code pool is empty. Generate more codes.", 409);
+    if (!pooled) {
+      // Nothing left at all: generate immediately rather than refusing.
+      await topUpPool(env);
+      const retry = await env.DB.prepare(
+        "SELECT code FROM code_pool WHERE used = 0 ORDER BY RANDOM() LIMIT 1"
+      ).first();
+      if (!retry) return fail("Couldn't allocate a code. Try again.", 409);
+      pooled.code = retry.code;
+    }
 
     await env.DB.batch([
       env.DB.prepare("UPDATE code_pool SET used = 1, used_at = ? WHERE code = ?").bind(now(), pooled.code),
@@ -507,11 +566,12 @@ async function handleApi(request, env, url) {
   if (path === "/parties" && method === "GET") {
     const who = await readSession(env, request);
     if (!who) return fail("Not signed in.", 401);
+    const pool = await env.DB.prepare("SELECT COUNT(*) AS n FROM code_pool WHERE used = 0").first();
     const rows = await env.DB.prepare(
       "SELECT y.*, (SELECT COUNT(*) FROM passes p WHERE p.party_id = y.id) AS issued " +
       "FROM parties y WHERE y.archived = 0 ORDER BY y.doors_close_at DESC"
     ).all();
-    return json({ ok: true, parties: rows.results });
+    return json({ ok: true, parties: rows.results, codesLeft: pool ? pool.n : 0 });
   }
 
   if (path === "/parties" && method === "POST") {
@@ -715,7 +775,7 @@ export default {
 
     if (url.pathname.startsWith("/api/")) {
       try {
-        return await handleApi(request, env, url);
+        return await handleApi(request, env, url, ctx);
       } catch (err) {
         // Never return the raw error: it can reveal table names and query
         // shapes. Log it for the dashboard, tell the caller nothing useful.
