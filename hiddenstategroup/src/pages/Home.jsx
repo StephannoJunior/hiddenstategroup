@@ -2,7 +2,8 @@ import { usePageMeta } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
 import { Fleuron } from "../components/Shared";
-import Countdown, { DECEMBER_13 } from "../components/Countdown";
+import Countdown from "../components/Countdown";
+import { useSite } from "../lib/site";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -286,6 +287,7 @@ function TabBar() {
 
 export default function Home() {
   useGoogleFonts();
+  const site = useSite();
   const { t } = useLang();
   usePageMeta({ title: null, description: "Records, agency, booking, events and artists — from another state of mind." });
   return (
@@ -293,15 +295,17 @@ export default function Home() {
       <Nav />
       <Nameplate />
 
+      {site.showCountdown && (
       <section style={{ background: theme.bg }} className="pb-10">
         <div className="max-w-[760px] mx-auto px-[18px]">
-          <Countdown target={DECEMBER_13} label={t("countdownTo") + " 13.12.2026"} />
+          <Countdown target={site.countdownTarget} label={site.countdownLabel} />
           <p className="text-center mt-3 m-0"
              style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.ink2 }}>
             LOCATION UNDISCLOSED · LINE-UP SEALED
           </p>
         </div>
       </section>
+      )}
       <Story />
       <Fleuron />
       <Offer />

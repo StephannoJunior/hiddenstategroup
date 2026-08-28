@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import GlassBar from "./components/GlassBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { LangProvider } from "./lib/lang";
+import { SiteProvider, useSite } from "./lib/site";
 
 /*
   Pages are loaded on demand rather than all at once.
@@ -51,6 +52,38 @@ function ScrollToTop() {
 
 // Shown for the moment a page file is in flight. Deliberately just the paper
 // colour: a spinner that flashes for 80ms is more distracting than nothing.
+/*
+  The holding page.
+
+  Deliberately does NOT cover the door tools or a guest's own pass: taking the
+  public site down mid-night must never strand someone at the door or leave a
+  guest unable to show their ticket.
+*/
+function ClosedGate({ children }) {
+  const site = useSite();
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  const stillWorks = ["/pass/", "/scan", "/doorlist", "/console", "/admin", "/admins-staff-boss"]
+    .some((p) => path.startsWith(p));
+
+  if (!site.siteClosed || stillWorks) return children;
+
+  return (
+    <div style={{ background: "#F3EBD9", color: "#16130E", minHeight: "100vh",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: "'EB Garamond', Georgia, serif", padding: "24px" }}>
+      <div style={{ textAlign: "center", maxWidth: "420px" }}>
+        <img src="/wordmark-black.png" alt="Hidden State"
+             style={{ height: "44px", width: "auto", margin: "0 auto 26px", display: "block" }} />
+        <div style={{ borderTop: "2px solid #16130E" }} />
+        <div style={{ borderTop: "1px solid #16130E", marginTop: "3px" }} />
+        <p style={{ fontSize: "20px", lineHeight: 1.5, marginTop: "26px" }}>
+          {site.siteClosedMessage}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function PageFallback() {
   return <div style={{ background: "#F3EBD9", minHeight: "100vh" }} />;
 }
@@ -59,6 +92,8 @@ export default function App() {
   return (
     <ErrorBoundary>
       <LangProvider>
+        <SiteProvider>
+          <ClosedGate>
         <BrowserRouter>
           <ScrollToTop />
           <GlassBar />
@@ -98,6 +133,8 @@ export default function App() {
             </Routes>
           </Suspense>
         </BrowserRouter>
+          </ClosedGate>
+        </SiteProvider>
       </LangProvider>
     </ErrorBoundary>
   );

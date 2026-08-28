@@ -7,6 +7,7 @@ import { ARTISTS } from "../lib/data";
 import { SOCIAL } from "../lib/social";
 import { LiveDateline, LanguageSwitch } from "./Dateline";
 import { useLang } from "../lib/lang";
+import { useSite } from "../lib/site";
 import { FORM_ENDPOINT, CONTACT_EMAIL, BOOKING_EMAIL } from "../lib/config";
 
 /*
@@ -177,6 +178,7 @@ export const NAV_ITEMS = [
 
 export function Nav() {
   const { t } = useLang();
+  const site = useSite();
   const navLabel = (item) => {
     const map = { NEWS: "news", RECORDS: "records", AGENCY: "agency", ARTISTS: "artists",
                   EVENTS: "events", MIXES: "mixes", ABOUT: "about", CONTACT: "contact" };
@@ -189,11 +191,31 @@ export function Nav() {
 
   return (
     <>
+      {/* One line across the top, set in the console. Nothing renders when
+          it is empty, so the masthead sits where it always did. */}
+      {site.announcement ? (
+        <div className="fixed top-0 left-0 right-0 z-[41] text-center py-1.5"
+             style={{ background: theme.ink, color: theme.bg }}>
+          {site.announcementLink ? (
+            <a href={site.announcementLink}
+               style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.bg }}>
+              {site.announcement}
+            </a>
+          ) : (
+            <span style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.bg }}>
+              {site.announcement}
+            </span>
+          )}
+        </div>
+      ) : null}
+
       <header
         className="fixed top-0 left-0 right-0 z-40"
         style={{
           background: theme.bg,
           borderBottom: `1px solid ${theme.ink}`,
+          // Sits below the banner when there is one.
+          top: site.announcement ? "28px" : 0,
           transform: "translateZ(0)",
           WebkitTransform: "translateZ(0)",
         }}

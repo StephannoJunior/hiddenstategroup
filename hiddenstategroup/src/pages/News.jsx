@@ -7,7 +7,7 @@ import {
   Nav, Footer, useGoogleFonts, Instagram,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
-import { ARTICLES, localised } from "../lib/news";
+import { ARTICLES, localised, usePosts } from "../lib/news";
 import { SOCIAL } from "../lib/social";
 
 /*
@@ -54,12 +54,13 @@ function Issue({ a: raw, lang }) {
 
 export default function News() {
   useGoogleFonts();
+  const { posts } = usePosts();
   const { t, lang } = useLang();
   usePageMeta({ title: "News", description: "Announcements, signings and dispatches from inside Hidden State." });
   const [active, setActive] = useState("ALL");
   const inTab = (a, tab) =>
     tab === "ALL" || (a.categories || [a.category]).includes(tab);
-  const shown = ARTICLES.filter((a) => inTab(a, active));
+  const shown = posts.filter((a) => inTab(a, active));
 
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>

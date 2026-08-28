@@ -7,6 +7,7 @@ import {
 } from "../components/Shared";
 import DoorGate from "../components/DoorGate";
 import * as api from "../lib/api";
+import IMAGES from "../content/images.json";
 
 /*
   The console.
@@ -33,11 +34,12 @@ const TABS = [
   { id: "scan",     label: "SCANNER",  need: "scan",    to: "/scan" },
   { id: "door",     label: "DOOR",     need: "seeList", to: "/doorlist" },
   { id: "passes",   label: "PASSES",   need: "seeList" },
-  { id: "events",   label: "EVENTS",   need: "issue" },
-  { id: "team",     label: "TEAM",     need: "team" },
+  { id: "events",   label: "EVENTS",   need: "issuePasses" },
+  { id: "team",     label: "TEAM",     need: "manageTeam" },
   { id: "requests", label: "REQUESTS", need: "seeList" },
   { id: "stats",    label: "THE NIGHT", need: "seeList" },
-  { id: "settings", label: "SETTINGS",  need: "team" },
+  { id: "posts",    label: "POSTS",     need: "issuePasses" },
+  { id: "settings", label: "SETTINGS",  need: "manageTeam" },
 ];
 
 /*
@@ -256,7 +258,7 @@ function Passes({ role, parties, party, setParty }) {
         </select>
       </Section>
 
-      {role.can.issue && (
+      {role.can.issuePasses && (
         <Section title="ISSUE A PASS">
           <form onSubmit={issue} className="space-y-3">
             <Field label="Full name"><input required style={inputStyle} value={form.name} onChange={set("name")} /></Field>
@@ -338,7 +340,7 @@ function Passes({ role, parties, party, setParty }) {
         </Section>
       )}
 
-      {role.can.issue && (
+      {role.can.issuePasses && (
         <Section title="ISSUE SEVERAL AT ONCE">
           <p className="m-0 mb-2" style={{ ...fontText, fontSize: "15px", lineHeight: 1.5, color: theme.ink2 }}>
             One per line. Add an email after a comma if you have it, and each
@@ -422,14 +424,14 @@ function Passes({ role, parties, party, setParty }) {
                   {r.refusals > 0 ? ` · ${r.refusals} refused` : ""}
                 </span>
               </span>
-              {role.can.revoke && (
+              {role.can.revokePasses && (
                 <button onClick={() => (editing === r.code ? setEditing(null) : startEdit(r))}
                         style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
                                  color: theme.ink2, background: "transparent", border: 0, cursor: "pointer" }}>
                   {editing === r.code ? "CLOSE" : "EDIT"}
                 </button>
               )}
-              {role.can.revoke && (
+              {role.can.revokePasses && (
                 <button onClick={() => (dead ? restore(r.code) : revoke(r.code, r.name))}
                         style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
                                  color: dead ? theme.brass : "#7A2E2E", background: "transparent", border: 0, cursor: "pointer" }}>
@@ -944,7 +946,7 @@ function Requests({ role, party }) {
             {r.pass_code ? ` · ${r.pass_code}` : ""}
           </span>
         </span>
-        {r.status === "PENDING" && role.can.issue && (
+        {r.status === "PENDING" && role.can.issuePasses && (
           <span className="flex gap-3 shrink-0">
             <button disabled={busy === r.id} onClick={() => decide(r.id, "APPROVED")}
                     style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
@@ -1064,6 +1066,222 @@ function Stats({ party }) {
   );
 }
 
+// ── POSTS ───────────────────────────────────────────────────────────────────
+
+function Posts() {
+  const [rows, setRows] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [tone, setTone] = useState("bad");
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const blank = {
+    slug: "", headline: "", summary: "", bodyText: "", kicker: "", signoff: "",
+    category: "NEWS", issue: "", dateLabel: "", sortDate: new Date().toISOString().slice(0, 10),
+    poster: "", photo: "", caption: "", link: "", linkLabel: "", published: true,
+  };
+  const [form, setForm] = useState(blank);
+
+  const load = useCallback(async () => {
+    const res = await api.listPosts();
+    if (res.ok) setRows(res.posts || []);
+    else setMsg(res.error || "Couldn't load the posts.");
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const set = (k) => (e) =>
+    setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+
+  // A headline becomes a web address: lowercase, dashes, nothing else.
+  const slugify = (text) =>
+    String(text).toLowerCase().trim()
+      .replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 60);
+
+  const startNew = () => { setForm(blank); setEditing("new"); };
+
+  const startEdit = (p) => {
+    setEditing(p.slug);
+    setForm({
+      slug: p.slug, headline: p.headline || "", summary: p.summary || "",
+      bodyText: (p.body || []).join("\n\n"), kicker: p.kicker || "", signoff: p.signoff || "",
+      category: p.category || "NEWS", issue: p.issue || "",
+      dateLabel: p.date_label || p.date || "", sortDate: p.sort_date || p.sortDate || "",
+      poster: p.poster || "", photo: p.photo || "", caption: p.caption || "",
+      link: p.link || "", linkLabel: p.link_label || p.linkLabel || "",
+      published: p.published !== false,
+    });
+  };
+
+  const save = async () => {
+    setMsg("");
+    if (!form.headline.trim()) { setTone("bad"); setMsg("A headline is needed."); return; }
+
+    const payload = {
+      ...form,
+      slug: form.slug || slugify(form.headline),
+      // A blank line separates paragraphs, the way anyone writing expects.
+      body: form.bodyText.split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean),
+      categories: [form.category],
+    };
+    delete payload.bodyText;
+
+    setBusy(true);
+    const res = editing === "new"
+      ? await api.createPost(payload)
+      : await api.editPost(editing, payload);
+    setBusy(false);
+
+    if (!res.ok) { setTone("bad"); setMsg(res.error || "Couldn't save."); return; }
+    setTone("good");
+    setMsg(editing === "new" ? "Posted." : "Saved.");
+    setEditing(null);
+    load();
+  };
+
+  const remove = async (slug, headline) => {
+    if (!window.confirm(`Delete "${headline}"? This cannot be undone.`)) return;
+    const res = await api.deletePost(slug);
+    if (!res.ok) { setTone("bad"); setMsg(res.error || "Couldn't delete."); return; }
+    setTone("good"); setMsg("Deleted.");
+    load();
+  };
+
+  const imageOptions = ["", ...IMAGES];
+
+  return (
+    <>
+      <Notice message={msg} tone={tone} />
+
+      {!editing && (
+        <Section title={`POSTS — ${rows.length}`}>
+          <button onClick={startNew} style={{ ...btn, marginBottom: "16px" }}>WRITE A POST</button>
+          {rows.map((p) => (
+            <div key={p.slug} className="flex items-center gap-3 py-3"
+                 style={{ borderBottom: `1px solid ${theme.rule}`, opacity: p.published === false ? 0.55 : 1 }}>
+              <span className="flex-1 min-w-0">
+                <span className="block" style={{ ...fontText, fontSize: "16.5px", color: theme.ink }}>
+                  {p.headline}
+                </span>
+                <span className="block" style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.12em", color: theme.ink2 }}>
+                  {p.category}{p.date_label ? ` · ${p.date_label}` : ""}
+                  {p.published === false ? " · DRAFT" : ""}
+                </span>
+              </span>
+              <button onClick={() => startEdit(p)}
+                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink,
+                               background: "transparent", border: 0, cursor: "pointer" }}>
+                EDIT
+              </button>
+              <button onClick={() => remove(p.slug, p.headline)}
+                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: "#7A2E2E",
+                               background: "transparent", border: 0, cursor: "pointer" }}>
+                DELETE
+              </button>
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {editing && (
+        <Section title={editing === "new" ? "A NEW POST" : `EDITING ${editing}`}>
+          <div className="space-y-3">
+            <Field label="Headline">
+              <input style={inputStyle} value={form.headline} onChange={set("headline")} />
+            </Field>
+            <Field label="Summary — one or two lines, shown on the news index">
+              <input style={inputStyle} value={form.summary} onChange={set("summary")} />
+            </Field>
+            <Field label="The post — leave a blank line between paragraphs">
+              <textarea rows={10} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }}
+                        value={form.bodyText} onChange={set("bodyText")} />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Category">
+                <select style={inputStyle} value={form.category} onChange={set("category")}>
+                  {["NEWS","ARTISTS","MUSIC","RECORDS","EVENTS","INTERVIEWS","INDUSTRY"].map((c) =>
+                    <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Date shown">
+                <input style={inputStyle} value={form.dateLabel} onChange={set("dateLabel")}
+                       placeholder="21 AUGUST 2026" />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Sort date">
+                <input type="date" style={inputStyle} value={form.sortDate} onChange={set("sortDate")} />
+              </Field>
+              <Field label="Issue">
+                <input style={inputStyle} value={form.issue} onChange={set("issue")} placeholder="VOL. 01, NO. 7" />
+              </Field>
+            </div>
+
+            {/* Photographs are the files already on the site. Send me new ones
+                and they appear in these lists. */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Poster">
+                <select style={inputStyle} value={form.poster} onChange={set("poster")}>
+                  {imageOptions.map((i) => <option key={i} value={i}>{i || "— none —"}</option>)}
+                </select>
+              </Field>
+              <Field label="Photo">
+                <select style={inputStyle} value={form.photo} onChange={set("photo")}>
+                  {imageOptions.map((i) => <option key={i} value={i}>{i || "— none —"}</option>)}
+                </select>
+              </Field>
+            </div>
+
+            <Field label="Photo caption">
+              <input style={inputStyle} value={form.caption} onChange={set("caption")} />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Kicker">
+                <input style={inputStyle} value={form.kicker} onChange={set("kicker")} />
+              </Field>
+              <Field label="Sign-off">
+                <input style={inputStyle} value={form.signoff} onChange={set("signoff")} />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Button link">
+                <input style={inputStyle} value={form.link} onChange={set("link")} />
+              </Field>
+              <Field label="Button text">
+                <input style={inputStyle} value={form.linkLabel} onChange={set("linkLabel")} />
+              </Field>
+            </div>
+
+            {editing === "new" && (
+              <Field label="Web address — left empty, it comes from the headline">
+                <input style={inputStyle} value={form.slug} onChange={set("slug")}
+                       placeholder={slugify(form.headline) || "a-new-post"} />
+              </Field>
+            )}
+
+            <label className="flex items-center gap-2.5 pt-1" style={{ cursor: "pointer" }}>
+              <input type="checkbox" checked={form.published} onChange={set("published")} />
+              <span style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+                Published — uncheck to keep it as a draft
+              </span>
+            </label>
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={save} disabled={busy} style={{ ...btn, opacity: busy ? 0.6 : 1 }}>
+                {busy ? "SAVING…" : editing === "new" ? "POST IT" : "SAVE"}
+              </button>
+              <button onClick={() => setEditing(null)} style={ghost}>CANCEL</button>
+            </div>
+          </div>
+        </Section>
+      )}
+    </>
+  );
+}
+
 // ── SETTINGS ────────────────────────────────────────────────────────────────
 
 function Settings({ parties }) {
@@ -1138,6 +1356,121 @@ function Settings({ parties }) {
             </p>
           </div>
         ))}
+      </Section>
+
+      <Section title="THE SITE">
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            Banner across every page
+          </p>
+          <input value={values.announcement} placeholder="Leave empty for no banner"
+                 onChange={(e) => set("announcement", e.target.value)}
+                 style={{ ...inputStyle, width: "100%" }} />
+          <input value={values.announcementLink} placeholder="Link (optional)"
+                 onChange={(e) => set("announcementLink", e.target.value)}
+                 style={{ ...inputStyle, width: "100%", marginTop: "8px" }} />
+          <p className="m-0 mt-1" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+            One line at the top of the site. Useful for a last-minute change of
+            venue or a sold-out notice.
+          </p>
+        </div>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.showCountdown} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("showCountdown", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Show the countdown on the home page
+            </span>
+          </span>
+        </label>
+
+        {values.showCountdown && (
+          <div className="py-3">
+            <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Counting down to
+            </p>
+            <input value={values.countdownTarget}
+                   onChange={(e) => set("countdownTarget", e.target.value)}
+                   style={{ ...inputStyle, width: "100%" }} />
+            <input value={values.countdownLabel} placeholder="Label above it"
+                   onChange={(e) => set("countdownLabel", e.target.value)}
+                   style={{ ...inputStyle, width: "100%", marginTop: "8px" }} />
+            <p className="m-0 mt-1" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              The moment must carry a timezone, like 2026-12-13T00:00:00+02:00,
+              or visitors in other countries reach zero at the wrong time.
+            </p>
+          </div>
+        )}
+
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            Note under the roster
+          </p>
+          <input value={values.rosterNote} onChange={(e) => set("rosterNote", e.target.value)}
+                 style={{ ...inputStyle, width: "100%" }} />
+        </div>
+
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            Note under the events list
+          </p>
+          <input value={values.eventsNote} onChange={(e) => set("eventsNote", e.target.value)}
+                 style={{ ...inputStyle, width: "100%" }} />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-3">
+          <div>
+            <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>Contact email</p>
+            <input value={values.contactEmail} onChange={(e) => set("contactEmail", e.target.value)}
+                   style={{ ...inputStyle, width: "100%" }} />
+          </div>
+          <div>
+            <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>Booking email</p>
+            <input value={values.bookingEmail} onChange={(e) => set("bookingEmail", e.target.value)}
+                   style={{ ...inputStyle, width: "100%" }} />
+          </div>
+        </div>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.guestListLinkVisible} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("guestListLinkVisible", e.target.checked)} />
+          <span style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            Show the guest list link publicly
+          </span>
+        </label>
+      </Section>
+
+      <Section title="EMAIL">
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            Sign-off at the foot of every email
+          </p>
+          <input value={values.emailSignoff} onChange={(e) => set("emailSignoff", e.target.value)}
+                 style={{ ...inputStyle, width: "100%" }} />
+        </div>
+      </Section>
+
+      <Section title="TAKING THE SITE DOWN">
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.siteClosed} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("siteClosed", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: "#7A2E2E" }}>
+              Close the site to visitors
+            </span>
+            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Shows a holding message instead of the site. The door tools and
+              guests' passes keep working, so this can be used mid-night
+              without stranding anyone.
+            </span>
+          </span>
+        </label>
+        {values.siteClosed && (
+          <input value={values.siteClosedMessage}
+                 onChange={(e) => set("siteClosedMessage", e.target.value)}
+                 style={{ ...inputStyle, width: "100%" }} />
+        )}
       </Section>
 
       <Section title="ACCESS">
@@ -1346,10 +1679,11 @@ function ConsoleScreen({ role }) {
         {tab === "passes" && (
           <Passes role={role} parties={parties} party={party} setParty={setParty} />
         )}
-        {tab === "events" && role.can.issue && <Events parties={parties} reload={loadParties} />}
-        {tab === "team" && role.can.team && <Team />}
+        {tab === "events" && role.can.issuePasses && <Events parties={parties} reload={loadParties} />}
+        {tab === "team" && role.can.manageTeam && <Team />}
         {tab === "requests" && <Requests role={role} party={party} />}
         {tab === "stats" && <Stats party={party} />}
+        {tab === "posts" && role.can.issuePasses && <Posts />}
         {tab === "settings" && role.can.manageTeam && <Settings parties={parties} />}
       </section>
       <Footer />

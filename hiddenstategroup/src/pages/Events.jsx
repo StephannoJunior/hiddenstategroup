@@ -1,6 +1,7 @@
 import { usePageMeta } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
+import { useSite } from "../lib/site";
 import React from "react";
 import { Link } from "react-router-dom";
 import {
@@ -75,6 +76,7 @@ function Card({ e }) {
 
 export default function Events() {
   useGoogleFonts();
+  const site = useSite();
   const { t } = useLang();
   usePageMeta({ title: "Events", description: "Nights, festivals and experiences from Hidden State." });
   const upcoming = EVENTS.filter((e) => e.status !== "past");
@@ -108,7 +110,7 @@ export default function Events() {
 
         <p className="text-center py-10 m-0"
            style={{ ...fontDisplay, fontStyle: "italic", fontSize: "20px", color: theme.ink2 }}>
-          {EVENTS_NOTE}
+          {site.eventsNote || EVENTS_NOTE}
         </p>
       </div>
 

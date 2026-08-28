@@ -135,6 +135,26 @@ export const listTeam = () => call("/team");
 export const maintenance = (action, extra = {}) =>
   call("/maintenance", { method: "POST", body: { action, ...extra } });
 
+/*
+  Posts.
+
+  Reading is public — the news pages use it. Writing needs a login, and the
+  server decides that, not this file.
+*/
+export const listPosts = () => call("/posts", { auth: false });
+export const createPost = (post) => call("/posts", { method: "POST", body: post });
+export const editPost = (slug, changes) =>
+  call(`/posts/${encodeURIComponent(slug)}`, { method: "PATCH", body: changes });
+export const deletePost = (slug) =>
+  call(`/posts/${encodeURIComponent(slug)}`, { method: "DELETE" });
+
+// The public site's own settings. No login needed — only the handful of
+// values every visitor sees anyway.
+export async function fetchSiteSettings() {
+  const res = await call("/site", { auth: false });
+  return res.ok ? res.settings : null;
+}
+
 export const fetchSettings = () => call("/settings");
 export const saveSettings = (settings) => call("/settings", { method: "PATCH", body: { settings } });
 

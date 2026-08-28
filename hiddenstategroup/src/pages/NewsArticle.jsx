@@ -9,13 +9,16 @@ import {
   Nav, Footer, useGoogleFonts,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
-import { getArticle, ARTICLES, localised } from "../lib/news";
+import { getArticle, ARTICLES, localised, usePosts } from "../lib/news";
 
 export default function NewsArticle() {
   useGoogleFonts();
   const { t, lang } = useLang();
   const { slug } = useParams();
-  const aRaw = getArticle(slug);
+  const { posts } = usePosts();
+  // Prefer what the console has published; fall back to the bundled copy so
+  // the page still renders before the fetch lands.
+  const aRaw = posts.find((p) => p.slug === slug) || getArticle(slug);
   const a = localised(aRaw, lang);
   usePageMeta({ title: a ? a.headline : "Story", description: a ? a.summary : "Hidden State news.", image: a ? (a.photo || a.poster) : null, type: "article" });
 

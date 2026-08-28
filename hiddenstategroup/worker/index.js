@@ -392,7 +392,49 @@ const DEFAULT_SETTINGS = {
 
   // Shown at the foot of every email.
   emailSignoff: "Hidden State",
+
+  // ── the public site ──────────────────────────────────────────────────────
+  // A line across the top of every page. Empty means no banner.
+  announcement: "",
+  announcementLink: "",
+
+  // The countdown on the home page.
+  showCountdown: true,
+  countdownTarget: "2026-12-13T00:00:00+02:00",
+  countdownLabel: "COUNTING DOWN TO 13.12.2026",
+
+  // The notes under the roster and the events list.
+  rosterNote: "More DJs and producers will join.",
+  eventsNote: "More events to come.",
+
+  // Where the public forms send to.
+  contactEmail: "info@hiddenstategroup.com",
+  bookingEmail: "booking@hiddenstategroup.com",
+
+  // Whether the guest list link is shown publicly at all.
+  guestListLinkVisible: true,
+
+  // Closes the whole site to visitors, leaving the door tools working. For a
+  // rebuild, or if something needs taking down quickly.
+  siteClosed: false,
+  siteClosedMessage: "Back shortly.",
 };
+
+/*
+  Which settings the public site may see.
+
+  Deliberately a list rather than a rule: it should be impossible to add a
+  setting one day and accidentally publish it. Anything not named here stays
+  behind the login.
+*/
+const PUBLIC_SETTINGS = [
+  "announcement", "announcementLink",
+  "showCountdown", "countdownTarget", "countdownLabel",
+  "rosterNote", "eventsNote",
+  "contactEmail", "bookingEmail",
+  "guestListLinkVisible", "guestListOpen",
+  "siteClosed", "siteClosedMessage",
+];
 
 async function getSettings(env) {
   try {
@@ -413,10 +455,28 @@ async function getSettings(env) {
   }
 }
 
+/*
+  Permissions. These names are the single vocabulary: the checkboxes in the
+  console grant exactly these keys, and every check below reads exactly these
+  keys.
+
+  They were briefly two vocabularies — the console granted `issuePasses` while
+  the server checked `issue` — which meant ticking a box silently did nothing.
+  Keeping one list is what stops that recurring.
+*/
 const CAN = {
-  BOSS:  { scan: true, seeList: true, reset: true, issue: true,  revoke: true,  team: true  },
-  OWNER: { scan: true, seeList: true, reset: true, issue: false, revoke: false, team: false },
-  STAFF: { scan: true, seeList: false, reset: false, issue: false, revoke: false, team: false },
+  BOSS: {
+    scan: true, seeList: true, seeReasons: true, reset: true,
+    issuePasses: true, revokePasses: true, manageTeam: true, seeContacts: true,
+  },
+  OWNER: {
+    scan: true, seeList: true, seeReasons: true, reset: true,
+    issuePasses: false, revokePasses: false, manageTeam: false, seeContacts: true,
+  },
+  STAFF: {
+    scan: true, seeList: false, seeReasons: false, reset: false,
+    issuePasses: false, revokePasses: false, manageTeam: false, seeContacts: false,
+  },
 };
 
 /*
@@ -626,6 +686,17 @@ async function handleApi(request, env, url, ctx) {
     });
   }
 
+  /*
+    The public site's own settings. No login: these are things every visitor
+    sees anyway. Only the names in PUBLIC_SETTINGS are ever sent.
+  */
+  if (path === "/site" && method === "GET") {
+    const all = await getSettings(env);
+    const out = {};
+    for (const key of PUBLIC_SETTINGS) out[key] = all[key];
+    return json({ ok: true, settings: out });
+  }
+
   // Public: the soonest event still open. The guest list form reads its age
   // limit and event from here, so changing them in the console changes the
   // public page too.
@@ -638,7 +709,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/health" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
 
     const present = (v) => (typeof v === "string" && v.length > 0);
     return json({
@@ -748,6 +819,102 @@ async function handleApi(request, env, url, ctx) {
         "content-disposition": `attachment; filename="hidden-state-${pass.code}.ics"`,
       },
     });
+  }
+
+  /*
+    POSTS. Written and edited from the console rather than by re-deploying.
+
+    Photographs are not uploaded here: they are files already on the site, and
+    the editor offers the ones that exist. That keeps this simple and avoids
+    standing up file storage for something that happens a few times a month.
+  */
+  if (path === "/posts" && method === "GET") {
+    // Public. Drafts are only visible to someone signed in.
+    const who = await readSession(env, request);
+    const showDrafts = who && can(who, "issuePasses");
+    const rows = await env.DB.prepare(
+      showDrafts
+        ? "SELECT * FROM posts ORDER BY sort_date DESC"
+        : "SELECT * FROM posts WHERE published = 1 ORDER BY sort_date DESC"
+    ).all();
+
+    // Stored flat; handed over in the shape the site already renders.
+    const posts = rows.results.map((r) => ({
+      ...r,
+      body: r.body ? r.body.split("\n").filter(Boolean) : [],
+      categories: (() => { try { return JSON.parse(r.categories || "[]"); } catch { return []; } })(),
+      published: !!r.published,
+    }));
+    return json({ ok: true, posts });
+  }
+
+  if (path === "/posts" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    if (!body.slug || !body.headline) return fail("A web address and a headline are needed.");
+
+    const exists = await env.DB.prepare("SELECT slug FROM posts WHERE slug = ?").bind(body.slug).first();
+    if (exists) return fail("A post already uses that web address.", 409);
+
+    await env.DB.prepare(
+      "INSERT INTO posts (slug, headline, summary, body, kicker, signoff, category, categories, " +
+      "issue, date_label, sort_date, poster, photo, caption, link, link_label, published, created_at, author) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(
+      body.slug, body.headline, body.summary || null,
+      Array.isArray(body.body) ? body.body.join("\n") : (body.body || null),
+      body.kicker || null, body.signoff || null,
+      body.category || "NEWS", JSON.stringify(body.categories || []),
+      body.issue || null, body.dateLabel || null,
+      body.sortDate || new Date().toISOString().slice(0, 10),
+      body.poster || null, body.photo || null, body.caption || null,
+      body.link || null, body.linkLabel || null,
+      body.published === false ? 0 : 1, now(), who.username
+    ).run();
+
+    return json({ ok: true, slug: body.slug });
+  }
+
+  if (path.startsWith("/posts/") && method === "PATCH") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+
+    const slug = decodeURIComponent(path.slice(7));
+    const map = {
+      headline: "headline", summary: "summary", kicker: "kicker", signoff: "signoff",
+      category: "category", issue: "issue", dateLabel: "date_label", sortDate: "sort_date",
+      poster: "poster", photo: "photo", caption: "caption",
+      link: "link", linkLabel: "link_label", published: "published",
+    };
+    const fields = [];
+    const values = [];
+    for (const [key, column] of Object.entries(map)) {
+      if (body[key] === undefined) continue;
+      fields.push(`${column} = ?`);
+      values.push(typeof body[key] === "boolean" ? (body[key] ? 1 : 0) : body[key]);
+    }
+    if (body.body !== undefined) {
+      fields.push("body = ?");
+      values.push(Array.isArray(body.body) ? body.body.join("\n") : body.body);
+    }
+    if (body.categories !== undefined) {
+      fields.push("categories = ?");
+      values.push(JSON.stringify(body.categories));
+    }
+    if (!fields.length) return fail("Nothing to change.");
+
+    fields.push("updated_at = ?");
+    values.push(now(), slug);
+    await env.DB.prepare(`UPDATE posts SET ${fields.join(", ")} WHERE slug = ?`).bind(...values).run();
+    return json({ ok: true, slug });
+  }
+
+  if (path.startsWith("/posts/") && method === "DELETE") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const slug = decodeURIComponent(path.slice(7));
+    await env.DB.prepare("DELETE FROM posts WHERE slug = ?").bind(slug).run();
+    return json({ ok: true, slug });
   }
 
   // ── the door ────────────────────────────────────────────────────────────
@@ -946,7 +1113,7 @@ async function handleApi(request, env, url, ctx) {
   // ── issuing a pass ──────────────────────────────────────────────────────
   if (path === "/passes" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "issue")) return fail("Only the boss can issue passes.", 403);
+    if (!who || !can(who, "issuePasses")) return fail("Only the boss can issue passes.", 403);
     if (!body.name || !body.party) return fail("A name and an event are required.");
 
     // Take the next unused code from the pool rather than inventing one, so
@@ -1011,7 +1178,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/passes/bulk" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "issue")) return fail("Only the boss can issue passes.", 403);
+    if (!who || !can(who, "issuePasses")) return fail("Only the boss can issue passes.", 403);
 
     const lines = String(body.names || "").split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 200);
     if (!lines.length) return fail("No names given.");
@@ -1056,7 +1223,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path === "/passes/check" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "issue")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
 
     const rows = await env.DB.prepare(
       "SELECT code, name, email, status FROM passes WHERE party_id = ? AND " +
@@ -1069,7 +1236,7 @@ async function handleApi(request, env, url, ctx) {
   // ── cancelling one ──────────────────────────────────────────────────────
   if (path.startsWith("/passes/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "revoke")) return fail("Only the boss can change passes.", 403);
+    if (!who || !can(who, "revokePasses")) return fail("Only the boss can change passes.", 403);
 
     const code = decodeURIComponent(path.slice(8)).toUpperCase();
     const existing = await env.DB.prepare("SELECT * FROM passes WHERE code = ?").bind(code).first();
@@ -1149,7 +1316,7 @@ async function handleApi(request, env, url, ctx) {
 
   if (path === "/parties" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "issue")) return fail("Only the boss can add events.", 403);
+    if (!who || !can(who, "issuePasses")) return fail("Only the boss can add events.", 403);
     if (!body.id || !body.name || !body.doorsCloseAt) {
       return fail("An id, a name and a closing time are required.");
     }
@@ -1166,7 +1333,7 @@ async function handleApi(request, env, url, ctx) {
 
   if (path.startsWith("/parties/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "issue")) return fail("Only the boss can change events.", 403);
+    if (!who || !can(who, "issuePasses")) return fail("Only the boss can change events.", 403);
 
     const id = decodeURIComponent(path.slice(9));
     const fields = [];
@@ -1193,7 +1360,7 @@ async function handleApi(request, env, url, ctx) {
   // and every scan attached to it, losing the record of a night that happened.
   if (path.startsWith("/parties/") && method === "DELETE") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "issue")) return fail("Only the boss can remove events.", 403);
+    if (!who || !can(who, "issuePasses")) return fail("Only the boss can remove events.", 403);
     const id = decodeURIComponent(path.slice(9));
     await env.DB.prepare("UPDATE parties SET archived = 1 WHERE id = ?").bind(id).run();
     return json({ ok: true, id, archived: true });
@@ -1244,7 +1411,7 @@ async function handleApi(request, env, url, ctx) {
   // ── team accounts ───────────────────────────────────────────────────────
   if (path === "/team" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
     const rows = await env.DB.prepare(
       "SELECT username, role, display_name, email, phone, photo_url, active, created_at FROM team ORDER BY role, username"
     ).all();
@@ -1253,7 +1420,7 @@ async function handleApi(request, env, url, ctx) {
 
   if (path === "/team" && method === "POST") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "team")) return fail("Only the boss can create accounts.", 403);
+    if (!who || !can(who, "manageTeam")) return fail("Only the boss can create accounts.", 403);
     if (!body.username || !body.password || !body.role) {
       return fail("A username, password and role are required.");
     }
@@ -1299,7 +1466,7 @@ async function handleApi(request, env, url, ctx) {
 
   if (path.startsWith("/team/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
 
     const username = decodeURIComponent(path.slice(6)).toLowerCase();
     const target = await env.DB.prepare("SELECT * FROM team WHERE username = ?").bind(username).first();
@@ -1374,7 +1541,7 @@ async function handleApi(request, env, url, ctx) {
 
   if (path.startsWith("/team/") && method === "DELETE") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
     const username = decodeURIComponent(path.slice(6)).toLowerCase();
     if (username === who.username) return fail("You can't delete your own account.", 400);
     await env.DB.batch([
@@ -1387,13 +1554,13 @@ async function handleApi(request, env, url, ctx) {
   // ── settings ────────────────────────────────────────────────────────────
   if (path === "/settings" && method === "GET") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "team")) return fail("Not allowed.", 403);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
     return json({ ok: true, settings: await getSettings(env), defaults: DEFAULT_SETTINGS });
   }
 
   if (path === "/settings" && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "team")) return fail("Only the boss can change settings.", 403);
+    if (!who || !can(who, "manageTeam")) return fail("Only the boss can change settings.", 403);
 
     const changes = body.settings || {};
     const statements = [];
@@ -1541,7 +1708,7 @@ async function handleApi(request, env, url, ctx) {
   */
   if (path.startsWith("/requests/") && method === "PATCH") {
     const who = await readSession(env, request);
-    if (!who || !can(who, "issue")) return fail("Only the boss can decide requests.", 403);
+    if (!who || !can(who, "issuePasses")) return fail("Only the boss can decide requests.", 403);
 
     const id = decodeURIComponent(path.slice(10));
     const req = await env.DB.prepare("SELECT * FROM requests WHERE id = ?").bind(id).first();

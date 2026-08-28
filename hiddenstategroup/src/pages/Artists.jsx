@@ -1,6 +1,7 @@
 import { usePageMeta } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
+import { useSite } from "../lib/site";
 import React from "react";
 import { Link } from "react-router-dom";
 import {
@@ -54,6 +55,7 @@ function Card({ a }) {
 
 export default function Artists() {
   useGoogleFonts();
+  const site = useSite();
   const { t } = useLang();
   usePageMeta({ title: "Artists", description: "The DJs and producers represented by Hidden State." });
   return (
@@ -74,7 +76,7 @@ export default function Artists() {
         {ARTISTS.map((a) => <Card key={a.id} a={a} />)}
         <p className="text-center py-10 m-0"
            style={{ ...fontDisplay, fontStyle: "italic", fontSize: "20px", color: theme.ink2 }}>
-          {ROSTER_NOTE}
+          {site.rosterNote || ROSTER_NOTE}
         </p>
       </div>
 
