@@ -25,8 +25,9 @@ export default function Guestlist() {
     description: "Request a place on the Hidden State guest list.",
   });
 
-  const [form, setForm] = useState({ name: "", email: "", phone: "", note: "", age: false });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", note: "", people: 1, age: false });
   const [sent, setSent] = useState(false);
+  const [thanks, setThanks] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,11 +35,13 @@ export default function Guestlist() {
   // console changes this page too.
   const [minimumAge, setMinimumAge] = useState(16);
   const [partyId, setPartyId] = useState(null);
+  const [partyName, setPartyName] = useState("");
   useEffect(() => {
     api.nextParty().then((p) => {
       if (!p) return;
       setMinimumAge(p.minimum_age ?? 16);
       setPartyId(p.id);
+      setPartyName(`${p.name}${p.date_label ? " — " + p.date_label : ""}`);
     });
   }, []);
 
@@ -56,6 +59,9 @@ export default function Guestlist() {
     const res = await api.submitRequest({ ...form, party: partyId });
     setSending(false);
     if (res.ok) {
+      // The server returns the line set in the console, so changing it there
+      // changes what a guest reads here.
+      if (res.message) setThanks(res.message);
       setSent(true);
     } else {
       setError(res.error || `Something went wrong. Please email ${CONTACT_EMAIL} instead.`);
@@ -68,8 +74,14 @@ export default function Guestlist() {
 
       <section className="max-w-[560px] mx-auto px-[18px] pt-[104px] pb-16">
         <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,7vw,44px)" }}>
-          Guest List
+          Ask for a Pass
         </h1>
+        {partyName && (
+          <p className="text-center m-0 mt-2"
+             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+            {partyName.toUpperCase()}
+          </p>
+        )}
         <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
         <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
 
@@ -82,7 +94,7 @@ export default function Guestlist() {
               Thank you.
             </h2>
             <p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>
-              If you're on the list, your pass will arrive by email before the night.
+              {thanks || "We'll be in touch. If you're on the list, your pass arrives by email before the night — keep an eye on your junk folder too."}
             </p>
           </div>
         ) : (
@@ -95,6 +107,15 @@ export default function Guestlist() {
             </Field>
             <Field label="Phone">
               <input required type="tel" style={inputStyle} value={form.phone} onChange={update("phone")} />
+            </Field>
+
+            <Field label="How many of you">
+              <select style={inputStyle} value={form.people}
+                      onChange={(e) => setForm((f) => ({ ...f, people: Number(e.target.value) }))}>
+                {[1,2,3,4,5,6].map((n) => (
+                  <option key={n} value={n}>{n === 1 ? "Just me" : `${n} people`}</option>
+                ))}
+              </select>
             </Field>
 
             <Field label="Anything we should know">
@@ -129,10 +150,15 @@ export default function Guestlist() {
             <button type="submit" disabled={sending} className="px-9 py-3.5"
                     style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em",
                              background: theme.ink, color: theme.bg, opacity: sending ? 0.6 : 1 }}>
-              {sending ? "SENDING…" : "REQUEST A PLACE"}
+              {sending ? "SENDING…" : "ASK FOR A PASS"}
             </button>
 
-            <p className="m-0 pt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.55, color: theme.ink2 }}>
+            <p className="m-0 pt-2" style={{ ...fontText, fontSize: "14.5px", lineHeight: 1.55, color: theme.ink }}>
+              We'll look at every request. If you're on the list, your pass
+              arrives by email before the night.
+            </p>
+
+            <p className="m-0" style={{ ...fontText, fontSize: "14px", lineHeight: 1.55, color: theme.ink2 }}>
               We use your details only to issue and check your pass. We don't
               share them, and you can ask us to delete them at any time by
               emailing {CONTACT_EMAIL}.

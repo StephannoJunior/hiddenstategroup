@@ -313,6 +313,89 @@ async function sendAccountEmail(env, { to, displayName, username, password, role
   }
 }
 
+/*
+  Telling you a request came in.
+
+  Without this, requests sit in the database until somebody thinks to look —
+  which means a guest who asked on Tuesday hears nothing until Friday, or not
+  at all. The point of a request is that it reaches a person.
+*/
+async function sendRequestAlert(env, { to, request, party }) {
+  if (!env.RESEND_API_KEY || !to) return { sent: false };
+
+  const lines = [
+    "Someone has asked for a pass.",
+    "",
+    `  Name:  ${request.name}`,
+    `  Email: ${request.email}`,
+    request.phone ? `  Phone: ${request.phone}` : null,
+    request.people > 1 ? `  For:   ${request.people} people` : null,
+    party ? `  Event: ${party.name} — ${party.date_label}` : null,
+    request.note ? "" : null,
+    request.note ? `  "${request.note}"` : null,
+    "",
+    "Approve or decline in the console:",
+    "https://hiddenstategroup.com/console",
+  ].filter((l) => l !== null).join("\n");
+
+  const html = `
+    <div style="font-family:Georgia,serif;color:#16130E;background:#F3EBD9;padding:32px">
+      <div style="max-width:460px;margin:0 auto">
+        <p style="font-family:Helvetica,sans-serif;font-size:10px;letter-spacing:.2em;color:#8A6A28;margin:0">
+          A PASS REQUEST
+        </p>
+        <div style="border-top:2px solid #16130E;margin-top:10px"></div>
+        <div style="border-top:1px solid #16130E;margin-top:3px"></div>
+
+        <h1 style="font-size:26px;font-weight:400;margin:22px 0 4px">${request.name}</h1>
+        <p style="font-family:Helvetica,sans-serif;font-size:12px;color:#463F35;margin:0">
+          ${request.email}${request.phone ? " · " + request.phone : ""}
+          ${request.people > 1 ? " · " + request.people + " people" : ""}
+        </p>
+        ${party ? `<p style="font-family:Helvetica,sans-serif;font-size:11px;letter-spacing:.14em;color:#463F35;margin:10px 0 0">
+          ${party.name.toUpperCase()} — ${(party.date_label || "").toUpperCase()}
+        </p>` : ""}
+        ${request.note ? `<p style="font-size:16px;font-style:italic;line-height:1.6;margin:18px 0 0;color:#463F35">
+          &ldquo;${request.note}&rdquo;
+        </p>` : ""}
+
+        <p style="margin:26px 0 0">
+          <a href="https://hiddenstategroup.com/console"
+             style="display:inline-block;background:#16130E;color:#F3EBD9;
+             font-family:Helvetica,sans-serif;font-size:11px;letter-spacing:.2em;
+             padding:14px 28px;text-decoration:none">OPEN THE CONSOLE</a>
+        </p>
+      </div>
+    </div>`;
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Hidden State <passes@hiddenstategroup.com>",
+        to: [to],
+        // So a reply goes to the guest rather than to the site.
+        reply_to: request.email,
+        subject: `Pass request — ${request.name}`,
+        text: lines,
+        html,
+      }),
+    });
+    if (!res.ok) {
+      console.error("Request alert refused:", res.status, await res.text());
+      return { sent: false };
+    }
+    return { sent: true };
+  } catch (err) {
+    console.error("Request alert failed:", err && err.message);
+    return { sent: false };
+  }
+}
+
 // ─── sessions ──────────────────────────────────────────────────────────────
 
 async function createSession(env, member, hours) {
@@ -332,18 +415,36 @@ async function readSession(env, request) {
   if (!token) return null;
 
   const row = await env.DB.prepare(
-    "SELECT s.username, s.role, s.expires_at, t.display_name, t.active, t.permissions " +
+    "SELECT s.username, s.role, s.expires_at, s.created_at, s.last_seen, t.display_name, t.active, t.permissions " +
     "FROM sessions s JOIN team t ON t.username = s.username WHERE s.token_hash = ?"
   ).bind(await sha256Hex(token)).first();
 
   if (!row) return null;
   if (new Date(row.expires_at).getTime() < Date.now()) return null;
+
+  /*
+    Optional idle timeout. A door phone left on a table should not stay signed
+    in indefinitely just because the shift has not ended.
+
+    Each request pushes the session forward, so someone actually working is
+    never interrupted.
+  */
+  const cfgIdle = await getSettings(env);
+  if (cfgIdle.idleSignOutMinutes > 0) {
+    const idleFor = (Date.now() - new Date(row.last_seen || row.created_at || row.expires_at).getTime()) / 60000;
+    if (row.last_seen && idleFor > cfgIdle.idleSignOutMinutes) {
+      await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await sha256Hex(token)).run();
+      return null;
+    }
+    await env.DB.prepare("UPDATE sessions SET last_seen = ? WHERE token_hash = ?")
+      .bind(now(), await sha256Hex(token)).run();
+  }
   // Suspending someone takes effect immediately, without waiting for their
   // session to lapse.
   if (!row.active) return null;
   return {
     username: row.username, role: row.role, displayName: row.display_name,
-    can: permissionsFor(row.role, row.permissions),
+    can: permissionsFor(row.role, row.permissions, await getSettings(env)),
   };
 }
 
@@ -414,6 +515,29 @@ const DEFAULT_SETTINGS = {
   // Whether the guest list link is shown publicly at all.
   guestListLinkVisible: true,
 
+  // ── the team ─────────────────────────────────────────────────────────────
+  // Whether management may issue and cancel passes, or only you.
+  managementCanIssue: false,
+  // Whether staff may see guests' email and phone on the door list.
+  staffSeeContacts: false,
+  // Sign everyone out after this many minutes of doing nothing. 0 disables it.
+  idleSignOutMinutes: 0,
+
+  // ── passes ───────────────────────────────────────────────────────────────
+  // Default kind and tier when issuing, so the common case is one field less.
+  defaultKind: "TICKET",
+  defaultTier: "STANDARD",
+  // Ask before issuing a second pass to a name already on the list.
+  warnOnDuplicate: true,
+  // Email the pass automatically when one is issued with an address.
+  emailPassOnIssue: true,
+
+  // ── the guest list ───────────────────────────────────────────────────────
+  // Most people one request may ask for.
+  maxPeoplePerRequest: 6,
+  // The line shown after someone asks.
+  requestThanksMessage: "We'll be in touch. If you're on the list, your pass arrives by email before the night.",
+
   // Closes the whole site to visitors, leaving the door tools working. For a
   // rebuild, or if something needs taking down quickly.
   siteClosed: false,
@@ -434,6 +558,7 @@ const PUBLIC_SETTINGS = [
   "contactEmail", "bookingEmail",
   "guestListLinkVisible", "guestListOpen",
   "siteClosed", "siteClosedMessage",
+  "maxPeoplePerRequest", "requestThanksMessage",
 ];
 
 async function getSettings(env) {
@@ -464,6 +589,22 @@ async function getSettings(env) {
   the server checked `issue` — which meant ticking a box silently did nothing.
   Keeping one list is what stops that recurring.
 */
+/*
+  Two of the settings widen what a role may do. They are applied on top of the
+  table below rather than written into it, so the table stays the plain
+  statement of what each role means.
+*/
+function withSettings(role, base, cfg) {
+  const out = { ...base };
+  if (role === "OWNER" && cfg.managementCanIssue) {
+    out.issuePasses = true;
+    out.revokePasses = true;
+  }
+  if (role === "STAFF" && cfg.staffSeeContacts) out.seeContacts = true;
+  if (role === "STAFF" && cfg.staffSeeDoorList) out.seeList = true;
+  return out;
+}
+
 const CAN = {
   BOSS: {
     scan: true, seeList: true, seeReasons: true, reset: true,
@@ -484,13 +625,14 @@ const CAN = {
   them. That way a particular door supervisor can be given the door list
   without promoting them to management.
 */
-function permissionsFor(role, stored) {
-  const base = CAN[role] || CAN.STAFF;
-  if (!stored) return { ...base };
+function permissionsFor(role, stored, cfg = DEFAULT_SETTINGS) {
+  const base = withSettings(role, CAN[role] || CAN.STAFF, cfg);
+  if (!stored) return base;
   try {
+    // An account's own settings win over the role and over the switches.
     return { ...base, ...JSON.parse(stored) };
   } catch {
-    return { ...base };
+    return base;
   }
 }
 
@@ -624,7 +766,7 @@ async function handleApi(request, env, url, ctx) {
     return json({
       ok: true, token, expires,
       user: { username: member.username, role: member.role, displayName: member.display_name,
-              can: permissionsFor(member.role, member.permissions) },
+              can: permissionsFor(member.role, member.permissions, settings) },
     });
   }
 
@@ -1118,6 +1260,8 @@ async function handleApi(request, env, url, ctx) {
 
     // Take the next unused code from the pool rather than inventing one, so
     // two passes can never collide.
+    const cfgIssue = await getSettings(env);
+
     // Refill in the background if we are running low, so issuing never stops.
     ctx.waitUntil(getSettings(env).then((cfg) => topUpPool(env, cfg.poolLowWater)));
 
@@ -1141,7 +1285,7 @@ async function handleApi(request, env, url, ctx) {
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         pooled.code, body.party, body.name, body.email || null, body.phone || null,
-        body.kind || "TICKET", body.tier || null, body.ticketRef || null, body.note || null,
+        body.kind || cfgIssue.defaultKind, body.tier || cfgIssue.defaultTier, body.ticketRef || null, body.note || null,
         body.kind === "INVITATION" ? 0 : 1,
         // A couple ticket admits two, a family four unless told otherwise.
         body.admits || (body.kind === "COUPLE" ? 2 : body.kind === "FAMILY" ? 4 : 1),
@@ -1152,7 +1296,7 @@ async function handleApi(request, env, url, ctx) {
     // Email is best effort. The pass exists either way, and the console shows
     // the link so it can always be sent by hand.
     let email = { sent: false, reason: "no address" };
-    if (body.email) {
+    if (body.email && cfgIssue.emailPassOnIssue) {
       const party = await env.DB.prepare(
         "SELECT name, date_label, venue, minimum_age FROM parties WHERE id = ?"
       ).bind(body.party).first();
@@ -1224,6 +1368,11 @@ async function handleApi(request, env, url, ctx) {
   if (path === "/passes/check" && method === "POST") {
     const who = await readSession(env, request);
     if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+
+    // The warning can be switched off. Answering with no matches is the same
+    // to the caller as there being none, so the console needs no special case.
+    const cfgDup = await getSettings(env);
+    if (!cfgDup.warnOnDuplicate) return json({ ok: true, matches: [] });
 
     const rows = await env.DB.prepare(
       "SELECT code, name, email, status FROM passes WHERE party_id = ? AND " +
@@ -1692,13 +1841,27 @@ async function handleApi(request, env, url, ctx) {
       return fail("The guest list is closed at the moment.", 403);
     }
     if (!body.name || !body.email) return fail("A name and email are required.");
+    const people = Math.max(1, Math.min(cfg.maxPeoplePerRequest, Number(body.people) || 1));
+    const note = String(body.note || "").slice(0, 150);
+
     await env.DB.prepare(
-      "INSERT INTO requests (party_id, name, email, phone, note, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).bind(
-      body.party || null, body.name, body.email, body.phone || null,
-      String(body.note || "").slice(0, 150), now()
-    ).run();
-    return json({ ok: true });
+      "INSERT INTO requests (party_id, name, email, phone, note, people, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(body.party || null, body.name, body.email, body.phone || null, note, people, now()).run();
+
+    // Tell someone. Sent in the background so the guest is not left waiting on
+    // an email service to answer before their request is accepted.
+    const party = body.party
+      ? await env.DB.prepare("SELECT name, date_label FROM parties WHERE id = ?").bind(body.party).first()
+      : null;
+    ctx.waitUntil(sendRequestAlert(env, {
+      to: cfg.accountCopyTo,
+      request: { name: body.name, email: body.email, phone: body.phone, note, people },
+      party,
+    }));
+
+    // The line to show them comes from settings, so it can be changed without
+    // a deploy.
+    return json({ ok: true, message: cfg.requestThanksMessage });
   }
 
   /*
@@ -1736,9 +1899,10 @@ async function handleApi(request, env, url, ctx) {
     await env.DB.batch([
       env.DB.prepare("UPDATE code_pool SET used = 1, used_at = ? WHERE code = ?").bind(now(), pooled.code),
       env.DB.prepare(
-        "INSERT INTO passes (code, party_id, name, email, phone, kind, note, id_required, issued_at, issued_by) " +
-        "VALUES (?, ?, ?, ?, ?, 'GUEST', ?, 1, ?, ?)"
-      ).bind(pooled.code, partyId, req.name, req.email, req.phone, req.note, now(), who.username),
+        "INSERT INTO passes (code, party_id, name, email, phone, kind, note, id_required, admits, issued_at, issued_by) " +
+        "VALUES (?, ?, ?, ?, ?, 'GUEST', ?, 1, ?, ?, ?)"
+      ).bind(pooled.code, partyId, req.name, req.email, req.phone, req.note,
+             Math.max(1, req.people || 1), now(), who.username),
       env.DB.prepare(
         "UPDATE requests SET status = 'APPROVED', pass_code = ?, decided_at = ?, decided_by = ? WHERE id = ?"
       ).bind(pooled.code, now(), who.username, id),

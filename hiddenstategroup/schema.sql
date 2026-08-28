@@ -97,7 +97,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   username   TEXT NOT NULL,
   role       TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  expires_at TEXT NOT NULL
+  expires_at TEXT NOT NULL,
+  last_seen  TEXT                            -- for the optional idle timeout
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
@@ -111,6 +112,7 @@ CREATE TABLE IF NOT EXISTS requests (
   email      TEXT NOT NULL,
   phone      TEXT,
   note       TEXT,
+  people     INTEGER NOT NULL DEFAULT 1,   -- a request may be for more than one
   status     TEXT NOT NULL DEFAULT 'PENDING', -- PENDING | APPROVED | DECLINED
   pass_code  TEXT,                          -- filled in once approved
   created_at TEXT NOT NULL,

@@ -1,5 +1,6 @@
 import { usePageMeta } from "../lib/seo";
 import { useLang } from "../lib/lang";
+import { useSite } from "../lib/site";
 import React, { useState } from "react";
 import {
   Nav, Footer, useGoogleFonts, Field, inputStyle, Instagram,
@@ -14,6 +15,7 @@ const initialForm = { name: "", email: "", reason: "General Inquiry", message: "
 
 export default function Contact() {
   useGoogleFonts();
+  const site = useSite();
   const { t } = useLang();
   usePageMeta({ title: "Contact", description: "Get in touch with Hidden State — booking, press, demos and management." });
   const [form, setForm] = useState(initialForm);
@@ -27,7 +29,7 @@ export default function Contact() {
     e.preventDefault();
     setError("");
     if (!FORM_ENDPOINT) {
-      setError(`This form isn't connected yet. Please email ${CONTACT_EMAIL} directly.`);
+      setError(`This form isn't connected yet. Please email ${site.contactEmail || CONTACT_EMAIL} directly.`);
       return;
     }
     setSending(true);
@@ -40,7 +42,7 @@ export default function Contact() {
       if (!res.ok) throw new Error("Request failed");
       setSubmitted(true);
     } catch {
-      setError(`Something went wrong sending that. Please email ${CONTACT_EMAIL} instead.`);
+      setError(`Something went wrong sending that. Please email ${site.contactEmail || CONTACT_EMAIL} instead.`);
     } finally {
       setSending(false);
     }

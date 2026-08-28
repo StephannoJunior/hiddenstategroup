@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info,
-         Ticket, Shield, ScanLine, ClipboardList, LogIn } from "lucide-react";
+         Ticket, Shield, ScanLine, ClipboardList, Settings2, PenLine } from "lucide-react";
 import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 import * as api from "../lib/api";
@@ -79,7 +79,19 @@ export default function GlassBar() {
     without a reload.
   */
   const [role, setRole] = useState(null);
-  const [guestPass, setGuestPass] = useState(null);
+  /*
+    Read on the first render rather than in an effect. Reading it afterwards
+    meant the bar briefly showed the finder link before switching to the
+    direct one — a visible flicker on every page load for anyone who holds a
+    pass.
+  */
+  const [guestPass, setGuestPass] = useState(() => {
+    try {
+      return localStorage.getItem("hs-guest-pass");
+    } catch {
+      return null;
+    }
+  });
 
   /*
     Ask the server who is signed in, rather than trusting anything the browser
@@ -126,13 +138,27 @@ export default function GlassBar() {
     if (role.can.scan) teamTabs.push({ href: "/scan", key: "scanner", Icon: ScanLine });
     if (role.can.seeList) teamTabs.push({ href: "/doorlist", key: "doorList", Icon: ClipboardList });
     teamTabs.push({ href: "/console", key: "team", Icon: Shield });
+    // Writing posts and changing settings are yours alone, so these only
+    // appear for an account that actually holds those permissions.
+    if (role.can.issuePasses) teamTabs.push({ href: "/console?tab=posts", key: "write", Icon: PenLine });
+    if (role.can.manageTeam) teamTabs.push({ href: "/console?tab=settings", key: "settings", Icon: Settings2 });
   }
 
+  /*
+    One tab for anyone who is not team, always in the same place.
+
+    It used to show MY PASS on a device that had opened one and SIGN IN on a
+    device that had not — so the same person saw different things on their
+    phone and their laptop. Now it is always the pass tab; it just goes
+    straight there if this device knows the code, and to the finder if not.
+  */
   const extraTabs = role
     ? teamTabs
-    : guestPass
-      ? [{ href: `/pass/${guestPass}`, key: "myPass", Icon: Ticket }]
-      : [{ href: "/admins-staff-boss", key: "signIn", Icon: LogIn }];
+    : [{
+        href: guestPass ? `/pass/${guestPass}` : "/mypass",
+        key: "myPass",
+        Icon: Ticket,
+      }];
 
   const handleTap = () => {
     if (tapTimer.current) {

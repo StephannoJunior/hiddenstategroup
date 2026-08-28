@@ -229,7 +229,17 @@ export function Nav() {
         <div className="max-w-[1180px] mx-auto px-[18px] h-[76px] lg:h-[92px] relative flex items-center justify-between">
           {/* left — the dateline, capped so it can never reach the logo */}
           <span className="min-w-0 overflow-hidden" style={{ maxWidth: "34%" }}>
-            <LiveDateline />
+            {/* Shown only while the guest list is open and the setting allows
+              it — no point sending people to a form that will refuse them. */}
+          {site.guestListLinkVisible && site.guestListOpen && (
+            <Link to="/guestlist" className="pb-0.5 mb-3 inline-block"
+                  style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em",
+                           color: theme.ink, borderBottom: `1px solid ${theme.brass}` }}>
+              ASK FOR A PASS
+            </Link>
+          )}
+
+          <LiveDateline />
           </span>
 
           {/* centre — always exactly halfway across */}
@@ -255,6 +265,7 @@ export function Nav() {
 }
 
 export function Footer() {
+  const site = useSite();
   return (
     <footer style={{ background: theme.bg, borderTop: `2px solid ${theme.ink}` }}>
       <div className="max-w-[1180px] mx-auto px-[18px] pt-10 pb-16">
@@ -267,6 +278,16 @@ export function Footer() {
             <Instagram account={SOCIAL.official} />
             <Instagram account={SOCIAL.group} />
           </div>
+          {/* Shown only while the guest list is open and the setting allows
+              it — no point sending people to a form that will refuse them. */}
+          {site.guestListLinkVisible && site.guestListOpen && (
+            <Link to="/guestlist" className="pb-0.5 mb-3 inline-block"
+                  style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em",
+                           color: theme.ink, borderBottom: `1px solid ${theme.brass}` }}>
+              ASK FOR A PASS
+            </Link>
+          )}
+
           <LiveDateline />
           <p style={{ ...fontUtility, color: theme.ink2, fontSize: "9.5px", letterSpacing: "0.2em" }}>
             © 2026 HIDDEN STATE — ALL RIGHTS RESERVED
@@ -304,6 +325,9 @@ export const inputStyle = {
 };
 
 export function BookingDrawer({ open, onClose, artist }) {
+  // The address comes from settings, so changing it in the console changes
+  // where enquiries actually go — it used to be fixed in the code.
+  const site = useSite();
   const [form, setForm] = useState(initialForm);
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
@@ -325,7 +349,7 @@ export function BookingDrawer({ open, onClose, artist }) {
 
     // No endpoint configured yet — tell the truth rather than fake a success.
     if (!FORM_ENDPOINT) {
-      setError(`This form isn't connected yet. Please email ${BOOKING_EMAIL} directly.`);
+      setError(`This form isn't connected yet. Please email ${site.bookingEmail || BOOKING_EMAIL} directly.`);
       return;
     }
 
@@ -337,13 +361,13 @@ export function BookingDrawer({ open, onClose, artist }) {
         body: JSON.stringify({
           ...form,
           _subject: `Booking request — ${form.artist || "Hidden State"}`,
-          _deliverTo: BOOKING_EMAIL,
+          _deliverTo: site.bookingEmail || BOOKING_EMAIL,
         }),
       });
       if (!res.ok) throw new Error("Request failed");
       setSubmitted(true);
     } catch {
-      setError(`Something went wrong sending that. Please email ${BOOKING_EMAIL} instead.`);
+      setError(`Something went wrong sending that. Please email ${site.bookingEmail || BOOKING_EMAIL} instead.`);
     } finally {
       setSending(false);
     }
@@ -366,7 +390,7 @@ export function BookingDrawer({ open, onClose, artist }) {
             <h2 className="mt-1 text-[22px]" style={{ ...fontDisplay, fontStyle: "italic", fontWeight: 500, color: theme.ink }}>
               {artist ? artist.name : "Hidden State Agency"}
             </h2>
-            <a href={`mailto:${BOOKING_EMAIL}`} className="mt-1 inline-block"
+            <a href={`mailto:${site.bookingEmail || BOOKING_EMAIL}`} className="mt-1 inline-block"
                style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.1em", color: theme.ink2 }}>
               {BOOKING_EMAIL}
             </a>

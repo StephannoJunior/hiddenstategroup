@@ -32,6 +32,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 // Passes — kept out of the main navigation deliberately. A guest reaches
 // their pass by link, and door staff reach the scanner by a bookmark.
 const Pass = lazy(() => import("./pages/Pass"));
+const MyPass = lazy(() => import("./pages/MyPass"));
 const Scan = lazy(() => import("./pages/Scan"));
 const Guestlist = lazy(() => import("./pages/Guestlist"));
 const PassList = lazy(() => import("./pages/PassList"));
@@ -62,7 +63,7 @@ function ScrollToTop() {
 function ClosedGate({ children }) {
   const site = useSite();
   const path = typeof window !== "undefined" ? window.location.pathname : "/";
-  const stillWorks = ["/pass/", "/scan", "/doorlist", "/console", "/admin", "/admins-staff-boss"]
+  const stillWorks = ["/pass/", "/mypass", "/scan", "/doorlist", "/console", "/admin", "/admins-staff-boss"]
     .some((p) => path.startsWith(p));
 
   if (!site.siteClosed || stillWorks) return children;
@@ -121,6 +122,7 @@ export default function App() {
               <Route path="/contact" element={<Contact />} />
 
               <Route path="/pass/:code" element={<Pass />} />
+              <Route path="/mypass" element={<MyPass />} />
               <Route path="/scan" element={<Scan />} />
               <Route path="/guestlist" element={<Guestlist />} />
               <Route path="/doorlist" element={<PassList />} />

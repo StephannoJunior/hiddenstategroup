@@ -942,7 +942,9 @@ function Requests({ role, party }) {
         <span className="flex-1 min-w-0">
           <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{r.name}</span>
           <span className="block" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.12em", color: theme.ink2 }}>
-            {r.email}{r.phone ? ` · ${r.phone}` : ""} · {new Date(r.created_at).toLocaleDateString()}
+            {r.email}{r.phone ? ` · ${r.phone}` : ""}
+            {r.people > 1 ? ` · ${r.people} people` : ""}
+            {" · "}{new Date(r.created_at).toLocaleDateString()}
             {r.pass_code ? ` · ${r.pass_code}` : ""}
           </span>
         </span>
@@ -1325,6 +1327,10 @@ function Settings({ parties }) {
       help: "The door turns amber at this share of the room, so a full night is seen coming rather than hit blind." },
     { key: "reminderHoursBefore", label: "Reminder sent", unit: "hours before",
       help: "How far ahead guests get their pass again. Set to 0 to stop sending reminders." },
+    { key: "maxPeoplePerRequest", label: "Most people per request", unit: "people",
+      help: "The largest group someone may ask for on the public form." },
+    { key: "idleSignOutMinutes", label: "Sign out after idle", unit: "minutes",
+      help: "Ends a team session after this long doing nothing. 0 leaves sessions running for their full length." },
     { key: "autoCloseAfterMinutes", label: "Refuse entry after", unit: "min from open",
       help: "An earlier cut-off than the event's closing time, so late arrivals are refused by the system rather than by a judgement call. 0 means no cut-off." },
   ];
@@ -1441,6 +1447,59 @@ function Settings({ parties }) {
         </label>
       </Section>
 
+      <Section title="ISSUING PASSES">
+        <div className="grid grid-cols-2 gap-3 py-3">
+          <div>
+            <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>Default kind</p>
+            <select value={values.defaultKind} onChange={(e) => set("defaultKind", e.target.value)}
+                    style={{ ...inputStyle, width: "100%" }}>
+              {["TICKET","COUPLE","FAMILY","INVITATION","GUEST","PRESS","ARTIST","STAFF"].map((k) =>
+                <option key={k} value={k}>{k}</option>)}
+            </select>
+          </div>
+          <div>
+            <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>Default tier</p>
+            <select value={values.defaultTier} onChange={(e) => set("defaultTier", e.target.value)}
+                    style={{ ...inputStyle, width: "100%" }}>
+              {["", "EARLY", "STANDARD", "VIP"].map((k) =>
+                <option key={k} value={k}>{k || "— none —"}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.emailPassOnIssue} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("emailPassOnIssue", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Email the pass as soon as it is issued
+            </span>
+            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Turn off if you would rather send links yourself.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.warnOnDuplicate} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("warnOnDuplicate", e.target.checked)} />
+          <span style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            Warn before issuing a second pass to the same person
+          </span>
+        </label>
+      </Section>
+
+      <Section title="THE GUEST LIST">
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            What someone sees after asking
+          </p>
+          <textarea rows={2} value={values.requestThanksMessage}
+                    onChange={(e) => set("requestThanksMessage", e.target.value)}
+                    style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }} />
+        </div>
+      </Section>
+
       <Section title="EMAIL">
         <div className="py-3">
           <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
@@ -1484,6 +1543,34 @@ function Settings({ parties }) {
             <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
               Useful when one person works the door alone. Turn it off and they
               can scan but not browse who is coming.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.managementCanIssue} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("managementCanIssue", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Management can issue and cancel passes
+            </span>
+            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Off by default, so only you can create or cancel a pass. Turn it
+              on when you need someone else able to.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.staffSeeContacts} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("staffSeeContacts", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Door staff can see guests' email and phone
+            </span>
+            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Off by default. A door phone gets borrowed, and contact details
+              are the part worth protecting.
             </span>
           </span>
         </label>
@@ -1622,7 +1709,18 @@ function Maintenance({ parties }) {
 
 function ConsoleScreen({ role }) {
   usePageMeta({ title: "Console", description: "Hidden State door console." });
-  const [tab, setTab] = useState("passes");
+  /*
+    Open the tab named in the address, so the bar can link straight to
+    settings or posts rather than dropping you on the passes list every time.
+  */
+  const [tab, setTab] = useState(() => {
+    try {
+      const wanted = new URLSearchParams(window.location.search).get("tab");
+      return wanted || "passes";
+    } catch {
+      return "passes";
+    }
+  });
   const [parties, setParties] = useState([]);
   const [party, setParty] = useState("");
   const [msg, setMsg] = useState("");
