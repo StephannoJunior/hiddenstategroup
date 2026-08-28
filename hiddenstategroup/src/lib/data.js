@@ -1,5 +1,7 @@
 // Roster and events live in src/content/*.json so the CMS can edit them.
 // Everything below re-exports under the original names.
+import { useEffect, useState } from "react";
+import * as api from "./api";
 import ARTISTS_JSON from "../content/artists.json";
 import EVENTS_JSON from "../content/events.json";
 import SETTINGS from "../content/settings.json";
@@ -90,3 +92,36 @@ export const ARTICLES = [
     span: "md",
   },
 ];
+
+/*
+  useContent — a content type from the database, with the bundled copy as a
+  fallback.
+
+  The bundle renders immediately and is kept if the fetch fails, so pages are
+  never blank while waiting and still work with no connection. The database
+  wins as soon as it answers.
+*/
+export function useContent(kind, fallback) {
+  const [items, setItems] = useState(fallback);
+
+  useEffect(() => {
+    let alive = true;
+    api.listContent(kind).then((res) => {
+      if (!alive || !res.ok || !res.items?.length) return;
+      setItems(res.items.map((x) => ({
+        ...x,
+        // The database column names differ slightly from what the pages read.
+        desc: x.descr ?? x.desc,
+        releaseDate: x.release_date ?? x.releaseDate,
+        artistId: x.artist_id ?? x.artistId,
+        comingSoon: x.coming_soon ?? x.comingSoon,
+        comingSoonNote: x.coming_soon_note ?? x.comingSoonNote,
+      })));
+    });
+    return () => { alive = false; };
+  }, [kind]);
+
+  return items;
+}
+
+export const useArtists = () => useContent("artists", ARTISTS_JSON);

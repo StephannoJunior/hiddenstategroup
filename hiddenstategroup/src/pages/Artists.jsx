@@ -8,7 +8,7 @@ import {
   Nav, Footer, useGoogleFonts, Instagram,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
-import { ARTISTS, ROSTER_NOTE } from "../lib/data";
+import { ARTISTS, ROSTER_NOTE, useArtists } from "../lib/data";
 import { SOCIAL } from "../lib/social";
 
 function Card({ a }) {
@@ -56,6 +56,7 @@ function Card({ a }) {
 export default function Artists() {
   useGoogleFonts();
   const site = useSite();
+  const artists = useArtists();
   const { t } = useLang();
   usePageMeta({ title: "Artists", description: "The DJs and producers represented by Hidden State." });
   return (
@@ -73,7 +74,7 @@ export default function Artists() {
       </section>
 
       <div className="max-w-[1180px] mx-auto px-[18px] pb-4">
-        {ARTISTS.map((a) => <Card key={a.id} a={a} />)}
+        {artists.map((a) => <Card key={a.id} a={a} />)}
         <p className="text-center py-10 m-0"
            style={{ ...fontDisplay, fontStyle: "italic", fontSize: "20px", color: theme.ink2 }}>
           {site.rosterNote || ROSTER_NOTE}

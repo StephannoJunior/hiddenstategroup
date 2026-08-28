@@ -1,13 +1,13 @@
 import { usePageMeta } from "../lib/seo";
 import React, { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts, Field, inputStyle,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
 import DoorGate from "../components/DoorGate";
 import * as api from "../lib/api";
-import IMAGES from "../content/images.json";
+import ImagePicker from "../components/ImagePicker";
 
 /*
   The console.
@@ -39,6 +39,9 @@ const TABS = [
   { id: "requests", label: "REQUESTS", need: "seeList" },
   { id: "stats",    label: "THE NIGHT", need: "seeList" },
   { id: "posts",    label: "POSTS",     need: "issuePasses" },
+  { id: "artists",  label: "ARTISTS",   need: "issuePasses" },
+  { id: "records",  label: "RECORDS",   need: "issuePasses" },
+  { id: "mixes",    label: "MIXES",     need: "issuePasses" },
   { id: "settings", label: "SETTINGS",  need: "manageTeam" },
 ];
 
@@ -596,6 +599,21 @@ function Events({ parties, reload }) {
           </p>
           {/* Set times, one per line. Shown on every guest's pass, so they
               know when to arrive rather than guessing. */}
+          <ImagePicker label="ARTWORK" value={form.artwork || ""} folder="events"
+                       onChange={(path) => setForm((f) => ({ ...f, artwork: path }))} />
+
+          <Field label="Description">
+            <textarea rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }}
+                      value={form.description || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+          </Field>
+
+          <Field label="Capacity">
+            <input type="number" style={inputStyle} value={form.capacity || ""}
+                   onChange={(e) => setForm((f) => ({ ...f, capacity: Number(e.target.value) || null }))}
+                   placeholder="Leave empty for no limit" />
+          </Field>
+
           <Field label="Set times">
             <textarea
               rows={4}
@@ -1148,7 +1166,6 @@ function Posts() {
     load();
   };
 
-  const imageOptions = ["", ...IMAGES];
 
   return (
     <>
@@ -1220,20 +1237,13 @@ function Posts() {
               </Field>
             </div>
 
-            {/* Photographs are the files already on the site. Send me new ones
-                and they appear in these lists. */}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Poster">
-                <select style={inputStyle} value={form.poster} onChange={set("poster")}>
-                  {imageOptions.map((i) => <option key={i} value={i}>{i || "— none —"}</option>)}
-                </select>
-              </Field>
-              <Field label="Photo">
-                <select style={inputStyle} value={form.photo} onChange={set("photo")}>
-                  {imageOptions.map((i) => <option key={i} value={i}>{i || "— none —"}</option>)}
-                </select>
-              </Field>
-            </div>
+            {/* Upload straight from the phone, or pick something already
+                on the site. */}
+            <ImagePicker label="POSTER" value={form.poster} folder="posters"
+                         onChange={(path) => setForm((f) => ({ ...f, poster: path }))} />
+
+            <ImagePicker label="PHOTO" value={form.photo} folder="posts"
+                         onChange={(path) => setForm((f) => ({ ...f, photo: path }))} />
 
             <Field label="Photo caption">
               <input style={inputStyle} value={form.caption} onChange={set("caption")} />
@@ -1275,6 +1285,214 @@ function Posts() {
               <button onClick={save} disabled={busy} style={{ ...btn, opacity: busy ? 0.6 : 1 }}>
                 {busy ? "SAVING…" : editing === "new" ? "POST IT" : "SAVE"}
               </button>
+              <button onClick={() => setEditing(null)} style={ghost}>CANCEL</button>
+            </div>
+          </div>
+        </Section>
+      )}
+    </>
+  );
+}
+
+// ── ARTISTS, RECORDS, MIXES ─────────────────────────────────────────────────
+
+/*
+  One editor for all three.
+
+  They differ only in which fields they carry, so the shape of each is
+  described here rather than written out three times. Adding a field means
+  adding a line, not another screen.
+*/
+const CONTENT_SHAPES = {
+  artists: {
+    label: "artist", key: "id", title: (x) => x.name,
+    blank: { id: "", name: "", alias: "", type: "DJ", genres: [], country: "", location: "",
+             descr: "", bio: "", photo: "", poster: "", instagram: "", published: true },
+    fields: [
+      { k: "name", label: "Name" },
+      { k: "alias", label: "Also known as" },
+      { k: "type", label: "Type", options: ["DJ", "Producer", "Live Act"] },
+      { k: "genres", label: "Genres — comma separated", list: true },
+      { k: "country", label: "Country" },
+      { k: "location", label: "Location" },
+      { k: "descr", label: "One line for the roster" },
+      { k: "bio", label: "Biography", long: true },
+      { k: "instagram", label: "Instagram key (from social.js)" },
+      { k: "photo", label: "PHOTO", image: true, folder: "artists" },
+      { k: "poster", label: "POSTER", image: true, folder: "posters" },
+    ],
+  },
+  records: {
+    label: "release", key: "slug", title: (x) => x.title,
+    blank: { slug: "", title: "", artist: "", kind: "ALBUM", tagline: "", catalog: "",
+             release_date: "", cover: "", playlist: "", note: "", tracks: [], published: true },
+    fields: [
+      { k: "title", label: "Title" },
+      { k: "artist", label: "Artist" },
+      { k: "kind", label: "Kind", options: ["ALBUM", "EP", "SINGLE"] },
+      { k: "tagline", label: "Tagline" },
+      { k: "catalog", label: "Catalogue number" },
+      { k: "release_date", label: "Release date" },
+      { k: "playlist", label: "Playlist link" },
+      { k: "note", label: "Note", long: true },
+      { k: "cover", label: "COVER", image: true, folder: "records" },
+    ],
+  },
+  mixes: {
+    label: "sessions page", key: "slug", title: (x) => x.name,
+    blank: { slug: "", artist_id: "", name: "", alias: "", photo: "", genres: [],
+             intro: "", coming_soon: false, coming_soon_note: "", sections: [], published: true },
+    fields: [
+      { k: "name", label: "Name" },
+      { k: "alias", label: "Also known as" },
+      { k: "genres", label: "Genres — comma separated", list: true },
+      { k: "intro", label: "Intro", long: true },
+      { k: "coming_soon_note", label: "Coming-soon note" },
+      { k: "photo", label: "PHOTO", image: true, folder: "artists" },
+    ],
+  },
+};
+
+function ContentEditor({ kind }) {
+  const shape = CONTENT_SHAPES[kind];
+  const [rows, setRows] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(shape.blank);
+  const [msg, setMsg] = useState("");
+  const [tone, setTone] = useState("bad");
+
+  const load = useCallback(async () => {
+    const res = await api.listContent(kind);
+    if (res.ok) setRows(res.items || []);
+    else setMsg(res.error || "Couldn't load these.");
+  }, [kind]);
+  useEffect(() => { load(); setEditing(null); }, [load]);
+
+  const startNew = () => { setForm({ ...shape.blank }); setEditing("new"); };
+  const startEdit = (item) => {
+    setEditing(item[shape.key]);
+    setForm({ ...shape.blank, ...item });
+  };
+
+  const save = async () => {
+    setMsg("");
+    const payload = { ...form };
+    // An empty key on a new record is unusable, so make one from the title.
+    if (editing === "new" && !payload[shape.key]) {
+      if (shape.key === "slug") {
+        payload.slug = String(shape.title(payload) || "").toLowerCase().trim()
+          .replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").slice(0, 50);
+      } else {
+        payload.id = Math.max(0, ...rows.map((r) => Number(r.id) || 0)) + 1;
+      }
+    }
+    const res = editing === "new"
+      ? await api.createContent(kind, payload)
+      : await api.editContent(kind, editing, payload);
+    if (!res.ok) { setTone("bad"); setMsg(res.error || "Couldn't save."); return; }
+    setTone("good"); setMsg("Saved.");
+    setEditing(null);
+    load();
+  };
+
+  const remove = async (id, title) => {
+    if (!window.confirm(`Delete ${title}? This cannot be undone.`)) return;
+    const res = await api.deleteContent(kind, id);
+    if (!res.ok) { setTone("bad"); setMsg(res.error || "Couldn't delete."); return; }
+    setTone("good"); setMsg("Deleted.");
+    load();
+  };
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  return (
+    <>
+      <Notice message={msg} tone={tone} />
+
+      {!editing && (
+        <Section title={`${kind.toUpperCase()} — ${rows.length}`}>
+          <button onClick={startNew} style={{ ...btn, marginBottom: "16px" }}>
+            ADD {shape.label.toUpperCase()}
+          </button>
+          {rows.map((item) => (
+            <div key={item[shape.key]} className="flex items-center gap-3 py-3"
+                 style={{ borderBottom: `1px solid ${theme.rule}`, opacity: item.published ? 1 : 0.55 }}>
+              {(item.photo || item.cover) && (
+                <img src={item.photo || item.cover} alt="" loading="lazy"
+                     style={{ width: "38px", height: "38px", objectFit: "cover", flexShrink: 0 }} />
+              )}
+              <span className="flex-1 min-w-0">
+                <span className="block" style={{ ...fontText, fontSize: "16.5px", color: theme.ink }}>
+                  {shape.title(item)}
+                </span>
+                <span className="block" style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.12em", color: theme.ink2 }}>
+                  {item[shape.key]}{item.published ? "" : " · HIDDEN"}
+                </span>
+              </span>
+              <button onClick={() => startEdit(item)}
+                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink,
+                               background: "transparent", border: 0, cursor: "pointer" }}>EDIT</button>
+              <button onClick={() => remove(item[shape.key], shape.title(item))}
+                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: "#7A2E2E",
+                               background: "transparent", border: 0, cursor: "pointer" }}>DELETE</button>
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {editing && (
+        <Section title={editing === "new" ? `A NEW ${shape.label.toUpperCase()}` : `EDITING ${editing}`}>
+          <div className="space-y-3">
+            {shape.fields.map((f) => {
+              if (f.image) {
+                return (
+                  <ImagePicker key={f.k} label={f.label} value={form[f.k] || ""} folder={f.folder}
+                               onChange={(path) => set(f.k, path)} />
+                );
+              }
+              if (f.options) {
+                return (
+                  <Field key={f.k} label={f.label}>
+                    <select style={inputStyle} value={form[f.k] || ""} onChange={(e) => set(f.k, e.target.value)}>
+                      {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </Field>
+                );
+              }
+              if (f.list) {
+                return (
+                  <Field key={f.k} label={f.label}>
+                    <input style={inputStyle}
+                           value={Array.isArray(form[f.k]) ? form[f.k].join(", ") : (form[f.k] || "")}
+                           onChange={(e) => set(f.k, e.target.value.split(",").map((x) => x.trim()).filter(Boolean))} />
+                  </Field>
+                );
+              }
+              if (f.long) {
+                return (
+                  <Field key={f.k} label={f.label}>
+                    <textarea rows={5} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }}
+                              value={form[f.k] || ""} onChange={(e) => set(f.k, e.target.value)} />
+                  </Field>
+                );
+              }
+              return (
+                <Field key={f.k} label={f.label}>
+                  <input style={inputStyle} value={form[f.k] || ""} onChange={(e) => set(f.k, e.target.value)} />
+                </Field>
+              );
+            })}
+
+            <label className="flex items-center gap-2.5 pt-1" style={{ cursor: "pointer" }}>
+              <input type="checkbox" checked={form.published !== false}
+                     onChange={(e) => set("published", e.target.checked)} />
+              <span style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+                Shown on the site
+              </span>
+            </label>
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={save} style={btn}>SAVE</button>
               <button onClick={() => setEditing(null)} style={ghost}>CANCEL</button>
             </div>
           </div>
@@ -1362,6 +1580,48 @@ function Settings({ parties }) {
             </p>
           </div>
         ))}
+      </Section>
+
+      <Section title="THE FLOATING BAR">
+        <p className="m-0 mb-3" style={{ ...fontText, fontSize: "14.5px", lineHeight: 1.55, color: theme.ink2 }}>
+          Signed in as boss the bar carries five extra tabs, which is a lot for
+          a phone. Below the limit they share the width; above it the bar
+          scrolls instead of squeezing everything to nothing.
+        </p>
+
+        {[
+          { key: "barMaxTabs", label: "Scroll above this many tabs", unit: "tabs" },
+          { key: "barTabWidth", label: "Tab width when scrolling", unit: "px" },
+          { key: "barLabelSize", label: "Label size", unit: "px" },
+        ].map((r) => (
+          <div key={r.key} className="flex items-center gap-3 py-3"
+               style={{ borderBottom: `1px solid ${theme.rule}` }}>
+            <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              {r.label}
+            </span>
+            <input type="number" step={r.key === "barLabelSize" ? "0.5" : "1"}
+                   value={values[r.key]}
+                   onChange={(e) => set(r.key, Number(e.target.value))}
+                   style={{ ...inputStyle, width: "90px", textAlign: "right" }} />
+            <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink2, width: "34px" }}>
+              {r.unit}
+            </span>
+          </div>
+        ))}
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.barShowLabels} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("barShowLabels", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Show labels under the icons
+            </span>
+            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Turn off for icons only. Far more fit across, at the cost of
+              having to know what each one means.
+            </span>
+          </span>
+        </label>
       </Section>
 
       <Section title="THE SITE">
@@ -1713,14 +1973,19 @@ function ConsoleScreen({ role }) {
     Open the tab named in the address, so the bar can link straight to
     settings or posts rather than dropping you on the passes list every time.
   */
-  const [tab, setTab] = useState(() => {
-    try {
-      const wanted = new URLSearchParams(window.location.search).get("tab");
-      return wanted || "passes";
-    } catch {
-      return "passes";
-    }
-  });
+  const location = useLocation();
+  const [tab, setTab] = useState("passes");
+
+  /*
+    Follow the tab named in the address, and keep following it.
+
+    Reading it only once meant the bar's SETTINGS link did nothing when you
+    were already on the console: the address changed, the page did not.
+  */
+  useEffect(() => {
+    const wanted = new URLSearchParams(location.search).get("tab");
+    if (wanted) setTab(wanted);
+  }, [location.search]);
   const [parties, setParties] = useState([]);
   const [party, setParty] = useState("");
   const [msg, setMsg] = useState("");
@@ -1782,6 +2047,9 @@ function ConsoleScreen({ role }) {
         {tab === "requests" && <Requests role={role} party={party} />}
         {tab === "stats" && <Stats party={party} />}
         {tab === "posts" && role.can.issuePasses && <Posts />}
+        {["artists","records","mixes"].includes(tab) && role.can.issuePasses && (
+          <ContentEditor key={tab} kind={tab} />
+        )}
         {tab === "settings" && role.can.manageTeam && <Settings parties={parties} />}
       </section>
       <Footer />

@@ -7,12 +7,13 @@ import {
   Nav, Footer, useGoogleFonts, Instagram, BookingDrawer,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
-import { ARTISTS, ROSTER_NOTE } from "../lib/data";
+import { ARTISTS, ROSTER_NOTE, useArtists } from "../lib/data";
 import { SOCIAL } from "../lib/social";
 
 export default function Agency() {
   useGoogleFonts();
   const { t } = useLang();
+  const artists = useArtists();
   usePageMeta({ title: "Agency", description: "Booking and representation for the Hidden State roster." });
   const [drawer, setDrawer] = useState(false);
   const [chosen, setChosen] = useState(null);
@@ -55,7 +56,7 @@ export default function Agency() {
           AVAILABLE FOR BOOKING
         </p>
         <div style={{ borderTop: "1px solid " + theme.ink }} className="mb-2" />
-        {ARTISTS.map((a) => (
+        {artists.map((a) => (
           <div key={a.id} className="grid md:grid-cols-[180px_1fr_auto] gap-4 md:gap-7 items-center py-6"
                style={{ borderBottom: "1px solid " + theme.rule }}>
             <Link to={`/artists/${a.id}`}>

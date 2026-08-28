@@ -41,10 +41,16 @@ export default function Pass() {
       if (!alive) return;
       setState({ loading: false, ...res });
       if (res.ok && res.refreshIn) setLeft(res.refreshIn);
-      // Remember this pass on the device, so the bar can offer a way back.
-      if (res.ok) {
-        try { localStorage.setItem("hs-guest-pass", res.pass.code); } catch { /* not fatal */ }
-      }
+      /*
+        Remember a working pass so the bar can offer a way back — and forget
+        one that no longer works. Leaving a cancelled code stored meant the
+        MY PASS tab took someone straight to "this pass has been cancelled"
+        every time, with no way out of it.
+      */
+      try {
+        if (res.ok) localStorage.setItem("hs-guest-pass", res.pass.code);
+        else localStorage.removeItem("hs-guest-pass");
+      } catch { /* not fatal */ }
 
       /*
         Redraw the QR each time the number changes, so the square and the
@@ -96,13 +102,26 @@ export default function Pass() {
     return shell(
       <div className="text-center">
         <h1 className="m-0" style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(26px,6vw,40px)" }}>
-          {state.revoked ? "This pass has been cancelled." : "We couldn't find that pass."}
+          {state.revoked ? "This pass has been cancelled." : "You don't have a pass yet."}
         </h1>
-        <p className="m-0 mt-3" style={{ ...fontText, fontSize: "17px", color: theme.ink2 }}>
+        <p className="m-0 mt-3" style={{ ...fontText, fontSize: "17px", lineHeight: 1.55, color: theme.ink2 }}>
           {state.revoked
-            ? "Speak to whoever issued it."
-            : state.error || "Check the link, or ask whoever sent it to resend."}
+            ? "Speak to whoever issued it, or ask for a new one."
+            : "If you were sent one, open the link from your email. Otherwise you can ask for a pass."}
         </p>
+
+        <div className="flex flex-wrap justify-center gap-4 mt-7">
+          <Link to="/guestlist" className="px-7 py-3.5"
+                style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
+                         background: theme.ink, color: theme.bg }}>
+            ASK FOR A PASS
+          </Link>
+          <Link to="/mypass" className="px-7 py-3.5"
+                style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
+                         color: theme.ink, border: `1px solid ${theme.ink}` }}>
+            I HAVE A CODE
+          </Link>
+        </div>
         {/* Someone who followed a broken link is exactly the person who needs
             this, so it belongs here rather than buried elsewhere. */}
         <div className="mt-8 pt-6 mx-auto" style={{ borderTop: `1px solid ${theme.rule}`, maxWidth: "360px" }}>

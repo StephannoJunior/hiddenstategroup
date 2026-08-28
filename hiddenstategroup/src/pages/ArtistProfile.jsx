@@ -8,16 +8,17 @@ import {
   Nav, Footer, useGoogleFonts, BookingDrawer, Instagram,
   fontDisplay, fontUtility, fontText, fontMasthead, theme,
 } from "../components/Shared";
-import { ARTISTS } from "../lib/data";
+import { ARTISTS, useArtists } from "../lib/data";
 import { SOCIAL } from "../lib/social";
 import { MIX_ARTISTS } from "../lib/mixes";
 
 export default function ArtistProfile() {
   useGoogleFonts();
   const { t } = useLang();
+  const artists = useArtists();
   const { id } = useParams();
   const [drawer, setDrawer] = useState(false);
-  const a = ARTISTS.find((x) => String(x.id) === id);
+  const a = artists.find((x) => String(x.id) === id);
   useArtistSchema(a);
   usePageMeta({ title: a ? (a.alias ? `${a.name} — ${a.alias}` : a.name) : "Artist", description: a ? a.bio.slice(0, 155) : "Hidden State roster.", image: a ? a.photo : null, type: "profile" });
 

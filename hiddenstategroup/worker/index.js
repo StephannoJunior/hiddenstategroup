@@ -538,6 +538,16 @@ const DEFAULT_SETTINGS = {
   // The line shown after someone asks.
   requestThanksMessage: "We'll be in touch. If you're on the list, your pass arrives by email before the night.",
 
+  // ── the floating bar ─────────────────────────────────────────────────────
+  // Above this many tabs the bar scrolls rather than squeezing them.
+  barMaxTabs: 9,
+  // Width of each tab once it scrolls.
+  barTabWidth: 64,
+  // Label size. Smaller fits more; larger is readable in a dark room.
+  barLabelSize: 7.5,
+  // Labels off leaves icons only, which fits far more across.
+  barShowLabels: true,
+
   // Closes the whole site to visitors, leaving the door tools working. For a
   // rebuild, or if something needs taking down quickly.
   siteClosed: false,
@@ -559,6 +569,7 @@ const PUBLIC_SETTINGS = [
   "guestListLinkVisible", "guestListOpen",
   "siteClosed", "siteClosedMessage",
   "maxPeoplePerRequest", "requestThanksMessage",
+  "barMaxTabs", "barTabWidth", "barLabelSize", "barShowLabels",
 ];
 
 async function getSettings(env) {
@@ -1059,6 +1070,179 @@ async function handleApi(request, env, url, ctx) {
     return json({ ok: true, slug });
   }
 
+  /*
+    UPLOADING A PHOTO.
+
+    Stored in R2 and served back through this Worker at /media/..., so nothing
+    needs a public bucket address and every image stays behind your own domain.
+
+    Deliberately strict about what it accepts. An upload endpoint that takes
+    anything is a way to host anything, and this one is reachable by every
+    account that can write a post.
+  */
+  if (path === "/upload" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    if (!env.MEDIA) return fail("Photo storage is not connected.", 500);
+
+    const form = await request.formData().catch(() => null);
+    const file = form && form.get("file");
+    if (!file || typeof file === "string") return fail("No file received.");
+
+    const ALLOWED = {
+      "image/jpeg": "jpg", "image/png": "png",
+      "image/webp": "webp", "image/gif": "gif",
+    };
+    const ext = ALLOWED[file.type];
+    if (!ext) return fail("Images only — JPEG, PNG, WebP or GIF.");
+
+    const MAX = 8 * 1024 * 1024;
+    if (file.size > MAX) return fail("That image is over 8MB. Please shrink it first.");
+
+    /*
+      The stored name is ours, not theirs. A filename from a phone can contain
+      anything, and letting it decide the path is how an upload folder ends up
+      with surprises in it.
+    */
+    const folder = (form.get("folder") || "uploads").toString().replace(/[^a-z0-9-]/gi, "").slice(0, 24) || "uploads";
+    const stamp = new Date().toISOString().slice(0, 10);
+    const key = `${folder}/${stamp}-${randomHex(6)}.${ext}`;
+
+    await env.MEDIA.put(key, file.stream(), {
+      httpMetadata: { contentType: file.type, cacheControl: "public, max-age=31536000, immutable" },
+      customMetadata: { uploadedBy: who.username, originalName: String(file.name || "").slice(0, 120) },
+    });
+
+    return json({ ok: true, path: `/media/${key}`, key });
+  }
+
+  // What has been uploaded, so the editor can offer them.
+  if (path === "/media" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    if (!env.MEDIA) return json({ ok: true, files: [] });
+
+    const listed = await env.MEDIA.list({ limit: 500 });
+    const files = listed.objects
+      .map((o) => ({ path: `/media/${o.key}`, key: o.key, size: o.size, uploaded: o.uploaded }))
+      .sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
+    return json({ ok: true, files });
+  }
+
+  if (path.startsWith("/media/") && method === "DELETE") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const key = decodeURIComponent(path.slice(7));
+    await env.MEDIA.delete(key);
+    return json({ ok: true, key });
+  }
+
+  /*
+    ARTISTS, RECORDS AND MIXES.
+
+    One handler for all three, because they differ only in their columns. Three
+    near-identical copies would be three places to fix every future change.
+
+    Reading is public — the site uses it. Writing needs the same permission as
+    posts.
+  */
+  const CONTENT = {
+    artists: {
+      table: "artists", key: "id",
+      cols: ["id","name","alias","type","genres","country","location","descr","bio",
+             "photo","poster","instagram","sort_order","published"],
+      json: ["genres"],
+    },
+    records: {
+      table: "records", key: "slug",
+      cols: ["slug","title","artist","kind","tagline","catalog","release_date","cover",
+             "playlist","note","tracks","sort_order","published"],
+      json: ["tracks"],
+    },
+    mixes: {
+      table: "mixes", key: "slug",
+      cols: ["slug","artist_id","name","alias","photo","genres","intro","coming_soon",
+             "coming_soon_note","sections","sort_order","published"],
+      json: ["genres","sections"],
+    },
+  };
+
+  const contentMatch = path.match(/^\/content\/(\w+)(?:\/(.+))?$/);
+  if (contentMatch) {
+    const [, kind, id] = contentMatch;
+    const def = CONTENT[kind];
+    if (!def) return fail("No such content type.", 404);
+
+    // Parse the JSON columns on the way out so pages never have to.
+    const shape = (row) => {
+      const out = { ...row };
+      for (const col of def.json) {
+        try { out[col] = JSON.parse(row[col] || "[]"); } catch { out[col] = []; }
+      }
+      out.published = !!row.published;
+      return out;
+    };
+
+    if (method === "GET") {
+      const who = await readSession(env, request);
+      const drafts = who && can(who, "issuePasses");
+      const rows = await env.DB.prepare(
+        `SELECT * FROM ${def.table} ${drafts ? "" : "WHERE published = 1"} ORDER BY sort_order, ${def.key}`
+      ).all();
+      return json({ ok: true, items: rows.results.map(shape) });
+    }
+
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+
+    if (method === "POST") {
+      const fields = [];
+      const marks = [];
+      const values = [];
+      for (const col of def.cols) {
+        // Accept either the column name or its camelCase form.
+        const camel = col.replace(/_(\w)/g, (m, c) => c.toUpperCase());
+        let v = body[col] !== undefined ? body[col] : body[camel];
+        if (v === undefined) continue;
+        if (def.json.includes(col)) v = JSON.stringify(v);
+        if (typeof v === "boolean") v = v ? 1 : 0;
+        fields.push(col); marks.push("?"); values.push(v);
+      }
+      if (!fields.length) return fail("Nothing to save.");
+      await env.DB.prepare(
+        `INSERT INTO ${def.table} (${fields.join(", ")}, updated_at) VALUES (${marks.join(", ")}, ?)`
+      ).bind(...values, now()).run();
+      return json({ ok: true });
+    }
+
+    if (method === "PATCH" && id) {
+      const sets = [];
+      const values = [];
+      for (const col of def.cols) {
+        if (col === def.key) continue;   // the key itself is never rewritten
+        const camel = col.replace(/_(\w)/g, (m, c) => c.toUpperCase());
+        let v = body[col] !== undefined ? body[col] : body[camel];
+        if (v === undefined) continue;
+        if (def.json.includes(col)) v = JSON.stringify(v);
+        if (typeof v === "boolean") v = v ? 1 : 0;
+        sets.push(`${col} = ?`); values.push(v);
+      }
+      if (!sets.length) return fail("Nothing to change.");
+      await env.DB.prepare(
+        `UPDATE ${def.table} SET ${sets.join(", ")}, updated_at = ? WHERE ${def.key} = ?`
+      ).bind(...values, now(), decodeURIComponent(id)).run();
+      return json({ ok: true });
+    }
+
+    if (method === "DELETE" && id) {
+      await env.DB.prepare(`DELETE FROM ${def.table} WHERE ${def.key} = ?`)
+        .bind(decodeURIComponent(id)).run();
+      return json({ ok: true });
+    }
+
+    return fail("Unknown request.", 400);
+  }
+
   // ── the door ────────────────────────────────────────────────────────────
   if (path === "/scan" && method === "POST") {
     const who = await readSession(env, request);
@@ -1470,12 +1654,15 @@ async function handleApi(request, env, url, ctx) {
       return fail("An id, a name and a closing time are required.");
     }
     await env.DB.prepare(
-      "INSERT INTO parties (id, name, date_label, venue, doors_close_at, minimum_age, rotating, capacity, created_at, created_by) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO parties (id, name, date_label, venue, starts_at, doors_close_at, minimum_age, " +
+      "rotating, capacity, lineup, artwork, description, created_at, created_by) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       body.id, body.name, body.dateLabel || body.name, body.venue || null,
-      body.doorsCloseAt, body.minimumAge ?? 16, body.rotating === false ? 0 : 1,
-      body.capacity || null, now(), who.username
+      body.startsAt || null, body.doorsCloseAt, body.minimumAge ?? 16,
+      body.rotating === false ? 0 : 1, body.capacity || null,
+      body.lineup || null, body.artwork || null, body.description || null,
+      now(), who.username
     ).run();
     return json({ ok: true, id: body.id });
   }
@@ -1492,6 +1679,7 @@ async function handleApi(request, env, url, ctx) {
       doorsCloseAt: "doors_close_at", startsAt: "starts_at",
       minimumAge: "minimum_age", rotating: "rotating",
       archived: "archived", capacity: "capacity", lineup: "lineup",
+      artwork: "artwork", description: "description",
     };
     for (const [key, column] of Object.entries(map)) {
       if (body[key] !== undefined) {
@@ -2005,6 +2193,24 @@ export default {
         const detail = env.DEBUG_ERRORS === "1" && err ? String(err.message) : undefined;
         return json({ ok: false, error: "Something went wrong.", detail }, 500);
       }
+    }
+
+    /*
+      Uploaded photographs. Served from here rather than a public bucket so
+      the address stays on your own domain, and cached hard because an
+      uploaded file never changes — a new upload gets a new name.
+    */
+    if (url.pathname.startsWith("/media/")) {
+      if (!env.MEDIA) return new Response("Not found", { status: 404 });
+      const key = decodeURIComponent(url.pathname.slice(7));
+      const object = await env.MEDIA.get(key);
+      if (!object) return new Response("Not found", { status: 404 });
+
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set("etag", object.httpEtag);
+      headers.set("cache-control", "public, max-age=31536000, immutable");
+      return new Response(object.body, { headers });
     }
 
     // Everything else is the website itself.

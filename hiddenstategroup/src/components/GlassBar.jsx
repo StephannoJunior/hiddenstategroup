@@ -5,6 +5,7 @@ import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info,
 import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 import * as api from "../lib/api";
+import { useSite } from "../lib/site";
 
 /*
   GlassBar — floating navigation on phones.
@@ -68,6 +69,7 @@ export default function GlassBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useLang();
+  const site = useSite();
 
   /*
     The bar gains one extra tab depending on who is signed in:
@@ -185,6 +187,17 @@ export default function GlassBar() {
     });
   };
 
+  /*
+    How the bar lays itself out, adjustable in settings because what reads
+    well depends on the phone and on how many tabs a person has.
+  */
+  const allTabs = [...TABS, ...extraTabs];
+  const tabWidth = site.barTabWidth || 64;
+  const labelSize = site.barLabelSize || 7.5;
+  const showLabels = site.barShowLabels !== false;
+  // Roughly what fits across a phone before the text stops being readable.
+  const crowded = allTabs.length > (site.barMaxTabs || 9);
+
   const isActive = (href) =>
     href === "/" ? location.pathname === "/" : location.pathname.startsWith(href);
 
@@ -294,12 +307,20 @@ export default function GlassBar() {
               transition: `opacity 200ms ease, transform 500ms ${SPRING}`,
             }}
           >
-            {/* Every tab shares the width equally, so all eight are visible
-                on a phone without sliding. Labels shrink rather than the bar
-                scrolling — being able to see the whole map matters more than
-                a comfortable label size. */}
-            <div className="flex relative" style={{ padding: "6px", gap: "2px" }}>
-              {[...TABS, ...extraTabs].map(({ href, key, Icon }) => {
+            {/*
+              Eight tabs share a phone's width comfortably. Thirteen do not —
+              signed in as boss there are five more, and each one ends up
+              around 26px wide with unreadable text.
+
+              So: share the width while they fit, and scroll once they do not.
+              Squeezing past that point makes every tab useless rather than
+              just the last few.
+            */}
+            <div
+              className={`flex relative ${crowded ? "overflow-x-auto no-scrollbar" : ""}`}
+              style={{ padding: "6px", gap: "2px", scrollSnapType: crowded ? "x proximity" : "none" }}
+            >
+              {allTabs.map(({ href, key, Icon }) => {
                 const active = isActive(href);
                 return (
                   <Link
@@ -308,8 +329,12 @@ export default function GlassBar() {
                     onClick={() => setOpen(false)}
                     className="flex flex-col items-center justify-center shrink-0 relative"
                     style={{
-                      flex: "1 1 0",
-                      minWidth: 0,
+                      // Fixed width once crowded, so text stays readable and
+                      // the row scrolls instead.
+                      flex: crowded ? "0 0 auto" : "1 1 0",
+                      width: crowded ? `${tabWidth}px` : undefined,
+                      minWidth: crowded ? `${tabWidth}px` : 0,
+                      scrollSnapAlign: "center",
                       padding: "8px 2px",
                       borderRadius: "16px",
                       gap: "5px",
@@ -319,20 +344,22 @@ export default function GlassBar() {
                     }}
                   >
                     <Icon size={19} strokeWidth={1.6} color={active ? theme.bg : theme.ink} aria-hidden="true" />
-                    <span
-                      style={{
-                        ...fontUtility,
-                        fontSize: "7.5px",
-                        letterSpacing: "0.02em",
-                        color: active ? theme.bg : theme.ink,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        maxWidth: "100%",
-                      }}
-                    >
-                      {t(key)}
-                    </span>
+                    {showLabels && (
+                      <span
+                        style={{
+                          ...fontUtility,
+                          fontSize: `${labelSize}px`,
+                          letterSpacing: "0.02em",
+                          color: active ? theme.bg : theme.ink,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          maxWidth: "100%",
+                        }}
+                      >
+                        {t(key)}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

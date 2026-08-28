@@ -40,6 +40,19 @@
     "crons": ["0 9 * * *"]
   },
 
+  /*
+    Photo storage. Create a bucket called hidden-state-media in the Cloudflare
+    dashboard under R2, and this connects to it. Uploaded images are served
+    back through the Worker at /media/..., so nothing needs a public bucket
+    URL and the files stay behind your own domain.
+  */
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "hidden-state-media"
+    }
+  ],
+
   // The D1 database.
   "d1_databases": [
     {

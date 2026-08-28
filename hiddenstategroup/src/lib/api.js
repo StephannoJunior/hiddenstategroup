@@ -136,6 +136,47 @@ export const maintenance = (action, extra = {}) =>
   call("/maintenance", { method: "POST", body: { action, ...extra } });
 
 /*
+  Photographs.
+
+  Uploading does not go through `call` because that sends JSON — a file needs
+  multipart form data, and the browser must set its own content-type header
+  with the boundary in it.
+*/
+export async function uploadImage(file, folder = "posts") {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("folder", folder);
+
+  // Built as a Headers object so the type is unambiguous; the browser
+  // still sets content-type itself, which multipart requires.
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("authorization", `Bearer ${token}`);
+
+  try {
+    const res = await fetch("/api/upload", { method: "POST", headers, body });
+    return await res.json();
+  } catch {
+    return { ok: false, error: "Couldn't reach the server. Check the signal." };
+  }
+}
+
+export const listMedia = () => call("/media");
+export const deleteMedia = (key) =>
+  call(`/media/${encodeURIComponent(key)}`, { method: "DELETE" });
+
+/*
+  Artists, records and mixes. One set of calls for all three — they differ
+  only in their fields, and the server handles that.
+*/
+export const listContent = (kind) => call(`/content/${kind}`, { auth: false });
+export const createContent = (kind, item) => call(`/content/${kind}`, { method: "POST", body: item });
+export const editContent = (kind, id, changes) =>
+  call(`/content/${kind}/${encodeURIComponent(id)}`, { method: "PATCH", body: changes });
+export const deleteContent = (kind, id) =>
+  call(`/content/${kind}/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+/*
   Posts.
 
   Reading is public — the news pages use it. Writing needs a login, and the

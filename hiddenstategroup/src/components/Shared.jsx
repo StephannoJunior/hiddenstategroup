@@ -229,15 +229,6 @@ export function Nav() {
         <div className="max-w-[1180px] mx-auto px-[18px] h-[76px] lg:h-[92px] relative flex items-center justify-between">
           {/* left — the dateline, capped so it can never reach the logo */}
           <span className="min-w-0 overflow-hidden" style={{ maxWidth: "34%" }}>
-            {/* Shown only while the guest list is open and the setting allows
-              it — no point sending people to a form that will refuse them. */}
-          {site.guestListLinkVisible && site.guestListOpen && (
-            <Link to="/guestlist" className="pb-0.5 mb-3 inline-block"
-                  style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em",
-                           color: theme.ink, borderBottom: `1px solid ${theme.brass}` }}>
-              ASK FOR A PASS
-            </Link>
-          )}
 
           <LiveDateline />
           </span>

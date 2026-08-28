@@ -26,6 +26,10 @@ const FALLBACK = {
   bookingEmail: "booking@hiddenstategroup.com",
   guestListLinkVisible: true,
   guestListOpen: true,
+  barMaxTabs: 9,
+  barTabWidth: 64,
+  barLabelSize: 7.5,
+  barShowLabels: true,
   siteClosed: false,
   siteClosedMessage: "Back shortly.",
 };
