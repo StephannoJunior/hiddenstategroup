@@ -122,7 +122,7 @@ export default function GlassBar() {
     }
 
     return () => { alive = false; };
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   /*
     What the bar shows depends entirely on who is looking.
@@ -195,11 +195,62 @@ export default function GlassBar() {
   const tabWidth = site.barTabWidth || 64;
   const labelSize = site.barLabelSize || 7.5;
   const showLabels = site.barShowLabels !== false;
-  // Roughly what fits across a phone before the text stops being readable.
-  const crowded = allTabs.length > (site.barMaxTabs || 9);
 
-  const isActive = (href) =>
-    href === "/" ? location.pathname === "/" : location.pathname.startsWith(href);
+  /*
+    Whether the bar scrolls is a question about WIDTH, not about how many tabs
+    there are.
+
+    Counting tabs meant a laptop with room for twenty was told to scroll at
+    ten, while a narrow phone squeezed nine into nothing. Measuring the bar
+    itself — and measuring again whenever it changes — means it opens fully
+    wherever there is room, and scrolls only when there genuinely is not.
+
+    ResizeObserver catches a window resize, an iPad rotating, and a
+    split-screen change alike, which a window resize listener alone does not.
+  */
+  const barRef = useRef(null);
+  const [available, setAvailable] = useState(0);
+
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const measure = () => setAvailable(el.clientWidth);
+    measure();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(measure);
+      observer.observe(el);
+      return () => observer.disconnect();
+    }
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [allTabs.length]);
+
+  // The narrowest a tab can be and still be read. Icons alone need less.
+  const minTab = showLabels ? Math.max(46, tabWidth * 0.72) : 38;
+  // Until it has been measured, assume there is room: guessing "crowded"
+  // would make the bar scroll for a moment on every load.
+  const crowded = available > 0 && available / allTabs.length < minTab;
+
+  /*
+    Which tab is lit.
+
+    The console's own tabs live in the address as ?tab=..., so comparing only
+    the path meant /console, /console?tab=posts and /console?tab=settings all
+    looked identical — the pill sat on the first of them and never moved.
+
+    A link carrying no tab matches only when no tab is showing, so the console
+    icon does not stay lit while you are in settings.
+  */
+  const isActive = (href) => {
+    const [hrefPath, hrefQuery] = href.split("?");
+    if (hrefPath === "/") return location.pathname === "/";
+    if (!location.pathname.startsWith(hrefPath)) return false;
+
+    const wanted = hrefQuery ? new URLSearchParams(hrefQuery).get("tab") : null;
+    const current = new URLSearchParams(location.search).get("tab");
+    return wanted ? current === wanted : !current;
+  };
 
   // Clear, not milky. Low opacity so the page reads through the panel.
   const pane = {
@@ -248,9 +299,23 @@ export default function GlassBar() {
           WebkitBackfaceVisibility: "hidden",
         }}
       >
-        {/* Fixed-height stage. Both states are absolutely placed inside it, so
-            neither pushes the other and the slide stays perfectly smooth. */}
-        <div className="relative w-full max-w-[560px]" style={{ height: "72px" }}>
+        {/*
+          Fixed-height stage. Both states sit absolutely inside it, so neither
+          pushes the other and the slide stays smooth.
+
+          The width follows the number of tabs rather than a fixed 560px: with
+          five team tabs added there is simply more to show, and a laptop or
+          iPad has the room for it. Capped so it never stretches across a large
+          monitor and leaves the tabs marooned at the edges.
+        */}
+        <div
+          ref={barRef}
+          className="relative w-full"
+          style={{
+            height: "72px",
+            maxWidth: `${Math.min(1080, Math.max(560, allTabs.length * (tabWidth + 6)))}px`,
+          }}
+        >
 
           {/* collapsed pill */}
           <div
