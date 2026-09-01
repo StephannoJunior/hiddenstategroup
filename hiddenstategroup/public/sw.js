@@ -25,7 +25,7 @@
 // You rarely need to: Vite already fingerprints JS and CSS filenames, so a
 // changed file is automatically a new file. This is for the rare case of
 // clearing something stubborn.
-const CACHE_VERSION = "hidden-state-v3";
+const CACHE_VERSION = "hidden-state-v4";
 const OFFLINE_URL = "/";
 
 const PRECACHE = [
@@ -75,6 +75,37 @@ self.addEventListener("fetch", (event) => {
 
   if (request.method !== "GET") return;
   const target = new URL(request.url);
+
+  /*
+    THE TYPEFACES.
+
+    These are the one thing worth keeping from another origin. Without this
+    the installed app opens offline set in Georgia — the layout holds, but it
+    stops looking like the site. Cache-first with a background refresh: a
+    served font is instant, and a new weight still arrives on the next visit.
+
+    Google serves the stylesheet with a short cache life and the font files
+    with a year, so the stylesheet is the one that needs revalidating.
+  */
+  if (target.hostname === "fonts.googleapis.com" || target.hostname === "fonts.gstatic.com") {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_VERSION);
+        const hit = await cache.match(request);
+        const live = fetch(request)
+          .then((res) => {
+            // Opaque cross-origin responses are cacheable and perfectly
+            // usable for fonts; only genuine failures are skipped.
+            if (res && (res.ok || res.type === "opaque")) cache.put(request, res.clone());
+            return res;
+          })
+          .catch(() => null);
+        return hit || (await live) || Response.error();
+      })()
+    );
+    return;
+  }
+
   if (target.origin !== self.location.origin) return;
 
   /*

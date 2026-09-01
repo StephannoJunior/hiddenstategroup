@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { fontDisplay, fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 
@@ -26,6 +26,81 @@ function remaining(target) {
     minutes: Math.floor((ms % 3600000) / 60000),
     seconds: Math.floor((ms % 60000) / 1000),
   };
+}
+
+/*
+  ── A ROLLING DIGIT ──────────────────────────────────────────────────────
+
+  A strip of the ten numerals inside a window one numeral tall, moved up by
+  whole steps. The new number arrives from below, which is the direction time
+  is going, and the old one leaves upward.
+
+  WHY A STRIP AND NOT TWO CROSS-FADED SPANS. Cross-fading gives you a moment
+  where both numbers are half-there and the figure is unreadable. A strip is
+  always showing exactly one digit; it is only ever between two of them.
+
+  THE 9 → 0 CASE. Rolling forward from 9 to 0 would run the strip backwards
+  past every digit — a whole second of blur once a minute. So the strip
+  carries an extra 0 on the end: nine rolls forward into it, and the strip is
+  then snapped back to the real 0 with the transition off, in the same frame,
+  where nobody can see it happen.
+*/
+const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+
+function Digit({ value, size }) {
+  const [pos, setPos] = useState(value);
+  const [animate, setAnimate] = useState(true);
+  const prev = useRef(value);
+
+  useEffect(() => {
+    if (value === prev.current) return;
+    const wrapping = prev.current === 9 && value === 0;
+    prev.current = value;
+
+    if (!wrapping) { setAnimate(true); setPos(value); return; }
+
+    setAnimate(true);
+    setPos(10); // the spare zero at the end of the strip
+
+    // Once the roll has finished, jump back to the real zero with the
+    // transition off. Two frames of grace so the browser has actually
+    // painted the end of the animation before the style changes under it.
+    const id = setTimeout(() => {
+      setAnimate(false);
+      setPos(0);
+      requestAnimationFrame(() => requestAnimationFrame(() => setAnimate(true)));
+    }, 540);
+    return () => clearTimeout(id);
+  }, [value]);
+
+  return (
+    <span className="hs-roll" style={{ height: "1em", fontSize: size }} aria-hidden="true">
+      <span
+        className="hs-roll-strip"
+        style={{
+          transform: `translateY(-${pos}em)`,
+          transition: animate ? undefined : "none",
+        }}
+      >
+        {DIGITS.map((d, i) => <span key={i}>{d}</span>)}
+      </span>
+    </span>
+  );
+}
+
+/*
+  The rolling figures are decorative and hidden from assistive technology; a
+  screen reader is given the plain number instead. Watching a digit spin is
+  not information, and hearing one announced ten times a second is not either.
+*/
+function Rolling({ value, size }) {
+  const text = String(value).padStart(2, "0");
+  return (
+    <span style={{ display: "inline-flex" }}>
+      <span className="sr-only">{text}</span>
+      {text.split("").map((d, i) => <Digit key={i} value={Number(d)} size={size} />)}
+    </span>
+  );
 }
 
 export default function Countdown({ target = DECEMBER_13, label = null, compact = false }) {
@@ -93,7 +168,7 @@ export default function Countdown({ target = DECEMBER_13, label = null, compact 
                 fontFeatureSettings: '"tnum" 1, "lnum" 1',
               }}
             >
-              {String(u.value).padStart(2, "0")}
+              <Rolling value={u.value} size={size} />
             </span>
             <span
               className="mt-1.5"

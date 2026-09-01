@@ -3,7 +3,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  PageHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 
 /*
@@ -19,12 +19,11 @@ export default function NotFound() {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <section className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-20 text-center">
-        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          Stop Press
-        </h1>
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
+      <PageHead kicker="STOP PRESS" title="404" sub="THIS PAGE WENT TO PRINT WITHOUT US" />
+
+      <section className="max-w-[900px] mx-auto px-[18px] pb-20 text-center">
 
         <h2 className="mt-8 mb-3" style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(26px,6vw,44px)" }}>
           This page went to print without us.

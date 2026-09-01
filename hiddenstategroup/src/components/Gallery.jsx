@@ -103,7 +103,7 @@ export default function Gallery({ photos = [], prefix = "hidden-state", title = 
 
       {error && (
         <p className="mt-3 mb-0 px-3 py-2.5"
-           style={{ ...fontText, fontSize: "15px", color: "#7A2E2E", border: "1px solid #C08A8A" }}>
+           style={{ ...fontText, fontSize: "15px", color: theme.bad, border: `1px solid ${theme.badLine}` }}>
           {error}
         </p>
       )}

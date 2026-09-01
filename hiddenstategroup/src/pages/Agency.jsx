@@ -5,7 +5,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts, Instagram, BookingDrawer,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  PageHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import { ARTISTS, ROSTER_NOTE, useArtists } from "../lib/data";
 import { SOCIAL } from "../lib/social";
@@ -22,17 +22,10 @@ export default function Agency() {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
 
-      <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
-        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          {t("theAgency")}
-        </h1>
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
-        <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
-          {t("agencySub")}
-        </p>
-      </section>
+      <PageHead kicker="BOOKING &amp; REPRESENTATION" title={t("theAgency")} sub={t("agencySub")} />
 
       <section className="max-w-[900px] mx-auto px-[18px] pt-8">
         <p className="m-0" style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.64, color: theme.ink }}>

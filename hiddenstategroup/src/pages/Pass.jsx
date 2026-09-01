@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  PageHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import * as api from "../lib/api";
 
@@ -47,10 +47,7 @@ export default function Pass() {
         MY PASS tab took someone straight to "this pass has been cancelled"
         every time, with no way out of it.
       */
-      try {
-        if (res.ok) localStorage.setItem("hs-guest-pass", res.pass.code);
-        else localStorage.removeItem("hs-guest-pass");
-      } catch { /* not fatal */ }
+      api.setGuestPass(res.ok ? res.pass.code : null);
 
       /*
         Redraw the QR each time the number changes, so the square and the
@@ -62,7 +59,7 @@ export default function Pass() {
           const QR = await import("qrcode");
           const url = await QR.toDataURL(`HS|${res.pass.code}|${res.code}`, {
             margin: 1, width: 560,
-            color: { dark: "#16130E", light: "#EFE6D0" },
+            color: { dark: theme.ink, light: theme.bg },
           });
           if (alive) setQr(url);
         } catch {
@@ -85,7 +82,11 @@ export default function Pass() {
   const shell = (children) => (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <section className="max-w-[520px] mx-auto px-[18px] pt-[104px] pb-24">{children}</section>
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
+      <PageHead kicker="YOUR ENTRY" title="The Pass"
+                sub="SHOW THIS AT THE DOOR" />
+      <section className="max-w-[520px] mx-auto px-[18px] pb-24">{children}</section>
       <Footer />
     </div>
   );
@@ -188,10 +189,7 @@ export default function Pass() {
 
   return shell(
     <>
-      <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(24px,6vw,38px)" }}>
-        Entry Pass
-      </h1>
-      <div className="flex justify-between py-1.5 mt-2"
+      <div className="flex justify-between py-1.5"
            style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
                     borderTop: `1px solid ${theme.ink}`, borderBottom: `1px solid ${theme.ink}` }}>
         <span>{pass.kind}</span>
@@ -216,7 +214,7 @@ export default function Pass() {
         </div>
       )}
 
-      <div className="mt-7 p-5" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
+      <div className="mt-7 p-5" style={{ border: `1px solid ${theme.ink}`, background: theme.sunk }}>
         {qr ? (
           <img src={qr} alt="Entry code" className="block"
                style={{ width: "100%", maxWidth: "300px", margin: "0 auto", imageRendering: "pixelated" }} />

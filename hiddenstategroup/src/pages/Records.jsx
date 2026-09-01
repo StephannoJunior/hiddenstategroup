@@ -4,7 +4,7 @@ import Img from "../components/Img";
 import React from "react";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  PageHead, IndexBand, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import { ALBUMS, watchUrl } from "../lib/records";
 import { SOCIAL } from "../lib/social";
@@ -79,19 +79,15 @@ export default function Records() {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
-        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          {t("theRecords")}
-        </h1>
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
-        <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
-          {t("recordsSub")}
-        </p>
-        <p className="mt-2.5 mb-0">
-          <Instagram account={SOCIAL.records} size="10.5px" />
-        </p>
-      </section>
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
+            <IndexBand top items={[
+        { label: "CATALOGUE", value: ALBUMS[0] ? ALBUMS[0].catalog + " \u2014" : "\u2014" },
+        { label: "RELEASES", value: String(ALBUMS.length).padStart(2, "0") },
+        { label: "TRACKS", value: String(ALBUMS.reduce((n, a) => n + a.tracks.length, 0)).padStart(2, "0") },
+        { label: "GENRE", value: "AFRO HOUSE / TECH" },
+      ]} />
+      <PageHead flush kicker="THE LABEL" title={t("theRecords")} sub={t("recordsSub")} />
 
       {ALBUMS.map((a) => <Album key={a.slug} a={a} />)}
 

@@ -1,3 +1,4 @@
+import { theme } from "../lib/theme";
 import React from "react";
 
 /*
@@ -37,8 +38,8 @@ export default class ErrorBoundary extends React.Component {
     return (
       <div
         style={{
-          background: "#F3EBD9",
-          color: "#16130E",
+          background: theme.bg,
+          color: theme.ink,
           minHeight: "100vh",
           display: "flex",
           alignItems: "center",
@@ -53,14 +54,14 @@ export default class ErrorBoundary extends React.Component {
               fontFamily: "'Space Grotesk', sans-serif",
               fontSize: "9.5px",
               letterSpacing: "0.2em",
-              color: "#8A6A28",
+              color: theme.brass,
               margin: 0,
             }}
           >
             STOP PRESS
           </p>
-          <div style={{ borderTop: "2px solid #16130E", marginTop: "10px" }} />
-          <div style={{ borderTop: "1px solid #16130E", marginTop: "3px" }} />
+          <div style={{ borderTop: `2px solid ${theme.ink}`, marginTop: "10px" }} />
+          <div style={{ borderTop: `1px solid ${theme.ink}`, marginTop: "3px" }} />
 
           <h1
             style={{
@@ -73,7 +74,7 @@ export default class ErrorBoundary extends React.Component {
           >
             Something went wrong on this page.
           </h1>
-          <p style={{ fontSize: "17px", lineHeight: 1.6, color: "#463F35", margin: 0 }}>
+          <p style={{ fontSize: "17px", lineHeight: 1.6, color: theme.ink2, margin: 0 }}>
             The rest of the site is fine. Reloading usually clears it.
           </p>
 
@@ -84,8 +85,8 @@ export default class ErrorBoundary extends React.Component {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontSize: "10px",
                 letterSpacing: "0.2em",
-                background: "#16130E",
-                color: "#F3EBD9",
+                background: theme.ink,
+                color: theme.bg,
                 border: 0,
                 padding: "13px 30px",
                 cursor: "pointer",
@@ -99,8 +100,8 @@ export default class ErrorBoundary extends React.Component {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontSize: "10px",
                 letterSpacing: "0.2em",
-                color: "#16130E",
-                borderBottom: "1px solid #8A6A28",
+                color: theme.ink,
+                borderBottom: `1px solid ${theme.brass}`,
                 alignSelf: "center",
                 textDecoration: "none",
               }}

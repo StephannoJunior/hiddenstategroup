@@ -6,9 +6,9 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  DetailHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
-import { getMixArtist, platformOf } from "../lib/mixes";
+import { getMixArtist, platformOf, countMixes } from "../lib/mixes";
 import { ARTISTS } from "../lib/data";
 import { SOCIAL } from "../lib/social";
 
@@ -23,6 +23,8 @@ export default function MixArtist() {
     return (
       <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
         <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
         <section className="max-w-[1180px] mx-auto px-[18px] pt-[140px] pb-24 text-center">
           <h1 style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(28px,6vw,44px)" }}>
             We couldn't find those sessions.
@@ -44,40 +46,19 @@ export default function MixArtist() {
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
-      <article className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-16">
-        <Link to="/mixes" className="inline-flex items-center gap-2 mb-6"
-              style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.18em", color: theme.ink2 }}>
-          <ArrowLeft size={12} strokeWidth={1.5} /> ALL SESSIONS
-        </Link>
+      <DetailHead
+        items={[
+          { label: "SESSIONS", value: String(countMixes(a)).padStart(2, "0") },
+          { label: "SOUND", value: a.genres[0].toUpperCase() },
+          { label: "FORMAT", value: "DJ SET / RADIO" },
+        ]}
+        image={a.photo}
+        meta={a.genres.join(" · ").toUpperCase()}
+        title={a.name}
+        sub={a.alias}
+        backTo="/mixes" backLabel="ALL SESSIONS" />
 
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,6.5vw,42px)" }}>
-          {t("sessionsRadio")}
-        </h1>
-        <div className="flex justify-between py-1.5 mt-2"
-             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
-                      borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
-          <span>HIDDEN STATE</span>
-          <span>{a.genres[0].toUpperCase()}</span>
-        </div>
-
-        <h2 className="text-center mt-6 mb-1"
-            style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(32px,8vw,58px)", lineHeight: 1.05 }}>
-          {a.name}
-        </h2>
-        {a.alias && (
-          <p className="text-center m-0" style={{ ...fontDisplay, fontStyle: "italic", fontSize: "22px", color: theme.brass }}>
-            {a.alias}
-          </p>
-        )}
-        <p className="text-center py-2.5 mt-4 m-0"
-           style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2,
-                    borderTop: "2px solid " + theme.ink, borderBottom: "2px solid " + theme.ink }}>
-          {a.genres.join(" · ").toUpperCase()}
-        </p>
-
-        <figure className="m-0 mt-6">
-          <Img src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
-        </figure>
+      <article className="max-w-[900px] mx-auto px-[18px] pt-8 pb-16">
 
         <div className="md:columns-2 md:gap-x-9 mt-6"
              style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.64, color: theme.ink }}>
@@ -110,7 +91,7 @@ export default function MixArtist() {
                       {m.title}
                     </span>
                     <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", color: theme.ink2, whiteSpace: "nowrap" }}>
-                      {platformOf(m.url)}
+                      {platformOf(m.url, m.icon)}
                     </span>
                     <span style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em", color: theme.brass, whiteSpace: "nowrap" }}>
                       PLAY →

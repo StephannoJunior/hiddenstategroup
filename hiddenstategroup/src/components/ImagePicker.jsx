@@ -58,7 +58,7 @@ export default function ImagePicker({ label, value, onChange, folder = "posts" }
       <div className="flex items-start gap-3">
         {/* What is chosen, so nobody has to read a path to know. */}
         <div style={{ width: "72px", height: "72px", flexShrink: 0,
-                      border: `1px solid ${theme.rule}`, background: "#EFE6D0",
+                      border: `1px solid ${theme.rule}`, background: theme.sunk,
                       display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
           {value ? (
             <img src={value} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -99,7 +99,7 @@ export default function ImagePicker({ label, value, onChange, folder = "posts" }
             </p>
           )}
           {error && (
-            <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", color: "#7A2E2E" }}>
+            <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", color: theme.bad }}>
               {error}
             </p>
           )}

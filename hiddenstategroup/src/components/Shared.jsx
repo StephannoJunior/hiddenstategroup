@@ -11,42 +11,14 @@ import { useSite } from "../lib/site";
 import { FORM_ENDPOINT, CONTACT_EMAIL, BOOKING_EMAIL } from "../lib/config";
 
 /*
-  HIDDEN STATE — Design tokens (dark editorial + vintage press hybrid)
-  Color:
-    --bg:      #0A0A09  (warm near-black, not pure black)
-    --bg-2:    #131211  (raised surface)
-    --fg:      #F4F1EA  (off-white, warm — "newsprint on black")
-    --fg-dim:  #8C887E  (muted warm grey for meta text)
-    --line:    #2A2823  (hairline borders)
-    --accent:  #B98A2E  (muted brass/gold — used only for tiny marks: live dot,
-                          underline on hover, category rule. Never large fills.)
-  Type:
-    Masthead — 'UnifrakturCook' (blackletter, used ONLY for the wordmark and
-                                  the press-strip: "the paper's nameplate")
-    Display  — 'Fraunces' (serif, optical, high-fashion editorial headlines)
-    Utility  — 'Space Grotesk' (tracked-out caps for nav/labels/meta)
-    Body     — 'Inter' (article copy, readable at small sizes)
-
-  This file holds every component reused across all pages: the press-strip
-  nav, footer, wordmark, stamps, grain texture and scroll-reveal wrapper.
-  Every page imports from here instead of redefining its own copy.
+  Shared furniture: the masthead, the footer, the wordmark, the booking form,
+  and the primitives of the Sleeve & Index system defined just below.
+  Every page imports from here rather than redefining its own copy.
 */
 
-export const fontDisplay = { fontFamily: "'Fraunces', serif" };
-// Broadsheet on paper — the demo-8 look, which is the approved main theme.
-// Warm ivory stock, ink text, hairline rules, blackletter only for mastheads.
-export const theme = {
-  bg: "#F3EBD9",     // stock
-  ink: "#16130E",    // headline / body
-  ink2: "#463F35",   // captions, meta
-  rule: "#C4B593",   // hairlines
-  brass: "#8A6A28",  // accents, italics
-  raised: "#16130E", // image wells
-};
-export const fontText = { fontFamily: "'EB Garamond', Georgia, serif" };
-export const fontUtility = { fontFamily: "'Space Grotesk', sans-serif" };
-export const fontBody = { fontFamily: "'Inter', sans-serif" };
-export const fontMasthead = { fontFamily: "'UnifrakturCook', serif" };
+import { theme, fontDisplay, fontText, fontUtility, fontBody, fontMasthead } from "../lib/theme";
+// Re-exported so every page keeps importing its tokens from one place.
+export { theme, fontDisplay, fontText, fontUtility, fontBody, fontMasthead };
 
 export function useGoogleFonts() {
   useEffect(() => {
@@ -56,11 +28,372 @@ export function useGoogleFonts() {
     link.id = id;
     link.rel = "stylesheet";
     link.href =
-      "https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500&family=UnifrakturCook:wght@700&display=swap";
+      "https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,700;0,6..96,900;1,6..96,400;1,6..96,700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap";
     document.head.appendChild(link);
   }, []);
 }
 
+/*
+  ── THE INDEX REGISTER ────────────────────────────────────────────────────
+  An ink band of metadata. Facts the page would otherwise have to say in a
+  sentence, worn on the outside instead: dates, counts, catalogue numbers.
+  Give it two to five pairs — more and it stops scanning.
+*/
+/*
+  ── PRINT FURNITURE ───────────────────────────────────────────────────────
+  Three details that separate ink on paper from a black rectangle on a beige
+  website. None of them uses a blend mode, a full-screen overlay or a sticky
+  panel — the three things that have broken this site on iOS.
+*/
+
+// Ink soaks. A black band laid on paper darkens the fibres just below it, and
+// that faint halo is most of why real print reads as pressed rather than
+// placed. Six pixels of it, under every band on the site.
+export function Bleed() {
+  return (
+    <span aria-hidden="true" className="block" style={{
+      height: "7px", marginTop: "-1px",
+      background: "linear-gradient(rgba(20,18,14,0.20), rgba(20,18,14,0))",
+    }} />
+  );
+}
+
+// Registration marks — the crosshairs a printer uses to line up each colour
+// pass. Here they mark where one register hands over to the other.
+export function RegMark({ color }) {
+  return (
+    <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" style={{ display: "block", opacity: 0.55 }}>
+      <circle cx="5.5" cy="5.5" r="3.4" fill="none" stroke={color || theme.brass} strokeWidth="0.7" />
+      <path d="M5.5 0v11M0 5.5h11" stroke={color || theme.brass} strokeWidth="0.7" />
+    </svg>
+  );
+}
+
+/*
+  A halftone screen. Photographs in print are not continuous tone — they are
+  a field of dots, and at this size the eye reads the dots as ink rather than
+  as pixels. Laid over the picture at low opacity, no blend mode involved.
+*/
+export function Halftone({ opacity = 0.26, size = 4 }) {
+  // Turned off in the console gives clean, modern photography instead.
+  const site = useSite();
+  if (site.photoHalftone === false) return null;
+  return (
+    <span aria-hidden="true" className="absolute inset-0" style={{
+      backgroundImage: "radial-gradient(circle at center, rgba(20,18,14,0.62) 0.8px, rgba(20,18,14,0) 1.1px)",
+      backgroundSize: `${size}px ${size}px`,
+      opacity,
+      pointerEvents: "none",
+    }} />
+  );
+}
+
+export function IndexBand({ items, top = false }) {
+  /*
+    `top` is for a band that opens a page. The masthead is fixed, so anything
+    at the very top of a page has to be pushed clear of it by hand — the same
+    104px every page already carries, topped up on desktop where the masthead
+    is taller.
+  */
+  return (
+    <div className={top ? "pt-[104px] lg:pt-[124px]" : undefined}
+         style={{ background: top ? theme.bg : undefined }}>
+    <div style={{ background: theme.ink, color: theme.bg }}>
+      <div className="max-w-[1180px] mx-auto grid"
+           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(112px, 1fr))" }}>
+        {items.map((it, i) => (
+          <div key={it.label}
+               style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.14em",
+                        padding: "10px 14px", color: "rgba(237,228,208,0.58)",
+                        borderRight: i < items.length - 1 ? "1px solid rgba(237,228,208,0.16)" : undefined }}>
+            {it.label}
+            <b style={{ display: "block", color: theme.bg, fontWeight: 700, fontSize: "11px", marginTop: "4px" }}>
+              {it.value}
+            </b>
+          </div>
+        ))}
+      </div>
+    </div>
+    <Bleed />
+    </div>
+  );
+}
+
+/*
+  A contact sheet. Photographs as evidence rather than as moments: uniform,
+  greyscale, numbered. Individually ordinary pictures read as a strong set,
+  which is what a growing archive actually has.
+*/
+export function ContactSheet({ frames, note }) {
+  /*
+    A CONTACT SHEET IS PRINTED FROM NEGATIVES, AND A NEGATIVE HAS A SHAPE.
+
+    These cells used to be a fixed 150px tall, which is landscape — so a 3:4
+    portrait got squeezed into it and the subject's head ended up cropped off
+    near the top edge. A photograph of a person that cuts the person is not a
+    smaller photograph, it is a different one.
+
+    So the cells are portrait, the way 35mm frames are when the camera is
+    held upright, and each frame can say where its subject sits. `pos`
+    defaults to a third of the way down, which is where a face lands in
+    almost every portrait ever taken.
+  */
+  return (
+    <section style={{ background: theme.bg }}>
+      <div className="max-w-[1180px] mx-auto">
+        <div className="flex justify-between items-center" style={{ ...fontUtility, fontSize: "9.5px",
+             letterSpacing: "0.18em", color: theme.ink2, padding: "11px 18px",
+             borderTop: `1px solid ${theme.rule}`, borderBottom: `1px solid ${theme.rule}` }}>
+          <span className="flex items-center gap-3"><RegMark /> CONTACT SHEET</span>
+          <span>{note || `${String(frames.length).padStart(2, "0")} FRAMES`}</span>
+        </div>
+        <div className="grid" style={{ gap: "1px", background: theme.rule,
+             gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
+          {frames.map((f, i) => (
+            <figure key={f.src} className="m-0 relative" style={{ background: theme.bg }}>
+              <Img src={f.src} alt={f.alt || ""}
+                   style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover",
+                            objectPosition: f.pos || "center 32%",
+                            filter: "grayscale(1) contrast(1.12) brightness(1.02)" }} />
+              <Halftone opacity={0.22} size={3} />
+              <figcaption style={{ ...fontUtility, position: "absolute", top: 0, left: 0,
+                          background: theme.ink, color: theme.bg, fontSize: "9px",
+                          padding: "2px 6px", letterSpacing: "0.08em" }}>
+                {String(i + 1).padStart(2, "0")}
+              </figcaption>
+              {f.caption && (
+                <figcaption style={{ ...fontUtility, position: "absolute", left: 0, right: 0, bottom: 0,
+                            background: "rgba(20,18,14,0.82)", color: theme.bg, fontSize: "8.5px",
+                            padding: "5px 7px", letterSpacing: "0.16em" }}>
+                  {f.caption}
+                </figcaption>
+              )}
+            </figure>
+          ))}
+        </div>
+        <div style={{ borderBottom: `1px solid ${theme.rule}` }} />
+      </div>
+    </section>
+  );
+}
+
+/*
+  A full-height portrait, printed as a plate rather than dropped into a grid.
+  Kept separate from the contact sheet on purpose: a sheet is evidence, a
+  plate is a portrait, and the same picture should not do both jobs at once.
+*/
+export function Plate({ src, alt, caption, credit }) {
+  return (
+    <figure className="m-0 relative" style={{ background: theme.ink }}>
+      <Img src={src} alt={alt || ""}
+           style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover",
+                    objectPosition: "center 28%",
+                    filter: "grayscale(1) contrast(1.10) sepia(0.20) brightness(1.04)" }} />
+      <Halftone opacity={0.20} size={3} />
+      {(caption || credit) && (
+        <figcaption className="flex justify-between gap-4" style={{ ...fontUtility, fontSize: "9px",
+                    letterSpacing: "0.16em", color: theme.ink2, background: theme.bg,
+                    padding: "9px 2px 0", borderTop: `1px solid ${theme.rule}`, marginTop: "7px" }}>
+          <span>{caption}</span><span>{credit}</span>
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
+/*
+  A numbered entry. The number is real information — these are catalogue
+  positions, not decoration — so it is set in the accent and in mono.
+*/
+export function Entry({ n, title, children, invert = false }) {
+  // On ink, oxblood goes nearly black. The number keeps its job by going to
+  // the stock colour instead — the accent is not load-bearing here.
+  const rule = invert ? "rgba(237,228,208,0.20)" : theme.rule;
+  const num = invert ? "rgba(237,228,208,0.62)" : theme.brass;
+  const head = invert ? theme.bg : theme.ink;
+  const body = invert ? "rgba(237,228,208,0.72)" : theme.ink2;
+  return (
+    <div className="grid items-start" style={{ gridTemplateColumns: "46px 1fr", gap: "16px",
+         padding: "22px 0", borderBottom: `1px solid ${rule}` }}>
+      <span style={{ ...fontUtility, fontSize: "11px", color: num, paddingTop: "9px" }}>{n}</span>
+      <div>
+        <h3 className="m-0 mb-1.5" style={{ ...fontDisplay, fontWeight: 700, fontSize: "clamp(24px,4.4vw,34px)",
+            letterSpacing: "-0.018em", color: head }}>{title}</h3>
+        <p className="m-0" style={{ ...fontText, fontSize: "17px", lineHeight: 1.55,
+           color: body, maxWidth: "54ch" }}>{children}</p>
+      </div>
+    </div>
+  );
+}
+
+/*
+  ── AN INK-GROUND SECTION ─────────────────────────────────────────────────
+  Not a band — a whole stretch of page that goes black and comes back. It is
+  the loudest move in the system, so it is used once or twice per page at
+  most; a site that is half black has no black in it.
+*/
+export function InkSection({ children, className = "" }) {
+  return (
+    <>
+      <section className={className} style={{ background: theme.ink, color: theme.bg }}>
+        <div className="max-w-[1180px] mx-auto px-[18px] py-12">{children}</div>
+      </section>
+      <Bleed />
+    </>
+  );
+}
+
+/*
+  Every page opened the same way: a centred title between a thick rule and a
+  thin one. Thirteen pages, one gesture, and it made the whole site read as
+  one long document rather than as a place with rooms in it.
+
+  This is the replacement. The name is set enormous, tight and flush left —
+  a catalogue's cover, not a chapter heading — with the section it belongs to
+  named above it in mono. No rules: the ink band that sits above it is already
+  the hardest edge on the page, and a double rule underneath would be a second
+  full stop.
+*/
+export function PageHead({ kicker, title, sub, flush = false }) {
+  return (
+    <section style={{ background: theme.bg }} className={flush ? "" : "pt-[104px] lg:pt-[124px]"}>
+      <div className="max-w-[1180px] mx-auto px-[18px] pt-9 pb-7">
+        {kicker && (
+          <p className="m-0 mb-4 flex items-center gap-3" style={{ ...fontUtility, fontSize: "9.5px",
+             letterSpacing: "0.22em", color: theme.brass }}><RegMark />{kicker}</p>
+        )}
+        <h1 className="m-0" style={{ ...fontDisplay, fontWeight: 900, textTransform: "uppercase",
+            fontSize: "clamp(46px,13vw,138px)", lineHeight: 0.82, letterSpacing: "-0.05em",
+            color: theme.ink, textWrap: "balance" }}>
+          {title}
+        </h1>
+        {sub && (
+          <p className="m-0 mt-5" style={{ ...fontUtility, fontSize: "9.5px",
+             letterSpacing: "0.18em", color: theme.ink2 }}>{sub}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/*
+  ── A DETAIL PAGE ─────────────────────────────────────────────────────────
+
+  Every page about ONE THING — an article, a night, an artist, a set of mixes
+  — opened the same way: a back link, "Hidden State" centred in the masthead
+  face, a hairline row of meta, the subject's name centred under it, and a
+  genre line hung between two rules. Four pages, one gesture, repeated so
+  exactly that you could not tell an artist from an event at a glance.
+
+  Which was the real problem. A detail page has a subject, and that subject
+  almost always has a PHOTOGRAPH — a portrait, a poster, a sleeve. Putting the
+  name on the picture instead of above it is the whole sleeve idea, and it
+  costs nothing: the picture was already on the page, three hundred pixels
+  further down, boxed and captioned.
+
+  So: the facts go in the band, the name goes on the photograph, and the back
+  link sits underneath in mono where it belongs. A subject with no picture
+  falls back to the same flush-left name every other page uses, which is a
+  quieter page rather than a broken one.
+*/
+export function DetailHead({ items, image, title, sub, meta, backTo, backLabel }) {
+  return (
+    <>
+      {items && items.length > 0 && <IndexBand top items={items} />}
+
+      {image ? (
+        <Sleeve src={image} alt={title} height="clamp(340px, 58vw, 720px)" pos="center 32%">
+          {meta && (
+            <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "9.5px",
+               letterSpacing: "0.24em", color: theme.onInk }}>{meta}</p>
+          )}
+          <h1 className="m-0" style={{ ...fontDisplay, fontWeight: 700, color: theme.bg,
+              fontSize: "clamp(38px,9vw,96px)", lineHeight: 0.94, letterSpacing: "-0.035em",
+              textWrap: "balance", textShadow: "0 4px 40px rgba(0,0,0,0.55)" }}>
+            {title}
+          </h1>
+          {sub && (
+            <p className="m-0 mt-2.5" style={{ ...fontDisplay, fontStyle: "italic",
+               fontSize: "clamp(20px,3.4vw,30px)", color: theme.onInk,
+               textShadow: "0 3px 30px rgba(0,0,0,0.6)" }}>{sub}</p>
+          )}
+        </Sleeve>
+      ) : (
+        <PageHead flush={!!(items && items.length)} kicker={meta} title={title} sub={sub} />
+      )}
+
+      {backTo && (
+        <div className="max-w-[900px] mx-auto px-[18px] pt-6">
+          <Link to={backTo} className="inline-flex items-center gap-2"
+                style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
+            ← {backLabel}
+          </Link>
+        </div>
+      )}
+    </>
+  );
+}
+
+/*
+  ── THE SLEEVE REGISTER ───────────────────────────────────────────────────
+  A photograph printed into the ink, with something laid over it. Never a
+  picture in a box with a caption underneath — that was the old site's habit
+  and it is what made the images feel like illustrations of the text.
+
+  The duotone is one filter chain, defined once: desaturate, push contrast,
+  then tint warm. Every photograph on the site gets the same treatment, which
+  is what makes a set of ordinary phone pictures look like one shoot.
+*/
+export const DUOTONE = "grayscale(1) contrast(1.16) sepia(0.44) hue-rotate(-16deg) saturate(1.55)";
+
+/*
+  THE SAME BAND IS A DIFFERENT CROP ON EVERY SCREEN.
+
+  A height of 46vw is generous on a phone, where the viewport is narrow and
+  tall — but on a 1440px laptop the same rule produced a wide letterbox that
+  cut the top and bottom out of the picture. The photograph was fine; the
+  frame around it was the wrong shape.
+
+  So the height is driven by the WIDTH it has to fill: it grows with the
+  viewport rather than stopping at a phone-sized number, and the cap is high
+  enough that a desktop still gets a proper plate. The focal point sits a
+  little above centre, which is where the subject is in every one of these
+  photographs.
+*/
+/*
+  A photograph printed to the trim.
+
+  `caption` is the new part. On a wide screen it hangs in the margin beside
+  the picture rather than sitting under it — which is what a printed page does
+  with a plate, and what stops a full-bleed image from being a decoration with
+  nothing to say about itself. Below 1100px there is no margin to hang into,
+  so the stylesheet puts it back underneath.
+*/
+export function Sleeve({ src, alt = "", height = "clamp(340px, 62vw, 780px)", opacity = 0.62,
+                        pos = "center 42%", children, align = "end", caption = null }) {
+  const site = useSite();
+  const duotone = site.photoDuotone !== false;
+  return (
+    <>
+      <figure className={caption ? "hs-bleed-figure" : undefined} style={{ margin: 0 }}>
+      <section className="relative" style={{ background: theme.ink }}>
+        <Img src={src} alt={alt} eager
+             style={{ width: "100%", height, objectFit: "cover", objectPosition: pos,
+                      filter: duotone ? DUOTONE : "grayscale(0.15) contrast(1.06)",
+                      opacity }} />
+        {/* the screen the picture is printed through */}
+        <Halftone opacity={0.30} size={4} />
+        <div className="absolute inset-0 flex flex-col"
+             style={{ justifyContent: align === "center" ? "center" : "flex-end" }}>
+          <div className="max-w-[1180px] mx-auto w-full px-[18px] pb-7">{children}</div>
+        </div>
+      </section>
+      {caption && <figcaption>{caption}</figcaption>}
+      </figure>
+      <Bleed />
+    </>
+  );
+}
 export function Reveal({ children, delay = 0, className = "" }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
@@ -94,31 +427,35 @@ export function Reveal({ children, delay = 0, className = "" }) {
   );
 }
 
-export function GrainOverlay() {
-  // NOTE: this used mixBlendMode:"overlay" on a fixed full-screen layer.
-  // On iOS that blends against black and darkens the whole page — it was the
-  // cause of the "everything looks dark" bug. Never reintroduce a blend mode here.
-  return (
-    <div
-      className="pointer-events-none fixed inset-0 z-[60]"
-      style={{
-        opacity: 0.035,
-        backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-      }}
-    />
-  );
-}
+/*
+  NOTHING HERE — an empty state with a voice.
 
-export function DoubleRule({ className = "" }) {
+  A blank screen and an empty screen look identical, and a visitor cannot tell
+  which one they are looking at. So an empty list says what it is empty OF,
+  and, where there is one, what would fill it.
+
+  Set as a small centred plate rather than a line of grey text: it should read
+  as a deliberate part of the page, not as the moment before something loads.
+*/
+export function Nothing({ children, note = null }) {
   return (
-    <div className={className}>
-      <div style={{ borderTop: "2px solid #2A2823" }} />
-      <div style={{ borderTop: "1px solid #2A2823", marginTop: "3px" }} />
+    <div className="text-center py-14 px-5">
+      <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.22em", color: theme.brass }}>
+        NOTHING HERE
+      </p>
+      <p className="m-0 mt-3 mx-auto" style={{ ...fontDisplay, fontStyle: "italic",
+         fontSize: "clamp(20px, 4.6vw, 27px)", lineHeight: 1.28, color: theme.ink, maxWidth: "26ch" }}>
+        {children}
+      </p>
+      {note && (
+        <p className="m-0 mt-3 mx-auto" style={{ ...fontText, fontSize: "16.5px",
+           lineHeight: 1.55, color: theme.ink2, maxWidth: "44ch" }}>
+          {note}
+        </p>
+      )}
     </div>
   );
 }
-
 export function Wordmark({ size = "h-9", dark = false }) {
   // The official line logo. `dark` picks the ink version for paper backgrounds.
   return (
@@ -131,24 +468,11 @@ export function Wordmark({ size = "h-9", dark = false }) {
     />
   );
 }
-
-export function StampTag({ children, tone = "accent" }) {
-  const color = tone === "accent" ? "#B98A2E" : "#F4F1EA";
-  return (
-    <span
-      className="inline-flex items-center px-2 py-[3px] border"
-      style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.14em", color, borderColor: color === "#B98A2E" ? "#4A3B1C" : "#2A2823" }}
-    >
-      {children}
-    </span>
-  );
-}
-
 export function MarkClipping({ src, alt, w = 92 }) {
   return (
     <div
       className="shrink-0 p-2"
-      style={{ background: "#E9DCC3", border: "1px solid #2A2823" }}
+      style={{ background: theme.bg, border: `1px solid ${theme.ink}` }}
     >
       <Img src={src} alt={alt} style={{ width: w, display: "block" }} />
     </div>
@@ -158,7 +482,7 @@ export function MarkClipping({ src, alt, w = 92 }) {
 export function PressStrip() {
   // Marks only — the blackletter wordmark that used to sit in the middle is gone.
   return (
-    <div className="hidden md:flex items-center justify-center gap-5 py-1.5" style={{ borderBottom: "1px solid #C4B593" }}>
+    <div className="hidden md:flex items-center justify-center gap-5 py-1.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
       <MarkClipping src={MARK_SJ} alt="SJ" w={34} />
       <MarkClipping src={MARK_SEAL} alt="Hidden State" w={60} />
       <MarkClipping src={MARK_NOPROBLEM} alt="No Problem" w={52} />
@@ -191,6 +515,21 @@ export function Nav() {
 
   return (
     <>
+      {/*
+        THE SKIP LINK.
+
+        The first thing a keyboard reaches on every page, and invisible until
+        it is reached. Without it, getting to the actual content means tabbing
+        through the masthead and the whole floating bar on every single page —
+        which is the difference between a site somebody can use and one they
+        give up on.
+
+        It is a real link to a real id, not a script: it has to work before
+        JavaScript, because that is when somebody with a slow connection is
+        most likely to be tabbing.
+      */}
+      <a href="#main" className="hs-skip">Skip to the page</a>
+
       {/* One line across the top, set in the console. Nothing renders when
           it is empty, so the masthead sits where it always did. */}
       {site.announcement ? (
@@ -258,29 +597,47 @@ export function Nav() {
 export function Footer() {
   const site = useSite();
   return (
-    <footer style={{ background: theme.bg, borderTop: `2px solid ${theme.ink}` }}>
+    <footer style={{ background: theme.ink, color: theme.bg }}>
       <div className="max-w-[1180px] mx-auto px-[18px] pt-10 pb-16">
         <div className="flex flex-col items-center text-center gap-4">
-          <Wordmark size="h-8" dark />
-          <p style={{ ...fontUtility, color: theme.ink2, fontSize: "9.5px", letterSpacing: "0.2em" }}>
+          <Wordmark size="h-8" />
+          <p style={{ ...fontUtility, color: "rgba(237,228,208,0.62)", fontSize: "9.5px", letterSpacing: "0.2em" }}>
             RECORDS · AGENCY · BOOKING · EVENTS · ARTISTS
           </p>
           <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
-            <Instagram account={SOCIAL.official} />
-            <Instagram account={SOCIAL.group} />
+            <Instagram account={SOCIAL.official} color={theme.bg} />
+            <Instagram account={SOCIAL.group} color={theme.bg} />
           </div>
           {/* Shown only while the guest list is open and the setting allows
               it — no point sending people to a form that will refuse them. */}
+          {/*
+            The pool is always open — it is not gated on the guest list being
+            open, because wanting to hear a song and wanting to get in are
+            different things.
+          */}
+          <Link to="/pool" className="pb-0.5 inline-block"
+                style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em",
+                         color: theme.bg, borderBottom: `1px solid ${theme.bg}` }}>
+            PUT A SONG IN THE POOL
+          </Link>
+
           {site.guestListLinkVisible && site.guestListOpen && (
             <Link to="/guestlist" className="pb-0.5 mb-3 inline-block"
                   style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em",
-                           color: theme.ink, borderBottom: `1px solid ${theme.brass}` }}>
+                           color: theme.bg, borderBottom: `1px solid ${theme.bg}` }}>
               ASK FOR A PASS
             </Link>
           )}
 
-          <LiveDateline />
-          <p style={{ ...fontUtility, color: theme.ink2, fontSize: "9.5px", letterSpacing: "0.2em" }}>
+          <LiveDateline tone="light" />
+
+          {site.footerNote ? (
+            <p style={{ ...fontText, color: "rgba(237,228,208,0.72)", fontSize: "16px",
+                        lineHeight: 1.5, maxWidth: "46ch", textAlign: "center" }}>
+              {site.footerNote}
+            </p>
+          ) : null}
+          <p style={{ ...fontUtility, color: "rgba(237,228,208,0.48)", fontSize: "9.5px", letterSpacing: "0.2em" }}>
             © 2026 HIDDEN STATE — ALL RIGHTS RESERVED
           </p>
         </div>
@@ -391,7 +748,11 @@ export function BookingDrawer({ open, onClose, artist }) {
 
         {submitted ? (
           <div className="p-8 md:p-10">
-            <StampTag>REQUEST SENT</StampTag>
+            <span className="inline-block px-2.5 py-[4px]"
+                  style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em",
+                           color: theme.brass, border: `1px solid ${theme.brass}` }}>
+              REQUEST SENT
+            </span>
             <h3 className="mt-5 text-[26px]" style={{ ...fontDisplay, fontWeight: 500, color: theme.ink }}>
               Thank you.
             </h3>
@@ -452,7 +813,7 @@ export function BookingDrawer({ open, onClose, artist }) {
               <textarea rows={4} style={{ ...inputStyle, resize: "none" }} value={form.message} onChange={update("message")} />
             </Field>
             {error && (
-              <p className="text-[12.5px] leading-relaxed px-3 py-2.5 border" style={{ ...fontBody, color: "#E8B4B4", borderColor: "#5A2A2A", background: "#1A1010" }}>
+              <p className="text-[12.5px] leading-relaxed px-3 py-2.5 border" style={{ ...fontBody, color: theme.bad, borderColor: theme.badLine, background: theme.sunk }}>
                 {error}
               </p>
             )}
@@ -473,84 +834,12 @@ export function BookingDrawer({ open, onClose, artist }) {
 
 // ---- Shared news-grid pieces (used by the Home and News pages) ----
 
-export const CATEGORIES = ["ALL", "MUSIC", "ARTISTS", "RELEASES", "EVENTS", "INTERVIEWS", "INDUSTRY", "EXCLUSIVE"];
 
 export const spanClasses = {
   lg: "md:col-span-4 md:row-span-2",
   md: "md:col-span-3 md:row-span-1",
   wide: "md:col-span-6 md:row-span-1",
 };
-
-export function ArticleCard({ article }) {
-  return (
-    <Link
-      to={`/news/article-${article.id}`}
-      className="group relative flex flex-col overflow-hidden h-full"
-    >
-      <div className={`relative overflow-hidden ${article.span === "wide" ? "aspect-[21/9]" : article.span === "lg" ? "aspect-[4/5] md:aspect-auto md:h-full md:min-h-[420px]" : "aspect-[4/3]"}`}>
-        <Img
-          src={article.image}
-          alt=""
-          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
-        />
-        <div
-          className="absolute inset-0"
-          style={{ background: "linear-gradient(180deg, rgba(10,10,9,0) 50%, rgba(10,10,9,0.85) 100%)" }}
-        />
-        <div className="absolute left-0 right-0 bottom-0 p-5 md:p-6">
-          <div className="mb-3">
-            <StampTag>{article.category}</StampTag>
-          </div>
-          <h3
-            className={`${article.span === "lg" ? "text-[26px] md:text-[32px]" : "text-[20px] md:text-[22px]"} leading-[1.1] mb-2`}
-            style={{ ...fontDisplay, fontWeight: 500, color: "#F4F1EA" }}
-          >
-            {article.headline}
-          </h3>
-          <p
-            className={`${article.span === "lg" ? "block" : "hidden md:block"} text-[13px] leading-relaxed mb-3 max-w-md`}
-            style={{ ...fontBody, color: "#C7C3B8" }}
-          >
-            {article.excerpt}
-          </p>
-          <div className="flex items-center gap-3" style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.08em", color: "#8C887E" }}>
-            <span>{article.date}</span>
-            <span>·</span>
-            <span>{article.readTime}</span>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-export function CategoryBar({ active, setActive }) {
-  return (
-    <div className="border-b sticky top-16 md:top-[112px] z-30" style={{ borderColor: "#2A2823", background: "#0A0A09" }}>
-      <div className="max-w-[1600px] mx-auto px-6 md:px-10">
-        <div className="flex items-center gap-6 md:gap-8 overflow-x-auto no-scrollbar py-4">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActive(cat)}
-              className="shrink-0 text-[12px] tracking-[0.14em] pb-1 border-b transition-colors"
-              style={{
-                ...fontUtility,
-                color: active === cat ? "#F4F1EA" : "#8C887E",
-                borderColor: active === cat ? "#B98A2E" : "transparent",
-              }}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---- Instagram ----
-// Renders "@handle" and links to the account. Pass an entry from SOCIAL.
 export function Instagram({ account, size = "10px", color = null }) {
   if (!account) return null;
   return (
@@ -564,7 +853,9 @@ export function Instagram({ account, size = "10px", color = null }) {
         fontSize: size,
         letterSpacing: "0.14em",
         color: color || theme.ink,
-        borderBottom: "1px solid " + theme.brass,
+        // The rule under the handle follows the text. Oxblood on ink is
+        // almost black, so a fixed accent underline vanished in the footer.
+        borderBottom: "1px solid " + (color || theme.brass),
       }}
     >
       {account.handle}

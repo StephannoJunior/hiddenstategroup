@@ -48,6 +48,106 @@ export function usePageMeta({ title = null, description = "", image = null, type
 }
 
 /*
+  ── A HELPER, BECAUSE THIS WAS WRITTEN OUT FOUR TIMES ────────────────────
+
+  Every schema hook below builds an object, stringifies it into a script tag
+  with a known id, and removes that tag on the way out. Doing it once means a
+  fifth kind of page is three lines rather than twenty, and it fixes a
+  hazard the copies shared: an object holding `undefined` values serialises
+  them away silently, but an object holding `null` does not, and a null in
+  structured data is an error in Google's eyes.
+*/
+function useSchema(id, build, deps) {
+  useEffect(() => {
+    const data = build();
+    if (!data) return undefined;
+
+    document.getElementById(id)?.remove();
+    const tag = document.createElement("script");
+    tag.type = "application/ld+json";
+    tag.id = id;
+    // Nulls and empty strings are dropped rather than published.
+    tag.textContent = JSON.stringify(data, (k, v) =>
+      v === null || v === "" || (Array.isArray(v) && !v.length) ? undefined : v);
+    document.head.appendChild(tag);
+
+    return () => document.getElementById(id)?.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
+/*
+  useArticleSchema — describes a news story.
+
+  This was the gap. Events, artists and releases already described themselves;
+  the news did not, so every article was a plain blue link with no date, no
+  headline treatment and no publisher attached to it.
+
+  DATES ARE THE PART THAT MATTERS. A news result without a date is treated as
+  undated and drops out of anything time-sensitive, which is most of what a
+  label publishes. `sortDate` is already a real ISO date in the content, which
+  is exactly what this needs — the human "21 AUGUST 2026" is unusable here.
+*/
+export function useArticleSchema(article) {
+  useSchema("hs-article-schema", () => {
+    if (!article) return null;
+    const image = article.poster || article.photo;
+    return {
+      "@context": "https://schema.org",
+      "@type": "NewsArticle",
+      headline: article.headline,
+      description: article.summary,
+      datePublished: article.sortDate || undefined,
+      dateModified: article.sortDate || undefined,
+      image: image ? BASE + image : undefined,
+      articleSection: article.category,
+      keywords: article.tags,
+      url: `${BASE}/news/${article.slug}`,
+      mainEntityOfPage: { "@type": "WebPage", "@id": `${BASE}/news/${article.slug}` },
+      author: { "@type": "Organization", name: SITE, url: BASE },
+      publisher: {
+        "@type": "Organization",
+        name: SITE,
+        url: BASE,
+        logo: { "@type": "ImageObject", url: `${BASE}/wordmark-black.png` },
+      },
+      // Word count is a weak signal on its own, but it separates a real piece
+      // from a two-line notice, and both live in this list.
+      wordCount: Array.isArray(article.body)
+        ? article.body.join(" ").split(/\s+/).length
+        : undefined,
+    };
+  }, [article]);
+}
+
+/*
+  useOrganisationSchema — who this is, said once, on the home page.
+
+  The rich results for events and artists all point at an "Organization"
+  called Hidden State, and until now nothing anywhere said what that
+  organisation actually is. This is the page that says it: the name, the mark,
+  and the accounts that are verifiably the same body elsewhere.
+
+  sameAs is the important line. It is how a search engine works out that this
+  site, that Instagram account and that label are one thing rather than three.
+*/
+export function useOrganisationSchema(accounts = []) {
+  useSchema("hs-org-schema", () => ({
+    "@context": "https://schema.org",
+    "@type": "MusicGroup",
+    "@id": `${BASE}/#organisation`,
+    name: SITE,
+    alternateName: "Hidden State Group",
+    url: BASE,
+    logo: `${BASE}/wordmark-black.png`,
+    image: `${BASE}/club.webp`,
+    description:
+      "Hidden State — record label, booking agency and artist roster.",
+    sameAs: accounts,
+  }), [accounts.join("|")]);
+}
+
+/*
   useStructuredData — describes an event in the format Google reads.
 
   This is what allows a listing to appear as a rich result with its date and

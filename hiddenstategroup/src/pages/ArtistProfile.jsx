@@ -6,7 +6,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import {
   Nav, Footer, useGoogleFonts, BookingDrawer, Instagram,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  DetailHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import { ARTISTS, useArtists } from "../lib/data";
 import { SOCIAL } from "../lib/social";
@@ -26,6 +26,8 @@ export default function ArtistProfile() {
     return (
       <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
         <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
         <section className="max-w-[1180px] mx-auto px-[18px] pt-[140px] pb-24 text-center">
           <h1 style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(28px,6vw,44px)" }}>
             We couldn't find that artist.
@@ -45,46 +47,19 @@ export default function ArtistProfile() {
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
-      <article className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-16">
-        <Link to="/artists" className="inline-flex items-center gap-2 mb-6"
-              style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.18em", color: theme.ink2 }}>
-          <ArrowLeft size={12} strokeWidth={1.5} /> THE ROSTER
-        </Link>
+      <DetailHead
+        items={[
+          { label: "DISCIPLINE", value: (a.type || "ARTIST").toUpperCase() },
+          { label: "SOUND", value: a.genres[0].toUpperCase() },
+          ...(a.location ? [{ label: "BASED", value: a.location.toUpperCase() }] : []),
+        ]}
+        image={a.photo}
+        meta={a.genres.join(" · ").toUpperCase()}
+        title={a.name}
+        sub={a.alias}
+        backTo="/artists" backLabel="THE ROSTER" />
 
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,6.5vw,42px)" }}>
-          Hidden State
-        </h1>
-        <div className="flex justify-between py-1.5 mt-2"
-             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
-                      borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
-          <span>{a.type}</span>
-          <span>ROSTER</span>
-          {a.location && <span>{a.location.toUpperCase()}</span>}
-        </div>
-
-        <h2 className="text-center mt-6 mb-1"
-            style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(32px,8vw,58px)", lineHeight: 1.05 }}>
-          {a.name}
-        </h2>
-        {a.alias && (
-          <p className="text-center m-0" style={{ ...fontDisplay, fontStyle: "italic", fontSize: "22px", color: theme.brass }}>
-            {a.alias}
-          </p>
-        )}
-        <p className="text-center py-2.5 mt-4 m-0"
-           style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2,
-                    borderTop: "2px solid " + theme.ink, borderBottom: "2px solid " + theme.ink }}>
-          {a.genres.join(" · ").toUpperCase()}
-        </p>
-
-        <figure className="m-0 mt-6">
-          <Img src={a.photo} alt={a.name} className="w-full block" style={{ background: theme.raised }} />
-          <figcaption className="pt-1.5 mt-1.5"
-            style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em", color: theme.ink2,
-                     borderTop: "1px solid " + theme.rule }}>
-            {a.name.toUpperCase()}{a.alias ? ` — ${a.alias.toUpperCase()}` : ""}
-          </figcaption>
-        </figure>
+      <article className="max-w-[900px] mx-auto px-[18px] pt-8 pb-16">
 
         <div className="md:columns-2 md:gap-x-9 mt-6"
              style={{ ...fontText, fontSize: "17.5px", lineHeight: 1.64, color: theme.ink }}>

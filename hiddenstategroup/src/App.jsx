@@ -5,6 +5,9 @@ import GlassBar from "./components/GlassBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { LangProvider } from "./lib/lang";
 import { SiteProvider, useSite } from "./lib/site";
+import { countView } from "./lib/api";
+import { Reveals, Folio } from "./components/Press";
+import { theme } from "./lib/theme";
 
 /*
   Pages are loaded on demand rather than all at once.
@@ -27,6 +30,7 @@ const Mixes = lazy(() => import("./pages/Mixes"));
 const MixArtist = lazy(() => import("./pages/MixArtist"));
 const About = lazy(() => import("./pages/About"));
 const Contact = lazy(() => import("./pages/Contact"));
+const SongPool = lazy(() => import("./pages/SongPool"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Passes — kept out of the main navigation deliberately. A guest reaches
@@ -51,6 +55,25 @@ function ScrollToTop() {
   return null;
 }
 
+/*
+  Counts one view per page arrived at.
+
+  The door tools and the console are left out on purpose: those are your own
+  traffic, and mixing staff into the numbers is how a readership figure stops
+  meaning anything. A guest's own pass is left out for the same reason it is
+  kept out of the navigation — it is private, not editorial.
+*/
+const UNCOUNTED = ["/console", "/scan", "/doorlist", "/admin", "/guestlist", "/admins-staff-boss", "/mypass"];
+
+function CountViews() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (UNCOUNTED.some((p) => pathname.startsWith(p))) return;
+    countView(pathname);
+  }, [pathname]);
+  return null;
+}
+
 // Shown for the moment a page file is in flight. Deliberately just the paper
 // colour: a spinner that flashes for 80ms is more distracting than nothing.
 /*
@@ -69,14 +92,14 @@ function ClosedGate({ children }) {
   if (!site.siteClosed || stillWorks) return children;
 
   return (
-    <div style={{ background: "#F3EBD9", color: "#16130E", minHeight: "100vh",
+    <div style={{ background: theme.bg, color: theme.ink, minHeight: "100vh",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontFamily: "'EB Garamond', Georgia, serif", padding: "24px" }}>
       <div style={{ textAlign: "center", maxWidth: "420px" }}>
         <img src="/wordmark-black.png" alt="Hidden State"
              style={{ height: "44px", width: "auto", margin: "0 auto 26px", display: "block" }} />
-        <div style={{ borderTop: "2px solid #16130E" }} />
-        <div style={{ borderTop: "1px solid #16130E", marginTop: "3px" }} />
+        <div style={{ borderTop: `2px solid ${theme.ink}` }} />
+        <div style={{ borderTop: `1px solid ${theme.ink}`, marginTop: "3px" }} />
         <p style={{ fontSize: "20px", lineHeight: 1.5, marginTop: "26px" }}>
           {site.siteClosedMessage}
         </p>
@@ -86,7 +109,7 @@ function ClosedGate({ children }) {
 }
 
 function PageFallback() {
-  return <div style={{ background: "#F3EBD9", minHeight: "100vh" }} />;
+  return <div style={{ background: theme.bg, minHeight: "100vh" }} />;
 }
 
 export default function App() {
@@ -97,6 +120,9 @@ export default function App() {
           <ClosedGate>
         <BrowserRouter>
           <ScrollToTop />
+          <CountViews />
+          <Reveals />
+          <Folio />
           <GlassBar />
           <Suspense fallback={<PageFallback />}>
             <Routes>
@@ -120,6 +146,7 @@ export default function App() {
 
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/pool" element={<SongPool />} />
 
               <Route path="/pass/:code" element={<Pass />} />
               <Route path="/mypass" element={<MyPass />} />

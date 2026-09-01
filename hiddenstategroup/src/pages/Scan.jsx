@@ -1,6 +1,7 @@
 import { usePageMeta } from "../lib/seo";
 import React, { useEffect, useRef, useState } from "react";
-import { Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, fontText, fontMasthead, theme } from "../components/Shared";
+import { Nav, Footer, useGoogleFonts, IndexBand, PageHead,
+         fontDisplay, fontUtility, fontText, theme } from "../components/Shared";
 import DoorGate from "../components/DoorGate";
 import * as api from "../lib/api";
 import * as door from "../lib/door";
@@ -20,15 +21,15 @@ import * as door from "../lib/door";
 */
 
 const TONE = {
-  VALID:     { bg: "#1E4620", fg: "#F3EBD9", label: "VALID" },
-  USED:      { bg: "#7A2E2E", fg: "#F3EBD9", label: "ALREADY USED" },
-  EXPIRED:   { bg: "#7A5A2E", fg: "#F3EBD9", label: "CODE EXPIRED" },
-  UNKNOWN:   { bg: "#7A2E2E", fg: "#F3EBD9", label: "NOT ON THE LIST" },
-  NOT_A_PASS:{ bg: "#463F35", fg: "#F3EBD9", label: "NOT A PASS" },
-  PARTY_OVER:{ bg: "#463F35", fg: "#F3EBD9", label: "PASS FOR ANOTHER NIGHT" },
-  NO_PARTY:  { bg: "#463F35", fg: "#F3EBD9", label: "PASS NOT LINKED TO A NIGHT" },
-  WRONG_CODE:{ bg: "#7A2E2E", fg: "#F3EBD9", label: "WRONG CODE" },
-  NOT_VALID: { bg: "#7A2E2E", fg: "#F3EBD9", label: "NOT A VALID CODE" },
+  VALID:     { bg: theme.good, fg: theme.bg, label: "VALID" },
+  USED:      { bg: theme.bad, fg: theme.bg, label: "ALREADY USED" },
+  EXPIRED:   { bg: theme.warn, fg: theme.bg, label: "CODE EXPIRED" },
+  UNKNOWN:   { bg: theme.bad, fg: theme.bg, label: "NOT ON THE LIST" },
+  NOT_A_PASS:{ bg: theme.ink2, fg: theme.bg, label: "NOT A PASS" },
+  PARTY_OVER:{ bg: theme.ink2, fg: theme.bg, label: "PASS FOR ANOTHER NIGHT" },
+  NO_PARTY:  { bg: theme.ink2, fg: theme.bg, label: "PASS NOT LINKED TO A NIGHT" },
+  WRONG_CODE:{ bg: theme.bad, fg: theme.bg, label: "WRONG CODE" },
+  NOT_VALID: { bg: theme.bad, fg: theme.bg, label: "NOT A VALID CODE" },
 };
 
 function ScanScreen({ role }) {
@@ -77,17 +78,45 @@ function ScanScreen({ role }) {
         setOffline(false);
         setAdmitted(door.localAdmittedCount());
 
-        const pending = door.getQueue();
-        if (pending.length) {
-          const sync = await api.syncAdmissions(pending);
-          if (sync.ok) {
-            door.clearQueue();
-            setQueued(0);
-            if (sync.conflicts?.length) {
-              setError(`${sync.conflicts.length} of those were already admitted elsewhere.`);
-            }
-          }
+        /*
+          SEND WHAT IS WAITING, IN BATCHES, AND REMOVE ONLY WHAT LANDED.
+
+          Two hundred at a time: the server takes five hundred per request, so
+          a busy night that queued more than that used to have the remainder
+          silently dropped when the door emptied its whole queue on the first
+          successful reply. Now each batch removes exactly the codes the
+          server says it dealt with, and anything unacknowledged is still
+          there for the next attempt.
+
+          The loop stops the moment a batch fails rather than pressing on:
+          if the signal has gone again, the next one will fail too, and
+          hammering a dead connection at the door helps nobody.
+        */
+        let waiting = door.getQueue();
+        let conflicts = 0;
+        let lost = 0;
+
+        while (waiting.length) {
+          const batch = waiting.slice(0, 200);
+          const sync = await api.syncAdmissions(batch);
+          if (!alive) return;
+          if (!sync.ok) break;
+
+          conflicts += sync.conflicts?.length || 0;
+          lost += sync.rejected?.length || 0;
+
+          const before = waiting.length;
+          waiting = door.dequeue([
+            ...(sync.handled || []),
+            ...(sync.rejected || []).filter(Boolean),
+          ]);
+          // Nothing acknowledged means retrying would loop forever.
+          if (waiting.length >= before) break;
         }
+
+        setQueued(waiting.length);
+        if (conflicts) setError(`${conflicts} of those were already admitted elsewhere.`);
+        else if (lost) setError(`${lost} queued scan${lost === 1 ? "" : "s"} could not be read and ${lost === 1 ? "was" : "were"} dropped.`);
       } else {
         setOffline(true);
       }
@@ -116,7 +145,7 @@ function ScanScreen({ role }) {
     rather than each keeping their own.
   */
   const handle = async (payload) => {
-    const code = String(payload || "").split("|")[1] || String(payload || "");
+    const code = door.codeOf(payload);
     const since = Date.now() - lastScan.current.at;
     if (lastScan.current.code === code && since < COOLDOWN_MS) return;
     lastScan.current = { code, at: Date.now() };
@@ -133,7 +162,8 @@ function ScanScreen({ role }) {
       const local = door.checkOffline(payload);
       if (local.ok) {
         const partyId = roster?.party?.id;
-        door.queueAdmission(local.name && payload.split("|")[1] ? payload.split("|")[1] : payload, partyId);
+        // One reading of the code, shared with the online path — see codeOf.
+        door.queueAdmission(door.codeOf(payload), partyId);
         setQueued(door.getQueue().length);
         setAdmitted((n) => n + 1);
         setResult({ tone: TONE.VALID, name: local.name,
@@ -236,27 +266,24 @@ function ScanScreen({ role }) {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
 
-      <section className="max-w-[520px] mx-auto px-[18px] pt-[104px] pb-16">
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(24px,6vw,38px)" }}>
-          Door
-        </h1>
-        <div className="flex justify-between py-1.5 mt-2"
-             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
-                      borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
-          <span>{offline ? "OFFLINE" : "ONLINE"}{queued > 0 ? ` · ${queued} TO SYNC` : ""}</span>
-          <span style={{
-            // Amber near the limit, red at it — a full room should be seen
-            // coming, not discovered.
-            color: roster?.party?.capacity
-              ? (admitted >= roster.party.capacity ? "#7A2E2E"
-                : admitted >= roster.party.capacity * ((roster.capacityWarnAt ?? 90) / 100) ? "#7A5A2E"
-                : theme.ink2)
-              : theme.ink2,
-          }}>
-            {admitted} IN{roster?.party?.capacity ? ` / ${roster.party.capacity}` : ""}
-          </span>
-        </div>
+      {/*
+        The door's own status IS the metadata of this page — whether it can
+        reach the server, what is waiting to sync, how full the room is. It
+        belongs in the band, where every other page of the system puts its
+        facts, rather than in a hairline row under a centred title.
+      */}
+      <IndexBand top items={[
+        { label: "LINK", value: offline ? "OFFLINE" : "ONLINE" },
+        ...(queued > 0 ? [{ label: "TO SYNC", value: String(queued) }] : []),
+        { label: "ADMITTED", value: roster?.party?.capacity
+            ? `${admitted} / ${roster.party.capacity}` : String(admitted) },
+      ]} />
+      <PageHead flush kicker="SCAN AND ADMIT" title="The Door" />
+
+      <section className="max-w-[520px] mx-auto px-[18px] pb-16">
 
         {result && (
           <div className="mt-5 px-5 py-7 text-center" style={{ background: result.tone.bg }}>
@@ -295,7 +322,7 @@ function ScanScreen({ role }) {
                  style={{ width: "100%", display: running ? "block" : "none", aspectRatio: "1 / 1", objectFit: "cover" }} />
           {!running && (
             <div className="py-16 text-center"
-                 style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.18em", color: "#8C887E" }}>
+                 style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.18em", color: theme.ink2 }}>
               CAMERA OFF
             </div>
           )}
@@ -317,7 +344,7 @@ function ScanScreen({ role }) {
 
         {error && (
           <p className="mt-3 mb-0 px-3 py-2.5"
-             style={{ ...fontText, fontSize: "15px", color: "#7A2E2E", border: "1px solid #C08A8A" }}>
+             style={{ ...fontText, fontSize: "15px", color: theme.bad, border: `1px solid ${theme.badLine}` }}>
             {error}
           </p>
         )}

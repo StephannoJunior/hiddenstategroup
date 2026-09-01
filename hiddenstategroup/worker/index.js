@@ -448,6 +448,154 @@ async function readSession(env, request) {
   };
 }
 
+/* ─── THE SONG POOL ────────────────────────────────────────────────────────
+
+   Someone pastes a link; the pool shows the song's name. That one line of
+   product is the whole reason this code exists, and doing it well means
+   resolving the link on the SERVER rather than in the browser:
+
+     • the browser cannot read another site's page — CORS forbids it, and
+       every "link preview" that works in a browser is really a server
+       somewhere doing this same job;
+     • the answer is cached in our own database, so a pool of forty songs
+       does not hammer Spotify forty times every time someone opens the page.
+
+   FETCHING URLs THAT STRANGERS SUPPLY IS THE DANGEROUS PART. A worker will
+   happily fetch anything it is told to, including an internal address, which
+   is how a link box becomes a way to probe things that are not meant to be
+   public. So the host is checked against a list of music services before
+   anything is fetched, and nothing else is ever requested. A link to a
+   service that is not on the list is still accepted and stored — it just
+   keeps the pasted URL as its name rather than being fetched.                */
+
+const OEMBED = {
+  "open.spotify.com":   "https://open.spotify.com/oembed?url=",
+  "youtube.com":        "https://www.youtube.com/oembed?format=json&url=",
+  "m.youtube.com":      "https://www.youtube.com/oembed?format=json&url=",
+  "music.youtube.com":  "https://www.youtube.com/oembed?format=json&url=",
+  "youtu.be":           "https://www.youtube.com/oembed?format=json&url=",
+  "soundcloud.com":     "https://soundcloud.com/oembed?format=json&url=",
+  "m.soundcloud.com":   "https://soundcloud.com/oembed?format=json&url=",
+};
+
+// Services with no oEmbed, where the page's own metadata is read instead.
+const SCRAPE = new Set([
+  "music.apple.com", "geo.music.apple.com",
+  "bandcamp.com", "www.bandcamp.com",
+  "beatport.com", "www.beatport.com",
+  "deezer.com", "www.deezer.com", "link.deezer.com",
+  "tidal.com", "listen.tidal.com",
+  "audius.co",
+]);
+
+const PROVIDER = (host) =>
+  host.includes("spotify") ? "SPOTIFY"
+: host.includes("youtu")   ? "YOUTUBE"
+: host.includes("soundcloud") ? "SOUNDCLOUD"
+: host.includes("apple")   ? "APPLE MUSIC"
+: host.includes("bandcamp") ? "BANDCAMP"
+: host.includes("beatport") ? "BEATPORT"
+: host.includes("deezer")  ? "DEEZER"
+: host.includes("tidal")   ? "TIDAL"
+: "LINK";
+
+/*
+  Titles come back in whatever shape the service felt like. YouTube gives one
+  string with the artist, the track and usually a shout about it being an
+  official video; Spotify gives the track alone and the artist separately.
+  This pulls them into the same two fields so a pool reads as one list rather
+  than as five services stapled together.
+*/
+function splitTitle(raw, author, provider) {
+  let title = (raw || "").trim();
+  let artist = (author || "").trim();
+
+  // the marketing that gets stapled onto a title
+  title = title
+    .replace(/\s*[\(\[][^)\]]*\b(official|lyric|audio|video|visualizer|hd|4k|mv)\b[^)\]]*[\)\]]/gi, "")
+    .replace(/\s*[-–—|]\s*(official\s+)?(music\s+)?video\s*$/i, "")
+    .trim();
+
+  // "Artist - Track" is the near-universal convention on YouTube, and on
+  // SoundCloud the "author" is an account handle — soundcloud gives you
+  // `blackcoffee`, while the title carries the real name. A handle has no
+  // space in it, which is a good enough tell to prefer what the title says.
+  const handle = artist && !/\s/.test(artist);
+  if (!artist || handle || provider === "YOUTUBE") {
+    const m = title.match(/^(.{2,60}?)\s+[-–—]\s+(.{2,})$/);
+    if (m) { artist = m[1].trim(); title = m[2].trim(); }
+  }
+  // SoundCloud's "author" is an account name, which is better than nothing
+  if (artist.length > 60) artist = artist.slice(0, 60);
+  if (title.length > 140) title = title.slice(0, 140);
+  return { title, artist };
+}
+
+const meta = (html, prop) => {
+  const re = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i");
+  const alt = new RegExp(
+    `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i");
+  return (html.match(re) || html.match(alt) || [])[1] || "";
+};
+
+async function resolveSong(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { return null; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+
+  const host = u.hostname.replace(/^www\./, "");
+  const provider = PROVIDER(host);
+  const clean = `${u.origin}${u.pathname}`;   // query strings are tracking, not identity
+
+  const timeout = (ms) => {
+    const c = new AbortController();
+    setTimeout(() => c.abort(), ms);
+    return c.signal;
+  };
+
+  try {
+    if (OEMBED[host]) {
+      const res = await fetch(OEMBED[host] + encodeURIComponent(rawUrl),
+                             { signal: timeout(4000), headers: { accept: "application/json" } });
+      if (!res.ok) return { provider, ...splitTitle("", "", provider) };
+      const d = await res.json();
+      const { title, artist } = splitTitle(d.title, d.author_name, provider);
+      return { provider, title, artist, artwork: d.thumbnail_url || null };
+    }
+
+    if (SCRAPE.has(host)) {
+      const res = await fetch(clean, {
+        signal: timeout(5000),
+        headers: { "user-agent": "Mozilla/5.0 (compatible; HiddenStateBot/1.0)" },
+      });
+      if (!res.ok) return { provider, title: "", artist: "" };
+      const html = (await res.text()).slice(0, 120000);
+      const og = meta(html, "og:title") ||
+                 (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
+      const { title, artist } = splitTitle(og, meta(html, "music:musician") ||
+                                               meta(html, "og:description").split("·")[0], provider);
+      return { provider, title, artist, artwork: meta(html, "og:image") || null };
+    }
+  } catch {
+    /* a service being slow or down must never lose someone's request */
+  }
+  return { provider, title: "", artist: "", artwork: null };
+}
+
+/*  A pasted link with no resolvable name still has to read as something in a
+    list, so it falls back to the tidiest thing the URL itself contains.      */
+function nameFromUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    // Apple Music and friends end in a numeric id; the words are the segment
+    // before it, which is the part worth showing.
+    const parts = u.pathname.split("/").filter(Boolean).filter((x) => !/^\d+$/.test(x));
+    const last = parts.pop() || u.hostname;
+    return decodeURIComponent(last).replace(/[-_]+/g, " ").replace(/\.\w{2,4}$/, "").trim();
+  } catch { return rawUrl; }
+}
+
 /*
   SETTINGS. Anything worth changing on a night without waiting for a deploy.
 
@@ -539,14 +687,39 @@ const DEFAULT_SETTINGS = {
   requestThanksMessage: "We'll be in touch. If you're on the list, your pass arrives by email before the night.",
 
   // ── the floating bar ─────────────────────────────────────────────────────
-  // Above this many tabs the bar scrolls rather than squeezing them.
-  barMaxTabs: 9,
   // Width of each tab once it scrolls.
   barTabWidth: 64,
   // Label size. Smaller fits more; larger is readable in a dark room.
   barLabelSize: 7.5,
   // Labels off leaves icons only, which fits far more across.
   barShowLabels: true,
+
+  /*
+    ── THE LOOK ─────────────────────────────────────────────────────────────
+    The design is a system, not a set of hardcoded values, so the parts of it
+    that are a matter of taste can be changed from the console on a Tuesday
+    instead of through a deploy.
+
+    Deliberately a SHORT list of named choices rather than free colour pickers.
+    Three papers that all work with the ink, three accents that all work on the
+    paper. A free colour field would let anyone produce an unreadable site in
+    two seconds, and the whole point of a system is that it has edges.
+  */
+  paperTone: "BOARD",        // BOARD | IVORY | BONE
+  accentTone: "OXBLOOD",     // OXBLOOD | BRASS | INK
+  grainStrength: "NORMAL",   // NONE | LIGHT | NORMAL | HEAVY
+  // The dot screen photographs are printed through, and the warm duotone on
+  // the full-bleed ones. Both off gives clean modern photography.
+  photoHalftone: true,
+  photoDuotone: true,
+
+  // The home page.
+  heroImage: "club",         // club | booth | portrait
+  heroHeightVw: 46,          // how tall the opening photograph is, in vw
+  showContactSheet: true,
+  storyHeadline: "",         // empty keeps the built-in line
+  closingLine: "",
+  footerNote: "",
 
   // Closes the whole site to visitors, leaving the door tools working. For a
   // rebuild, or if something needs taking down quickly.
@@ -569,7 +742,10 @@ const PUBLIC_SETTINGS = [
   "guestListLinkVisible", "guestListOpen",
   "siteClosed", "siteClosedMessage",
   "maxPeoplePerRequest", "requestThanksMessage",
-  "barMaxTabs", "barTabWidth", "barLabelSize", "barShowLabels",
+  "barTabWidth", "barLabelSize", "barShowLabels",
+  "paperTone", "accentTone", "grainStrength", "photoHalftone", "photoDuotone",
+  "heroImage", "heroHeightVw", "showContactSheet",
+  "storyHeadline", "closingLine", "footerNote",
 ];
 
 async function getSettings(env) {
@@ -700,6 +876,81 @@ async function topUpPool(env, lowWater) {
   await env.DB.batch(statements);
   console.log(`Code pool topped up: ${spare} left, added about ${TOP_UP_BY}.`);
   return { added: TOP_UP_BY, spare };
+}
+
+/*
+  ── BACKUPS ───────────────────────────────────────────────────────────────
+
+  Every pass, every request, every song and the whole team live in one
+  database with, until now, no copy of it anywhere. A mistake — a bad DELETE,
+  a wrong migration, an account removed in error — was final.
+
+  Once a week the entire database is written out as JSON and put in the media
+  bucket under a prefix the public route refuses to serve. Twelve are kept,
+  which is three months; the oldest is dropped as a new one lands.
+
+  WHY JSON AND NOT SQL. A .sql dump has to be replayed by something that
+  understands the dialect, and D1 has already rejected perfectly ordinary DDL
+  twice on this project. JSON can be read by anything, including by eye at
+  four in the morning, which is when a backup is actually opened.
+*/
+const PRIVATE_PREFIX = "backups/";
+const KEEP_BACKUPS = 12;
+
+// A table can grow without anyone watching. Rather than fail on a huge one,
+// take the newest rows and say so in the file.
+const MAX_ROWS = 20000;
+
+async function backupDatabase(env) {
+  if (!env.MEDIA) return { ok: false, error: "No bucket is connected." };
+
+  const tables = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+  ).all();
+
+  const dump = {
+    taken: now(),
+    database: "hiddenstate",
+    tables: {},
+    truncated: [],
+  };
+
+  for (const { name } of tables.results || []) {
+    // The table name comes from sqlite_master, not from a request, so it
+    // cannot be anything the database did not already call a table.
+    const rows = await env.DB.prepare(
+      `SELECT * FROM "${name}" LIMIT ${MAX_ROWS + 1}`
+    ).all();
+    const list = rows.results || [];
+    if (list.length > MAX_ROWS) {
+      dump.truncated.push(name);
+      list.length = MAX_ROWS;
+    }
+    dump.tables[name] = list;
+  }
+
+  const key = `${PRIVATE_PREFIX}hiddenstate-${new Date().toISOString().slice(0, 10)}.json`;
+  const body = JSON.stringify(dump);
+  await env.MEDIA.put(key, body, {
+    httpMetadata: { contentType: "application/json" },
+  });
+
+  // Keep the last twelve and drop the rest.
+  const listed = await env.MEDIA.list({ prefix: PRIVATE_PREFIX, limit: 200 });
+  const old = (listed.objects || [])
+    .sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded))
+    .slice(KEEP_BACKUPS);
+  for (const o of old) await env.MEDIA.delete(o.key);
+
+  return {
+    ok: true,
+    key,
+    bytes: body.length,
+    tables: Object.keys(dump.tables).length,
+    rows: Object.values(dump.tables).reduce((n, r) => n + r.length, 0),
+    dropped: old.length,
+    truncated: dump.truncated,
+  };
 }
 
 // ─── routes ────────────────────────────────────────────────────────────────
@@ -1394,26 +1645,44 @@ async function handleApi(request, env, url, ctx) {
     let recorded = 0;
     const conflicts = [];
 
+    /*
+      WHICH ONES THIS SERVER HAS FINISHED WITH.
+
+      The door used to empty its whole queue the moment a sync came back ok,
+      and that quietly threw work away in two ways: anything past the 500-entry
+      cap was never looked at, and an entry missing a code or a night was
+      skipped here without a word. Both vanished on the phone regardless.
+
+      So the answer now names the entries that were actually dealt with —
+      written, already present, or malformed beyond saving — and the door
+      removes exactly those and keeps the rest to try again.
+    */
+    const handled = [];
+    const rejected = [];
+
     for (const e of entries) {
-      if (!e.code || !e.party) continue;
+      if (!e.code || !e.party) { rejected.push(e.code || null); continue; }
       const already = await env.DB.prepare(
         "SELECT scanned_at FROM scans WHERE code = ? AND party_id = ? AND result = 'ADMITTED'"
       ).bind(e.code, e.party).first();
 
       if (already) {
         // Someone was admitted twice — once offline, once elsewhere. Worth
-        // surfacing rather than silently dropping.
+        // surfacing rather than silently dropping. Still "handled": retrying
+        // it tomorrow would produce the same answer forever.
         conflicts.push({ code: e.code, at: already.scanned_at });
+        handled.push(e.code);
         continue;
       }
       await env.DB.prepare(
         "INSERT INTO scans (code, party_id, result, reason, scanned_by, scanned_at) " +
         "VALUES (?, ?, 'ADMITTED', 'offline', ?, ?)"
       ).bind(e.code, e.party, who.username, e.at || now()).run();
+      handled.push(e.code);
       recorded += 1;
     }
 
-    return json({ ok: true, recorded, conflicts });
+    return json({ ok: true, recorded, conflicts, handled, rejected });
   }
 
   // ── the door list ───────────────────────────────────────────────────────
@@ -2022,6 +2291,238 @@ async function handleApi(request, env, url, ctx) {
   }
 
   // ── guest list requests ─────────────────────────────────────────────────
+
+  /* ── THE SONG POOL ──────────────────────────────────────────────────────
+     Public: see a pool, add to a pool. Team: moderate one.                */
+
+  // The events a visitor may add songs to. Deliberately its own route rather
+  // than opening /parties: that one carries capacity, closing times and who
+  // created it, none of which is a stranger's business.
+  /*
+    Read a link and say what it is, without storing anything.
+
+    The song pool already had to do this; the sessions editor needs exactly
+    the same answer while someone is typing, so it shares the one resolver
+    rather than growing a second, slightly different one that drifts.
+  */
+  if (path === "/resolve" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !(can(who, "issuePasses") || can(who, "manageTeam")))
+      return fail("Sign in first.", 403);
+    const raw = url.searchParams.get("url") || "";
+    if (!/^https?:\/\//i.test(raw)) return fail("That doesn't look like a link.");
+    const found = await resolveSong(raw);
+    return json({ ok: true, provider: (found && found.provider) || "LINK",
+                  title: (found && found.title) || nameFromUrl(raw),
+                  artist: (found && found.artist) || "" });
+  }
+
+  /*
+    ── READERSHIP ──────────────────────────────────────────────────────────
+
+    Counting without watching anybody.
+
+    What is stored is a day, a path and a number. There is no cookie, no
+    identifier, no address, no third party and nothing that could be joined
+    back to a person — which is also why no consent banner is needed. The
+    cost of that honesty is that this counts VIEWS, not people, and it will
+    never tell you how long anyone stayed. It answers one question well:
+    is anybody reading the news page.
+
+    The path is checked against the site's real shapes before it is written.
+    Without that, anyone could POST arbitrary strings and fill the table.
+  */
+  if (path === "/hit" && method === "POST") {
+    const raw = String(body.path || "").split("?")[0].split("#")[0];
+    if (!raw.startsWith("/") || raw.length > 120) return json({ ok: true });
+
+    // Detail pages collapse to their shape. Thirty separate rows for thirty
+    // articles tells you less than one row saying the news is read at all,
+    // and it keeps a slug out of the table.
+    const shape = raw
+      .replace(/^\/artists\/[^/]+$/, "/artists/:id")
+      .replace(/^\/events\/[^/]+$/, "/events/:id")
+      .replace(/^\/news\/[^/]+$/, "/news/:slug")
+      .replace(/^\/mixes\/[^/]+$/, "/mixes/:slug")
+      .replace(/^\/pass\/[^/]+$/, "/pass/:code");
+
+    const KNOWN = new Set([
+      "/", "/records", "/agency", "/artists", "/artists/:id", "/events",
+      "/events/:id", "/news", "/news/:slug", "/mixes", "/mixes/:slug",
+      "/about", "/contact", "/pool", "/mypass", "/pass/:code",
+    ]);
+    if (!KNOWN.has(shape)) return json({ ok: true });
+
+    const day = new Date().toISOString().slice(0, 10);
+    await env.DB.prepare(
+      "INSERT INTO views (day, path, n) VALUES (?, ?, 1) " +
+      "ON CONFLICT (day, path) DO UPDATE SET n = n + 1"
+    ).bind(day, shape).run().catch(() => {});
+    return json({ ok: true });
+  }
+
+  if (path === "/views" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
+
+    const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
+    const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+
+    const byPath = await env.DB.prepare(
+      "SELECT path, SUM(n) AS n FROM views WHERE day >= ? GROUP BY path ORDER BY n DESC"
+    ).bind(from).all();
+    const byDay = await env.DB.prepare(
+      "SELECT day, SUM(n) AS n FROM views WHERE day >= ? GROUP BY day ORDER BY day ASC"
+    ).bind(from).all();
+
+    const pages = byPath.results || [];
+    return json({
+      ok: true,
+      days,
+      total: pages.reduce((t, r) => t + Number(r.n || 0), 0),
+      pages,
+      daily: byDay.results || [],
+    });
+  }
+
+  if (path === "/backups" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
+    if (!env.MEDIA) return json({ ok: true, backups: [] });
+
+    const listed = await env.MEDIA.list({ prefix: PRIVATE_PREFIX, limit: 200 });
+    const backups = (listed.objects || [])
+      .map((o) => ({ key: o.key, name: o.key.slice(PRIVATE_PREFIX.length), size: o.size, taken: o.uploaded }))
+      .sort((a, b) => new Date(b.taken) - new Date(a.taken));
+    return json({ ok: true, backups });
+  }
+
+  if (path === "/backups" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Only the boss can do this.", 403);
+    return json(await backupDatabase(env));
+  }
+
+  /*
+    Downloading one. Deliberately NOT served from /media — that route is
+    public. This one checks the session on every request, and the file comes
+    back as an attachment so a browser saves it rather than rendering the
+    whole guest list into a tab.
+  */
+  if (path.startsWith("/backups/") && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
+    if (!env.MEDIA) return fail("No bucket is connected.", 404);
+
+    const name = decodeURIComponent(path.slice("/backups/".length));
+    // Nothing from the request is allowed to walk out of the prefix.
+    if (!/^[\w.-]+\.json$/.test(name)) return fail("No such backup.", 404);
+
+    const object = await env.MEDIA.get(PRIVATE_PREFIX + name);
+    if (!object) return fail("No such backup.", 404);
+
+    return new Response(object.body, {
+      headers: {
+        "content-type": "application/json",
+        "content-disposition": `attachment; filename="${name}"`,
+        "cache-control": "no-store",
+      },
+    });
+  }
+
+  if (path === "/public-parties" && method === "GET") {
+    const rows = await env.DB.prepare(
+      "SELECT id, name, date_label FROM parties WHERE archived = 0 AND doors_close_at > ? " +
+      "ORDER BY doors_close_at ASC LIMIT 12"
+    ).bind(now()).all();
+    return json({ ok: true, parties: rows.results || [] });
+  }
+
+  if (path === "/songs" && method === "GET") {
+    const pool = url.searchParams.get("pool") === "HOUSE" ? "HOUSE" : "EVENT";
+    const party = url.searchParams.get("party") || null;
+    const who = await readSession(env, request);
+    const team = !!who && (can(who, "issuePasses") || can(who, "manageTeam"));
+
+    // A hidden song stays in the database and out of the public list; the
+    // team sees everything, because moderating a list you cannot see is not
+    // moderating.
+    const where = pool === "HOUSE" ? "pool = 'HOUSE'" : "pool = 'EVENT' AND party_id = ?";
+    const binds = pool === "HOUSE" ? [] : [party];
+    const rows = await env.DB.prepare(
+      `SELECT id, url, provider, title, artist, artwork, by_name, status, created_at` +
+      (team ? ", by_contact" : "") +
+      ` FROM songs WHERE ${where}` + (team ? "" : " AND status != 'HIDDEN'") +
+      " ORDER BY created_at DESC LIMIT 300"
+    ).bind(...binds).all();
+    return json({ ok: true, songs: rows.results || [], team });
+  }
+
+  if (path === "/songs" && method === "POST") {
+    const pool = body.pool === "HOUSE" ? "HOUSE" : "EVENT";
+    const party = pool === "EVENT" ? String(body.party || "") : null;
+    const raw = String(body.url || "").trim();
+    const byName = String(body.name || "").trim().slice(0, 60);
+
+    if (!raw) return fail("Paste a link to the song.");
+    if (!/^https?:\/\//i.test(raw)) return fail("That doesn't look like a link. It should start with https://");
+    if (pool === "EVENT" && !party) return fail("Pick which night this is for.");
+
+    if (pool === "EVENT") {
+      const ok = await env.DB.prepare(
+        "SELECT id FROM parties WHERE id = ? AND archived = 0 AND doors_close_at > ?"
+      ).bind(party, now()).first();
+      if (!ok) return fail("That night isn't taking requests.");
+    }
+
+    /* Rate limit. One person with a playlist can fill a pool in a minute, and
+       then it is their pool rather than everyone's. */
+    const ip = request.headers.get("cf-connecting-ip") || "unknown";
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM songs WHERE ip = ? AND created_at > ?"
+    ).bind(ip, since).first();
+    if ((recent?.n || 0) >= 8) return fail("That's plenty for one hour — come back later and add more.");
+
+    const found = await resolveSong(raw);
+    const title = (found && found.title) || nameFromUrl(raw);
+    const artist = (found && found.artist) || "";
+
+    try {
+      await env.DB.prepare(
+        "INSERT INTO songs (pool, party_id, url, provider, title, artist, artwork, by_name, by_contact, status, created_at, ip) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NEW', ?, ?)"
+      ).bind(pool, party, raw, (found && found.provider) || "LINK", title, artist,
+             (found && found.artwork) || null, byName,
+             String(body.contact || "").trim().slice(0, 120) || null, now(), ip).run();
+    } catch (err) {
+      // the unique index doing its job
+      if (String(err && err.message).includes("UNIQUE")) {
+        return json({ ok: true, duplicate: true, title, artist,
+                      message: "That one's already in — good taste." });
+      }
+      throw err;
+    }
+    return json({ ok: true, title, artist, provider: (found && found.provider) || "LINK" });
+  }
+
+  if (path.startsWith("/songs/") && (method === "PATCH" || method === "DELETE")) {
+    const who = await readSession(env, request);
+    if (!who || !(can(who, "issuePasses") || can(who, "manageTeam")))
+      return fail("Only the team can change the pool.", 403);
+    const id = Number(path.split("/")[2]);
+    if (!id) return fail("Which song?");
+
+    if (method === "DELETE") {
+      await env.DB.prepare("DELETE FROM songs WHERE id = ?").bind(id).run();
+      return json({ ok: true });
+    }
+    const status = ["NEW", "PLAYED", "HIDDEN"].includes(body.status) ? body.status : null;
+    if (!status) return fail("Unknown status.");
+    await env.DB.prepare("UPDATE songs SET status = ? WHERE id = ?").bind(status, id).run();
+    return json({ ok: true });
+  }
+
   if (path === "/requests" && method === "POST") {
     // Public. Anyone can ask; nobody is added by asking.
     const cfg = await getSettings(env);
@@ -2169,7 +2670,20 @@ async function sendReminders(env) {
 
 export default {
   // Cloudflare calls this on the schedule in wrangler.jsonc.
+  /*
+    Two schedules now, told apart by which one fired. Running the backup daily
+    would keep twelve days rather than twelve weeks, which is the wrong window
+    — a mistake is usually noticed within a day but sometimes within a month.
+  */
   async scheduled(event, env, ctx) {
+    if (event.cron === "0 4 * * 1") {
+      ctx.waitUntil(
+        backupDatabase(env).then((r) =>
+          console.log(r.ok ? `Backup: ${r.rows} rows in ${r.tables} tables → ${r.key}` : `Backup failed: ${r.error}`)
+        )
+      );
+      return;
+    }
     ctx.waitUntil(sendReminders(env));
   },
 
@@ -2203,6 +2717,20 @@ export default {
     if (url.pathname.startsWith("/media/")) {
       if (!env.MEDIA) return new Response("Not found", { status: 404 });
       const key = decodeURIComponent(url.pathname.slice(7));
+
+      /*
+        THIS ROUTE IS PUBLIC AND HAS NO LOGIN ON IT — by design, because it
+        serves the photographs on the site. It therefore hands out ANY object
+        in the bucket to anyone who guesses its name.
+
+        That is fine for pictures and catastrophic for anything else, so the
+        bucket now has a reserved prefix that this route refuses outright.
+        The database backups live under it. Without this line, adding backups
+        to this bucket would have published every guest, every email address
+        and every pass at a URL anyone could type.
+      */
+      if (key.startsWith(PRIVATE_PREFIX)) return new Response("Not found", { status: 404 });
+
       const object = await env.MEDIA.get(key);
       if (!object) return new Response("Not found", { status: 404 });
 

@@ -1,7 +1,8 @@
 import { usePageMeta } from "../lib/seo";
+import { useSite } from "../lib/site";
 import React, { useEffect, useState } from "react";
 import { Nav, Footer, useGoogleFonts, Field, inputStyle,
-         fontDisplay, fontUtility, fontText, fontMasthead, theme } from "../components/Shared";
+         IndexBand, PageHead, fontDisplay, fontUtility, fontText, theme } from "../components/Shared";
 import { CONTACT_EMAIL } from "../lib/config";
 import * as api from "../lib/api";
 
@@ -20,6 +21,7 @@ import * as api from "../lib/api";
 
 export default function Guestlist() {
   useGoogleFonts();
+  const site = useSite();
   usePageMeta({
     title: "Guest list",
     description: "Request a place on the Hidden State guest list.",
@@ -71,19 +73,18 @@ export default function Guestlist() {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
 
-      <section className="max-w-[560px] mx-auto px-[18px] pt-[104px] pb-16">
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,7vw,44px)" }}>
-          Ask for a Pass
-        </h1>
-        {partyName && (
-          <p className="text-center m-0 mt-2"
-             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-            {partyName.toUpperCase()}
-          </p>
-        )}
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
+      <IndexBand top items={[
+        { label: "THE NIGHT", value: partyName ? partyName.toUpperCase() : "TBA" },
+        { label: "MOST PER REQUEST", value: String(Math.max(1, Number(site.maxPeoplePerRequest) || 6)) },
+        { label: "REPLY BY", value: "EMAIL" },
+      ]} />
+      <PageHead flush kicker="THE GUEST LIST" title="Ask for a pass"
+                sub="ONE REQUEST, ONE ANSWER — BY EMAIL" />
+
+      <section className="max-w-[560px] mx-auto px-[18px] pb-16">
 
         {sent ? (
           <div className="mt-8 p-8 text-center" style={{ border: "1px solid " + theme.ink }}>
@@ -112,7 +113,13 @@ export default function Guestlist() {
             <Field label="How many of you">
               <select style={inputStyle} value={form.people}
                       onChange={(e) => setForm((f) => ({ ...f, people: Number(e.target.value) }))}>
-                {[1,2,3,4,5,6].map((n) => (
+                {/*
+                  The largest group is a setting, and the server refuses
+                  anything above it. Hardcoding six here meant the form could
+                  offer a number the server would then reject — the two have
+                  to come from the same place.
+                */}
+                {Array.from({ length: Math.max(1, Number(site.maxPeoplePerRequest) || 6) }, (_, i) => i + 1).map((n) => (
                   <option key={n} value={n}>{n === 1 ? "Just me" : `${n} people`}</option>
                 ))}
               </select>
@@ -142,7 +149,7 @@ export default function Guestlist() {
 
             {error && (
               <p className="m-0 px-3 py-2.5"
-                 style={{ ...fontText, fontSize: "15px", color: "#7A2E2E", border: "1px solid #C08A8A" }}>
+                 style={{ ...fontText, fontSize: "15px", color: theme.bad, border: `1px solid ${theme.badLine}` }}>
                 {error}
               </p>
             )}

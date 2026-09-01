@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts, Field, inputStyle,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  IndexBand, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import DoorGate from "../components/DoorGate";
 import * as api from "../lib/api";
@@ -31,18 +31,40 @@ import ImagePicker from "../components/ImagePicker";
   with a form. They belong here as ways in, not as panels.
 */
 const TABS = [
-  { id: "scan",     label: "SCANNER",  need: "scan",    to: "/scan" },
-  { id: "door",     label: "DOOR",     need: "seeList", to: "/doorlist" },
-  { id: "passes",   label: "PASSES",   need: "seeList" },
-  { id: "events",   label: "EVENTS",   need: "issuePasses" },
-  { id: "team",     label: "TEAM",     need: "manageTeam" },
-  { id: "requests", label: "REQUESTS", need: "seeList" },
-  { id: "stats",    label: "THE NIGHT", need: "seeList" },
-  { id: "posts",    label: "POSTS",     need: "issuePasses" },
-  { id: "artists",  label: "ARTISTS",   need: "issuePasses" },
-  { id: "records",  label: "RECORDS",   need: "issuePasses" },
-  { id: "mixes",    label: "MIXES",     need: "issuePasses" },
-  { id: "settings", label: "SETTINGS",  need: "manageTeam" },
+  { id: "scan",     label: "SCANNER",   need: "scan",        to: "/scan", group: "door" },
+  { id: "door",     label: "DOOR",      need: "seeList",     to: "/doorlist", group: "door" },
+  { id: "passes",   label: "PASSES",    need: "seeList",     group: "door" },
+  { id: "requests", label: "REQUESTS",  need: "seeList",     group: "door" },
+  { id: "stats",    label: "THE NIGHT", need: "seeList",     group: "door" },
+  { id: "events",   label: "EVENTS",    need: "issuePasses", group: "content" },
+  { id: "posts",    label: "POSTS",     need: "issuePasses", group: "content" },
+  { id: "artists",  label: "ARTISTS",   need: "issuePasses", group: "content" },
+  { id: "records",  label: "RECORDS",   need: "issuePasses", group: "content" },
+  { id: "mixes",    label: "MIXES",     need: "issuePasses", group: "content" },
+  { id: "reading",  label: "READERSHIP",need: "manageTeam",  group: "system" },
+  { id: "backups",  label: "BACKUPS",   need: "manageTeam",  group: "system" },
+  { id: "team",     label: "TEAM",      need: "manageTeam",  group: "system" },
+  { id: "settings", label: "SETTINGS",  need: "manageTeam",  group: "system" },
+];
+
+/*
+  Why the tabs are grouped rather than listed.
+
+  Twelve of them in one sideways-scrolling row meant the last four were simply
+  out of sight — and nobody scrolls a row whose end they cannot see. Worse, a
+  scrolling row hides exactly the tabs used least often, which are the ones
+  most in need of being findable.
+
+  Three groups, because there are three reasons to be here: something is
+  happening at the door tonight; something needs writing or editing; something
+  about the system itself needs changing. Each answers a different question,
+  and grouping them means the eye goes to the right third before reading a
+  single label.
+*/
+const GROUPS = [
+  { id: "door",    label: "THE DOOR" },
+  { id: "content", label: "CONTENT" },
+  { id: "system",  label: "SYSTEM" },
 ];
 
 /*
@@ -60,9 +82,219 @@ const PERMISSIONS = [
   { key: "seeContacts",  label: "See guests' email and phone" },
 ];
 
+/*
+  READERSHIP — what people actually open.
+
+  A bar per page, longest first, because the only question this answers is
+  which pages get read and which do not. There is no line chart of visits over
+  time: with these numbers a daily line is mostly noise, and a total plus a
+  ranking is the part you would act on.
+
+  Everything here is a count of views. Nobody is identified, nothing is
+  followed between pages, and the door tools are not counted at all.
+*/
+const READABLE = {
+  "/": "Home", "/records": "Records", "/agency": "Agency", "/artists": "Roster",
+  "/artists/:id": "An artist", "/events": "Events", "/events/:id": "An event",
+  "/news": "News", "/news/:slug": "An article", "/mixes": "Sessions",
+  "/mixes/:slug": "A sessions page", "/about": "About", "/contact": "Contact",
+  "/pool": "The pool", "/pass/:code": "A pass",
+};
+
+function Readership() {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    api.readership(days).then((res) => {
+      if (!live) return;
+      setLoading(false);
+      if (res.ok) setData(res);
+    });
+    return () => { live = false; };
+  }, [days]);
+
+  const pages = data?.pages || [];
+  const top = pages.length ? Number(pages[0].n) : 0;
+  const busiest = (data?.daily || []).reduce((a, b) => (Number(b.n) > Number(a?.n || 0) ? b : a), null);
+
+  return (
+    <div>
+      <IndexBand items={[
+        { label: "PERIOD", value: `${days} DAYS` },
+        { label: "VIEWS", value: loading ? "—" : String(data?.total ?? 0) },
+        { label: "PAGES READ", value: loading ? "—" : String(pages.length) },
+        { label: "BUSIEST DAY", value: busiest ? busiest.day.slice(5).replace("-", ".") : "—" },
+      ]} />
+
+      <div className="flex gap-1.5 mt-6 mb-7">
+        {[7, 30, 90, 365].map((d) => {
+          const on = days === d;
+          return (
+            <button key={d} onClick={() => setDays(d)}
+                    style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", cursor: "pointer",
+                             padding: "9px 13px", color: on ? theme.bg : theme.ink,
+                             background: on ? theme.ink : "transparent",
+                             border: `1px solid ${on ? theme.ink : theme.rule}` }}>
+              {d === 365 ? "A YEAR" : `${d} DAYS`}
+            </button>
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <p className="m-0" style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em", color: theme.ink2 }}>
+          READING…
+        </p>
+      ) : pages.length === 0 ? (
+        <p className="m-0" style={{ ...fontText, fontSize: "17px", lineHeight: 1.55, color: theme.ink2 }}>
+          Nothing counted yet. Counting starts the moment this version is live —
+          there is no history to fill in, because none was ever kept.
+        </p>
+      ) : (
+        <div style={{ borderTop: `1px solid ${theme.ink}` }}>
+          {pages.map((r) => {
+            const n = Number(r.n) || 0;
+            return (
+              <div key={r.path} className="py-3" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+                <div className="flex items-baseline justify-between gap-4">
+                  <span style={{ ...fontText, fontSize: "17px", color: theme.ink }}>
+                    {READABLE[r.path] || r.path}
+                  </span>
+                  <span style={{ ...fontUtility, fontSize: "12px", color: theme.ink,
+                                 fontVariantNumeric: "tabular-nums" }}>
+                    {n}
+                  </span>
+                </div>
+                {/* The bar is scaled to the busiest page, not to the total:
+                    ranking is the point, and against a total every bar on a
+                    site with a strong home page is a sliver. */}
+                <div className="mt-1.5" style={{ height: "3px", background: theme.rule }}>
+                  <div style={{ height: "100%", width: `${top ? (n / top) * 100 : 0}%`, background: theme.brass }} />
+                </div>
+                <span className="block mt-1" style={{ ...fontUtility, fontSize: "8.5px",
+                      letterSpacing: "0.14em", color: theme.ink2 }}>
+                  {r.path}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="m-0 mt-6" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+        Counted here, by us, with no cookie and no third party — which is why
+        the site needs no consent banner. These are views, not people: one
+        person reading three pages is three.
+      </p>
+    </div>
+  );
+}
+
+/*
+  BACKUPS — a copy of everything, taken every Monday.
+
+  The list is the whole interface. There is no restore button and that is
+  deliberate: putting a database back is not something anyone should be one
+  mis-tap away from, and it is rare enough to be worth doing deliberately with
+  the file in front of you. What this gives you is the file.
+*/
+function Backups() {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.listBackups().then((res) => {
+      setLoading(false);
+      if (res.ok) setList(res.backups || []);
+    });
+  }, []);
+
+  useEffect(load, [load]);
+
+  const takeOne = async () => {
+    setBusy(true);
+    setMsg("");
+    const res = await api.makeBackup();
+    setBusy(false);
+    setMsg(res.ok
+      ? `Taken — ${res.rows} rows across ${res.tables} tables${res.dropped ? `, ${res.dropped} old one${res.dropped === 1 ? "" : "s"} dropped` : ""}.`
+      : (res.error || "That did not work."));
+    load();
+  };
+
+  const size = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`);
+  const latest = list[0];
+
+  return (
+    <div>
+      <IndexBand items={[
+        { label: "KEPT", value: loading ? "—" : String(list.length).padStart(2, "0") },
+        { label: "MOST RECENT", value: latest ? latest.taken.slice(0, 10) : "NONE YET" },
+        { label: "SCHEDULE", value: "MONDAY 04:00" },
+      ]} />
+
+      <p className="m-0 mt-6" style={{ ...fontText, fontSize: "17px", lineHeight: 1.55, color: theme.ink2 }}>
+        The whole database is written out every Monday morning and the last
+        twelve are kept — three months. They are stored where the site's photos
+        are, behind a name the public side refuses to serve, and downloading one
+        needs this login.
+      </p>
+
+      <button onClick={takeOne} disabled={busy} className="mt-5 px-4 py-3"
+              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em",
+                       background: theme.ink, color: theme.bg, border: 0,
+                       cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
+        {busy ? "TAKING A COPY…" : "TAKE ONE NOW"}
+      </button>
+
+      <Notice message={msg} tone={msg.startsWith("Taken") ? "good" : "bad"} />
+
+      <div className="mt-7" style={{ borderTop: `1px solid ${theme.ink}` }}>
+        {loading ? (
+          <p className="m-0 py-8 text-center" style={{ ...fontUtility, fontSize: "10px",
+             letterSpacing: "0.16em", color: theme.ink2 }}>READING…</p>
+        ) : list.length === 0 ? (
+          <p className="m-0 py-8 text-center" style={{ ...fontUtility, fontSize: "10px",
+             letterSpacing: "0.16em", color: theme.ink2 }}>
+            NONE YET — THE FIRST ONE ARRIVES MONDAY
+          </p>
+        ) : (
+          list.map((b) => (
+            <div key={b.key} className="flex items-center justify-between gap-4 py-3.5"
+                 style={{ borderBottom: `1px solid ${theme.rule}` }}>
+              <span className="min-w-0">
+                <span className="block" style={{ ...fontText, fontSize: "17px", color: theme.ink }}>
+                  {b.taken.slice(0, 10)}
+                </span>
+                <span className="block" style={{ ...fontUtility, fontSize: "8.5px",
+                      letterSpacing: "0.14em", color: theme.ink2 }}>
+                  {size(b.size)}
+                </span>
+              </span>
+              <button onClick={() => api.downloadBackup(b.name)}
+                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                               cursor: "pointer", padding: "8px 11px", background: "transparent",
+                               border: `1px solid ${theme.rule}`, color: theme.ink }}>
+                DOWNLOAD
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Notice({ message, tone = "bad" }) {
   if (!message) return null;
-  const colour = tone === "good" ? "#1E4620" : "#7A2E2E";
+  const colour = tone === "good" ? theme.good : theme.bad;
   return (
     <p className="m-0 mt-3 px-3 py-2.5"
        style={{ ...fontText, fontSize: "15px", color: colour, border: `1px solid ${colour}55` }}>
@@ -71,13 +303,35 @@ function Notice({ message, tone = "bad" }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, children, onSave, saving, saved }) {
+  /*
+    A save button at the FOOT OF EVERY SECTION, not only at the bottom of the
+    page. Changing one thing in the first group meant scrolling past forty
+    controls to reach a single button, and a long scroll between a decision
+    and its confirmation is how people end up unsure whether it saved at all.
+
+    Every button saves the whole settings object, so it does not matter which
+    one is pressed — what matters is that one is always within reach.
+  */
   return (
     <div className="mt-7">
       <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
         {title}
       </p>
       {children}
+      {onSave && (
+        <div className="flex items-center gap-4 mt-4">
+          <button onClick={onSave} disabled={saving}
+                  style={{ ...btn, opacity: saving ? 0.6 : 1 }}>
+            {saving ? "SAVING…" : "SAVE"}
+          </button>
+          {saved && (
+            <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
+              SAVED
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -312,7 +566,7 @@ function Passes({ role, parties, party, setParty }) {
           </form>
 
           {issued && (
-            <div className="mt-4 p-5 text-center" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
+            <div className="mt-4 p-5 text-center" style={{ border: `1px solid ${theme.ink}`, background: theme.sunk }}>
               <p className="m-0" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.brass }}>
                 WRITE THIS ON THE TICKET
               </p>
@@ -323,7 +577,7 @@ function Passes({ role, parties, party, setParty }) {
               {/* Say plainly whether it was emailed. Silence here would leave
                   you assuming a guest has their pass when they do not. */}
               <p className="m-0 mt-3" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
-                                               color: issued.email?.sent ? "#1E4620" : "#7A5A2E" }}>
+                                               color: issued.email?.sent ? theme.good : theme.warn }}>
                 {issued.email?.sent ? "EMAILED" : `NOT EMAILED — ${issued.email?.reason || "send it yourself"}`}
               </p>
 
@@ -362,7 +616,7 @@ function Passes({ role, parties, party, setParty }) {
           </button>
 
           {bulkResult && (
-            <div className="mt-4 p-4" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
+            <div className="mt-4 p-4" style={{ border: `1px solid ${theme.ink}`, background: theme.sunk }}>
               <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em", color: theme.brass }}>
                 {bulkResult.issued.length} ISSUED{bulkResult.failed.length ? ` · ${bulkResult.failed.length} FAILED` : ""}
               </p>
@@ -372,7 +626,7 @@ function Passes({ role, parties, party, setParty }) {
                 </p>
               ))}
               {bulkResult.failed.map((f, n) => (
-                <p key={n} className="m-0" style={{ ...fontText, fontSize: "15px", color: "#7A2E2E" }}>
+                <p key={n} className="m-0" style={{ ...fontText, fontSize: "15px", color: theme.bad }}>
                   {f.name} — {f.reason}
                 </p>
               ))}
@@ -437,14 +691,14 @@ function Passes({ role, parties, party, setParty }) {
               {role.can.revokePasses && (
                 <button onClick={() => (dead ? restore(r.code) : revoke(r.code, r.name))}
                         style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
-                                 color: dead ? theme.brass : "#7A2E2E", background: "transparent", border: 0, cursor: "pointer" }}>
+                                 color: dead ? theme.brass : theme.bad, background: "transparent", border: 0, cursor: "pointer" }}>
                   {dead ? "RESTORE" : "CANCEL"}
                 </button>
               )}
             </div>
 
             {editing === r.code && (
-              <div className="px-3 py-4 mb-3" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
+              <div className="px-3 py-4 mb-3" style={{ border: `1px solid ${theme.ink}`, background: theme.sunk }}>
                 <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em", color: theme.brass }}>
                   EDITING {r.code} — THE CODE ITSELF CANNOT CHANGE
                 </p>
@@ -640,7 +894,7 @@ function Events({ parties, reload }) {
             </span>
             <button onClick={() => archive(p.id, p.name)}
                     style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
-                             color: "#7A2E2E", background: "transparent", border: 0, cursor: "pointer" }}>
+                             color: theme.bad, background: "transparent", border: 0, cursor: "pointer" }}>
               REMOVE
             </button>
           </div>
@@ -836,7 +1090,7 @@ function Team() {
                 </button>
                 <button onClick={() => remove(m.username)}
                         style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
-                                 color: "#7A2E2E", background: "transparent", border: 0, cursor: "pointer" }}>
+                                 color: theme.bad, background: "transparent", border: 0, cursor: "pointer" }}>
                   DELETE
                 </button>
               </>
@@ -844,7 +1098,7 @@ function Team() {
           </div>
 
           {editing === m.username && (
-            <div className="px-3 py-4 mb-3" style={{ border: `1px solid ${theme.ink}`, background: "#EFE6D0" }}>
+            <div className="px-3 py-4 mb-3" style={{ border: `1px solid ${theme.ink}`, background: theme.sunk }}>
               <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em", color: theme.brass }}>
                 EDITING {m.username} — THE USERNAME ITSELF CANNOT CHANGE
               </p>
@@ -970,19 +1224,19 @@ function Requests({ role, party }) {
           <span className="flex gap-3 shrink-0">
             <button disabled={busy === r.id} onClick={() => decide(r.id, "APPROVED")}
                     style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
-                             color: "#1E4620", background: "transparent", border: 0, cursor: "pointer" }}>
+                             color: theme.good, background: "transparent", border: 0, cursor: "pointer" }}>
               {busy === r.id ? "…" : "APPROVE"}
             </button>
             <button disabled={busy === r.id} onClick={() => decide(r.id, "DECLINED")}
                     style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
-                             color: "#7A2E2E", background: "transparent", border: 0, cursor: "pointer" }}>
+                             color: theme.bad, background: "transparent", border: 0, cursor: "pointer" }}>
               DECLINE
             </button>
           </span>
         )}
         {r.status !== "PENDING" && (
           <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
-                         color: r.status === "APPROVED" ? "#1E4620" : theme.ink2 }}>
+                         color: r.status === "APPROVED" ? theme.good : theme.ink2 }}>
             {r.status}
           </span>
         )}
@@ -1192,7 +1446,7 @@ function Posts() {
                 EDIT
               </button>
               <button onClick={() => remove(p.slug, p.headline)}
-                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: "#7A2E2E",
+                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.bad,
                                background: "transparent", border: 0, cursor: "pointer" }}>
                 DELETE
               </button>
@@ -1353,6 +1607,142 @@ const CONTENT_SHAPES = {
   },
 };
 
+/*
+  THE SESSIONS EDITOR — the part of a mixes page that was never editable.
+
+  A mixes page is a person (name, photo, intro) plus their SESSIONS, grouped
+  into sections. Everything except the sessions could be changed from the
+  console; the sessions themselves lived in a JSON file, which meant adding a
+  set meant a deploy. This is the missing half.
+
+  Adding one is a single paste. Drop in the link and the name and the platform
+  fill themselves in — the server reads them out of the link, the same
+  resolver the song pool uses. Both are still editable afterwards, because a
+  service's own title is often "SET 01 FINAL FINAL v3" and yours is better.
+*/
+
+const PLATFORMS = ["AUTO", "YOUTUBE", "SOUNDCLOUD", "MIXCLOUD", "SPOTIFY", "APPLE MUSIC", "BANDCAMP", "LISTEN"];
+
+function Sessions({ sections, onChange }) {
+  const [busyAt, setBusyAt] = useState("");
+
+  const edit = (si, fn) => {
+    const next = sections.map((s) => ({ ...s, items: [...(s.items || [])] }));
+    fn(next[si], next);
+    onChange(next);
+  };
+
+  /*
+    The link is the only thing anyone actually has to hand. Everything else is
+    derived from it the moment it stops changing, and only into fields that are
+    still empty — retyping over something a person just wrote is worse than
+    leaving a blank.
+  */
+  const readLink = async (si, ii, url) => {
+    if (!/^https?:\/\//i.test(url)) return;
+    const at = `${si}-${ii}`;
+    setBusyAt(at);
+    const res = await api.resolveLink(url);
+    setBusyAt("");
+    if (!res.ok) return;
+    edit(si, (sec) => {
+      const item = { ...sec.items[ii] };
+      if (!item.title) item.title = res.artist ? `${res.artist} — ${res.title}` : res.title;
+      if (!item.icon && res.provider && res.provider !== "LINK") item.icon = res.provider;
+      sec.items[ii] = item;
+    });
+  };
+
+  return (
+    <div className="mt-7">
+      <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
+        SESSIONS
+      </p>
+
+      {sections.length === 0 && (
+        <p className="m-0 mb-3" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+          Nothing here yet. A section is a heading — “2026”, “Radio”, “Live” —
+          and the sets go under it.
+        </p>
+      )}
+
+      {sections.map((sec, si) => (
+        <div key={si} className="mb-6" style={{ border: `1px solid ${theme.rule}`, padding: "14px" }}>
+          <div className="flex items-center gap-3">
+            <input value={sec.label || ""} placeholder="Section heading"
+                   onChange={(e) => edit(si, (s) => { s.label = e.target.value; })}
+                   style={{ ...inputStyle, flex: 1 }} />
+            <button onClick={() => onChange(sections.filter((_, i) => i !== si))}
+                    style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", cursor: "pointer",
+                             padding: "9px 11px", background: "transparent",
+                             border: `1px solid ${theme.rule}`, color: theme.ink }}>
+              REMOVE SECTION
+            </button>
+          </div>
+
+          {(sec.items || []).map((item, ii) => (
+            <div key={ii} className="mt-3.5 pt-3.5" style={{ borderTop: `1px solid ${theme.rule}` }}>
+              <div className="flex items-center gap-3">
+                <span style={{ ...fontUtility, fontSize: "10px", color: theme.brass, width: "26px" }}>
+                  {String(ii + 1).padStart(2, "0")}
+                </span>
+                <input value={item.url || ""} placeholder="Link to the set"
+                       inputMode="url" autoCapitalize="none" autoCorrect="off"
+                       onChange={(e) => edit(si, (s) => { s.items[ii] = { ...s.items[ii], url: e.target.value }; })}
+                       onBlur={(e) => readLink(si, ii, e.target.value.trim())}
+                       style={{ ...inputStyle, flex: 1 }} />
+                <button onClick={() => edit(si, (s) => { s.items.splice(ii, 1); })}
+                        style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", cursor: "pointer",
+                                 padding: "9px 11px", background: theme.ink, border: 0, color: theme.bg }}>
+                  ✕
+                </button>
+              </div>
+
+              <input value={item.title || ""} placeholder="What to call it"
+                     onChange={(e) => edit(si, (s) => { s.items[ii] = { ...s.items[ii], title: e.target.value }; })}
+                     style={{ ...inputStyle, width: "100%", marginTop: "8px" }} />
+
+              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em", color: theme.ink2, marginRight: "4px" }}>
+                  {busyAt === `${si}-${ii}` ? "READING THE LINK…" : "ICON"}
+                </span>
+                {PLATFORMS.map((pf) => {
+                  const on = (item.icon || "AUTO") === pf;
+                  return (
+                    <button key={pf} onClick={() => edit(si, (s) => {
+                              s.items[ii] = { ...s.items[ii], icon: pf === "AUTO" ? "" : pf };
+                            })}
+                            style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.12em", cursor: "pointer",
+                                     padding: "7px 9px",
+                                     color: on ? theme.bg : theme.ink,
+                                     background: on ? theme.ink : "transparent",
+                                     border: `1px solid ${on ? theme.ink : theme.rule}` }}>
+                      {pf}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <button onClick={() => edit(si, (s) => { s.items.push({ url: "", title: "", icon: "" }); })}
+                  style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", cursor: "pointer",
+                           marginTop: "14px", padding: "10px 14px", background: "transparent",
+                           border: `1px solid ${theme.ink}`, color: theme.ink }}>
+            + ADD A SET
+          </button>
+        </div>
+      ))}
+
+      <button onClick={() => onChange([...sections, { label: "", items: [] }])}
+              style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em", cursor: "pointer",
+                       padding: "11px 16px", background: theme.ink, border: 0, color: theme.bg }}>
+        + ADD A SECTION
+      </button>
+    </div>
+  );
+}
+
 function ContentEditor({ kind }) {
   const shape = CONTENT_SHAPES[kind];
   const [rows, setRows] = useState([]);
@@ -1433,7 +1823,7 @@ function ContentEditor({ kind }) {
                       style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink,
                                background: "transparent", border: 0, cursor: "pointer" }}>EDIT</button>
               <button onClick={() => remove(item[shape.key], shape.title(item))}
-                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: "#7A2E2E",
+                      style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.bad,
                                background: "transparent", border: 0, cursor: "pointer" }}>DELETE</button>
             </div>
           ))}
@@ -1483,6 +1873,15 @@ function ContentEditor({ kind }) {
               );
             })}
 
+            {/*
+              Only the sessions page has sessions. The other content kinds get
+              their fields and nothing else.
+            */}
+            {kind === "mixes" && (
+              <Sessions sections={form.sections || []}
+                        onChange={(next) => set("sections", next)} />
+            )}
+
             <label className="flex items-center gap-2.5 pt-1" style={{ cursor: "pointer" }}>
               <input type="checkbox" checked={form.published !== false}
                      onChange={(e) => set("published", e.target.checked)} />
@@ -1517,16 +1916,94 @@ function Settings({ parties }) {
     });
   }, []);
 
-  const save = async () => {
+  const [savedAt, setSavedAt] = useState(null);   // which section last confirmed
+
+  const save = async (which) => {
     setBusy(true);
     const res = await api.saveSettings(values);
     setBusy(false);
     setMsg(res.ok ? "Saved. Changes apply straight away." : (res.error || "Couldn't save."));
+    if (res.ok) {
+      setSavedAt(which);
+      setTimeout(() => setSavedAt((w) => (w === which ? null : w)), 2600);
+    }
   };
+  // Handed to each Section so the button beside the controls you just changed
+  // is the one that confirms.
+  const saver = (which) => ({
+    onSave: () => save(which),
+    saving: busy,
+    saved: savedAt === which,
+  });
 
   if (!values) return <><Notice message={msg} /><Section title="SETTINGS"><p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>Loading…</p></Section></>;
 
   const set = (k, v) => setValues((s) => ({ ...s, [k]: v }));
+
+  /*
+    A named choice, not a free field.
+
+    Every one of these could have been a colour picker or a slider, and every
+    one of them would then have been able to produce an unreadable site in two
+    seconds. A system with no edges is not a system. Three papers that all work
+    with the ink; three accents that all work on the paper.
+  */
+  const Choice = ({ k, label, help, options }) => (
+    <div className="py-4" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+      <p className="m-0 mb-2.5" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{label}</p>
+      <div className="flex flex-wrap" style={{ gap: "6px" }}>
+        {options.map((o) => {
+          const on = values[k] === o.value;
+          return (
+            <button key={o.value} onClick={() => set(k, o.value)}
+                    style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em",
+                             padding: "10px 14px", cursor: "pointer",
+                             display: "flex", alignItems: "center", gap: "8px",
+                             color: on ? theme.bg : theme.ink,
+                             background: on ? theme.ink : "transparent",
+                             border: `1px solid ${on ? theme.ink : theme.rule}` }}>
+              {o.swatch && (
+                <span style={{ width: "13px", height: "13px", background: o.swatch,
+                               border: `1px solid ${on ? "rgba(237,228,208,0.5)" : theme.rule}`,
+                               display: "block" }} />
+              )}
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      {help && (
+        <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+          {help}
+        </p>
+      )}
+    </div>
+  );
+
+  const Switch = ({ k, label, help }) => (
+    <label className="flex items-start gap-3 py-3.5" style={{ cursor: "pointer", borderBottom: `1px solid ${theme.rule}` }}>
+      <input type="checkbox" checked={!!values[k]} style={{ marginTop: "4px" }}
+             onChange={(e) => set(k, e.target.checked)} />
+      <span>
+        <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{label}</span>
+        {help && (
+          <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>{help}</span>
+        )}
+      </span>
+    </label>
+  );
+
+  const Line = ({ k, label, help, placeholder }) => (
+    <div className="py-4" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+      <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{label}</p>
+      <input value={values[k] || ""} placeholder={placeholder}
+             onChange={(e) => set(k, e.target.value)}
+             style={{ ...inputStyle, width: "100%" }} />
+      {help && (
+        <p className="m-0 mt-1.5" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>{help}</p>
+      )}
+    </div>
+  );
 
   const rows = [
     { key: "scanCooldown", label: "Scan cooldown", unit: "seconds",
@@ -1557,7 +2034,75 @@ function Settings({ parties }) {
     <>
       <Notice message={msg} tone={msg.startsWith("Saved") ? "good" : "bad"} />
 
-      <Section title="THE DOOR">
+      <Section title="THE LOOK" {...saver("THE LOOK")}>
+        <p className="m-0 mb-4" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+          These change the site itself. Everything here saves and applies at
+          once — open the site in another tab and reload to see it.
+        </p>
+
+        <Choice k="paperTone" label="Paper"
+                help="The stock everything is printed on. Board is the darkest and the most physical; bone is the coolest."
+                options={[
+                  { value: "BOARD", label: "BOARD", swatch: theme.bg },
+                  { value: "IVORY", label: "IVORY", swatch: theme.bg },
+                  { value: "BONE",  label: "BONE",  swatch: "#E6DFD2" },
+                ]} />
+
+        <Choice k="accentTone" label="Accent"
+                help="The one colour that is not ink or paper — drop caps, numbers, kickers, the italic in a headline."
+                options={[
+                  { value: "OXBLOOD", label: "OXBLOOD", swatch: theme.brass },
+                  { value: "BRASS",   label: "BRASS",   swatch: theme.brass },
+                  { value: "INK",     label: "NONE",    swatch: theme.ink },
+                ]} />
+
+        <Choice k="grainStrength" label="Paper grain"
+                help="The fibre in the stock. Heavy reads as board and card; none reads as a screen."
+                options={[
+                  { value: "NONE",   label: "NONE" },
+                  { value: "LIGHT",  label: "LIGHT" },
+                  { value: "NORMAL", label: "NORMAL" },
+                  { value: "HEAVY",  label: "HEAVY" },
+                ]} />
+
+        <Switch k="photoHalftone" label="Print photographs through a dot screen"
+                help="What makes a picture read as ink rather than as a photograph on a screen. Off gives clean, modern photography." />
+        <Switch k="photoDuotone" label="Warm duotone on the full-bleed photographs"
+                help="Ties every picture to the same shoot. Off leaves them close to their original colour." />
+      </Section>
+
+      <Section title="THE HOME PAGE" {...saver("THE HOME PAGE")}>
+        <Choice k="heroImage" label="The opening photograph"
+                options={[
+                  { value: "club",     label: "THE ROOM" },
+                  { value: "booth",    label: "THE BOOTH" },
+                  { value: "portrait", label: "PORTRAIT" },
+                ]} />
+
+        <div className="flex items-center gap-3 py-4" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+          <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            How tall it opens
+          </span>
+          <input type="number" value={values.heroHeightVw}
+                 onChange={(e) => set("heroHeightVw", Number(e.target.value))}
+                 style={{ ...inputStyle, width: "90px", textAlign: "right" }} />
+          <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink2, width: "62px" }}>
+            % of width
+          </span>
+        </div>
+
+        <Switch k="showContactSheet" label="Show the contact sheet"
+                help="The numbered strip of photographs under the story." />
+
+        <Line k="storyHeadline" label="The big headline" placeholder="Leave empty for the built-in line"
+              help="The line set large under THE STORY. Empty keeps the one that is written in." />
+        <Line k="closingLine" label="The closing line" placeholder="Leave empty for the built-in line"
+              help="Set in italic over the last photograph on the page." />
+        <Line k="footerNote" label="A note in the footer" placeholder="Optional"
+              help="One or two sentences at the bottom of every page. Empty shows nothing." />
+      </Section>
+
+      <Section title="THE DOOR" {...saver("THE DOOR")}>
         {rows.map((r) => (
           <div key={r.key} className="py-3.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
             <div className="flex items-center gap-3">
@@ -1582,15 +2127,14 @@ function Settings({ parties }) {
         ))}
       </Section>
 
-      <Section title="THE FLOATING BAR">
+      <Section title="THE FLOATING BAR" {...saver("THE FLOATING BAR")}>
         <p className="m-0 mb-3" style={{ ...fontText, fontSize: "14.5px", lineHeight: 1.55, color: theme.ink2 }}>
-          Signed in as boss the bar carries five extra tabs, which is a lot for
-          a phone. Below the limit they share the width; above it the bar
-          scrolls instead of squeezing everything to nothing.
+          The bar measures itself rather than counting tabs: it shares the
+          width while they fit and scrolls once they genuinely do not, on any
+          screen. These two set how big each tab is when it does scroll.
         </p>
 
         {[
-          { key: "barMaxTabs", label: "Scroll above this many tabs", unit: "tabs" },
           { key: "barTabWidth", label: "Tab width when scrolling", unit: "px" },
           { key: "barLabelSize", label: "Label size", unit: "px" },
         ].map((r) => (
@@ -1624,7 +2168,7 @@ function Settings({ parties }) {
         </label>
       </Section>
 
-      <Section title="THE SITE">
+      <Section title="THE SITE" {...saver("THE SITE")}>
         <div className="py-3">
           <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
             Banner across every page
@@ -1749,7 +2293,7 @@ function Settings({ parties }) {
         </label>
       </Section>
 
-      <Section title="THE GUEST LIST">
+      <Section title="THE GUEST LIST" {...saver("THE GUEST LIST")}>
         <div className="py-3">
           <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
             What someone sees after asking
@@ -1760,7 +2304,7 @@ function Settings({ parties }) {
         </div>
       </Section>
 
-      <Section title="EMAIL">
+      <Section title="EMAIL" {...saver("EMAIL")}>
         <div className="py-3">
           <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
             Sign-off at the foot of every email
@@ -1775,7 +2319,7 @@ function Settings({ parties }) {
           <input type="checkbox" checked={!!values.siteClosed} style={{ marginTop: "4px" }}
                  onChange={(e) => set("siteClosed", e.target.checked)} />
           <span>
-            <span className="block" style={{ ...fontText, fontSize: "16px", color: "#7A2E2E" }}>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.bad }}>
               Close the site to visitors
             </span>
             <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
@@ -1877,7 +2421,7 @@ function Settings({ parties }) {
         </div>
       </Section>
 
-      <button onClick={save} disabled={busy} style={{ ...btn, marginTop: "8px", opacity: busy ? 0.6 : 1 }}>
+      <button onClick={() => save("FOOT")} disabled={busy} style={{ ...btn, marginTop: "8px", opacity: busy ? 0.6 : 1 }}>
         {busy ? "SAVING…" : "SAVE SETTINGS"}
       </button>
 
@@ -1916,8 +2460,8 @@ function Maintenance({ parties }) {
         <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>{label}</span>
         <button onClick={onClick}
                 style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
-                         color: danger ? "#7A2E2E" : theme.ink,
-                         background: "transparent", border: `1px solid ${danger ? "#C08A8A" : theme.ink}`,
+                         color: danger ? theme.bad : theme.ink,
+                         background: "transparent", border: `1px solid ${danger ? theme.badLine : theme.ink}`,
                          padding: "9px 14px", cursor: "pointer" }}>
           RUN
         </button>
@@ -2006,43 +2550,115 @@ function ConsoleScreen({ role }) {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <section className="max-w-[720px] mx-auto px-[18px] pt-[104px] pb-16">
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(24px,6vw,38px)" }}>
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
+      {/*
+        The console is the index register end to end — it is nothing but facts
+        and controls — so it opens the way every index does: an ink band that
+        states who you are and what the night has left, then the name set
+        large. The old centred title over a hairline row said the same things
+        in a whisper.
+      */}
+      <IndexBand top items={[
+        { label: "SIGNED IN", value: (role.displayName || role.label || "").toUpperCase() },
+        { label: "ROLE", value: role.id },
+        { label: "CODES LEFT", value: codesLeft !== null ? String(codesLeft) : "\u2014" },
+        { label: "EVENTS", value: String(parties.length).padStart(2, "0") },
+      ]} />
+
+      <section className="max-w-[1180px] mx-auto px-[18px] pb-16">
+        <h1 className="m-0 pt-8" style={{ ...fontDisplay, fontWeight: 900, textTransform: "uppercase",
+            fontSize: "clamp(34px,9vw,76px)", lineHeight: 0.88, letterSpacing: "-0.04em", color: theme.ink }}>
           Console
         </h1>
-        <div className="flex justify-between py-1.5 mt-2"
-             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
-                      borderTop: `1px solid ${theme.ink}`, borderBottom: `1px solid ${theme.ink}` }}>
-          <span>{(role.displayName || role.label || "").toUpperCase()}</span>
-          <span>{role.id}{codesLeft !== null ? " · " + codesLeft + " CODES" : ""}</span>
+
+        {/*
+          TWO PANES ON A LAPTOP, ONE COLUMN ON A PHONE.
+
+          The console was a 720px column on every screen, which meant a
+          laptop showed a narrow strip of content down the middle with the
+          navigation pushed off the top the moment you scrolled — so changing
+          tab meant scrolling back up every time. On a wide screen the tabs
+          belong in a rail that stays put beside the work.
+
+          `sticky` is used on the rail and NOTHING on that element clips its
+          overflow: the two together are what made Safari refuse to unstick a
+          panel here once, and it looked like the whole page had gone dark.
+        */}
+        <div className="lg:grid lg:gap-10 mt-6" style={{ gridTemplateColumns: "260px minmax(0, 1fr)" }}>
+          <div className="lg:sticky lg:self-start" style={{ top: "124px" }}>
+
+        {/*
+          Everything visible at once. The grid wraps rather than scrolls, so
+          the number of columns follows the screen — three on a phone, five or
+          six on a laptop — and no tab is ever hidden past an edge.
+
+          A group with nothing in it for this account is not drawn at all:
+          door staff see THE DOOR and nothing else, rather than two empty
+          headings telling them what they cannot have.
+        */}
+        <div className="mt-6">
+          {GROUPS.map((g) => {
+            const items = allowed.filter((t) => t.group === g.id);
+            if (!items.length) return null;
+
+            return (
+              <div key={g.id} className="mb-5">
+                <div className="flex items-center gap-3 mb-2">
+                  <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.22em", color: theme.brass }}>
+                    {g.label}
+                  </span>
+                  <span className="flex-1" style={{ borderTop: `1px solid ${theme.rule}` }} />
+                </div>
+
+                <div className="grid" style={{ gap: "6px", gridTemplateColumns: "repeat(auto-fill, minmax(112px, 1fr))" }}>
+                  {items.map((t) => {
+                    // A link leaves the console entirely, so it is never the
+                    // lit one — nothing here is "open" while you are at it.
+                    const active = !t.to && tab === t.id;
+                    const style = {
+                      ...fontUtility,
+                      fontSize: "9.5px",
+                      letterSpacing: "0.14em",
+                      color: active ? theme.bg : theme.ink,
+                      background: active ? theme.ink : "transparent",
+                      border: `1px solid ${active ? theme.ink : theme.rule}`,
+                      // 44px is the smallest a target can be and still be hit
+                      // reliably with a thumb, which is how this is used.
+                      minHeight: "44px",
+                      padding: "10px 6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      textAlign: "center",
+                      lineHeight: 1.2,
+                      cursor: "pointer",
+                      transition: "background 200ms ease, color 200ms ease, border-color 200ms ease",
+                    };
+
+                    return t.to ? (
+                      <Link key={t.id} to={t.to} style={style}>{t.label} →</Link>
+                    ) : (
+                      <button key={t.id} onClick={() => setTab(t.id)} style={style}>{t.label}</button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        <div className="flex gap-5 mt-5 overflow-x-auto no-scrollbar">
-          {allowed.map((t) => (
-            t.to ? (
-              <Link key={t.id} to={t.to} className="pb-1 whitespace-nowrap"
-                    style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em",
-                             color: theme.ink2, borderBottom: "2px solid transparent" }}>
-                {t.label} →
-              </Link>
-            ) : (
-            <button key={t.id} onClick={() => setTab(t.id)} className="pb-1 whitespace-nowrap"
-                    style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em",
-                             color: tab === t.id ? theme.brass : theme.ink2,
-                             borderBottom: `2px solid ${tab === t.id ? theme.brass : "transparent"}`,
-                             background: "transparent", border: 0, cursor: "pointer" }}>
-              {t.label}
-            </button>
-            )
-          ))}
-        </div>
+          </div>
 
+          <div className="min-w-0">
         <Notice message={msg} />
 
         {tab === "passes" && (
           <Passes role={role} parties={parties} party={party} setParty={setParty} />
         )}
         {tab === "events" && role.can.issuePasses && <Events parties={parties} reload={loadParties} />}
+        {tab === "reading" && role.can.manageTeam && <Readership />}
+        {tab === "backups" && role.can.manageTeam && <Backups />}
         {tab === "team" && role.can.manageTeam && <Team />}
         {tab === "requests" && <Requests role={role} party={party} />}
         {tab === "stats" && <Stats party={party} />}
@@ -2051,6 +2667,8 @@ function ConsoleScreen({ role }) {
           <ContentEditor key={tab} kind={tab} />
         )}
         {tab === "settings" && role.can.manageTeam && <Settings parties={parties} />}
+          </div>
+        </div>
       </section>
       <Footer />
     </div>

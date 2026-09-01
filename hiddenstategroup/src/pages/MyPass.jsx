@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  PageHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import * as api from "../lib/api";
 
@@ -74,13 +74,13 @@ export default function MyPass() {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
 
-      <section className="max-w-[440px] mx-auto px-[18px] pt-[104px] pb-20">
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,7vw,42px)" }}>
-          Your Pass
-        </h1>
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
+      <PageHead kicker="FIND IT" title="Your pass"
+                sub="THE CODE IS ON YOUR EMAIL AND YOUR TICKET" />
+
+      <section className="max-w-[440px] mx-auto px-[18px] pb-20">
 
         <form onSubmit={openPass} className="mt-8">
           <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
@@ -105,7 +105,7 @@ export default function MyPass() {
 
         {error && (
           <p className="m-0 mt-4 px-3 py-2.5"
-             style={{ ...fontText, fontSize: "15px", color: "#7A2E2E", border: "1px solid #C08A8A" }}>
+             style={{ ...fontText, fontSize: "15px", color: theme.bad, border: `1px solid ${theme.badLine}` }}>
             {error}
           </p>
         )}

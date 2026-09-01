@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Nav, Footer, useGoogleFonts, fontDisplay, fontUtility, fontText, fontMasthead, theme } from "./Shared";
+import { Nav, Footer, useGoogleFonts, PageHead,
+         fontDisplay, fontUtility, fontText, theme } from "./Shared";
 import * as api from "../lib/api";
 
 /*
@@ -85,12 +86,10 @@ export default function DoorGate({ children }) {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <section className="max-w-[420px] mx-auto px-[18px] pt-[104px] pb-24">
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(24px,6vw,36px)" }}>
-          Staff Only
-        </h1>
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
+      <PageHead kicker="THE SYSTEM" title="Staff only"
+                sub="DOOR STAFF AND MANAGEMENT" />
+
+      <section className="max-w-[420px] mx-auto px-[18px] pb-24">
 
         <form onSubmit={submit} className="mt-8">
           <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
@@ -117,7 +116,7 @@ export default function DoorGate({ children }) {
           />
           {error && (
             <p className="m-0 mt-3 px-3 py-2.5"
-               style={{ ...fontText, fontSize: "15px", color: "#7A2E2E", border: "1px solid #C08A8A" }}>
+               style={{ ...fontText, fontSize: "15px", color: theme.bad, border: `1px solid ${theme.badLine}` }}>
               {error}
             </p>
           )}

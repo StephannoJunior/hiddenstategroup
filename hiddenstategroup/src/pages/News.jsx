@@ -5,7 +5,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  PageHead, IndexBand, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import { ARTICLES, localised, usePosts } from "../lib/news";
 import { SOCIAL } from "../lib/social";
@@ -65,17 +65,15 @@ export default function News() {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
 
-      <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] pb-2 text-center">
-        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          {t("dailyNews")}
-        </h1>
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
-        <p className="mt-3 mb-0">
-          <Instagram account={SOCIAL.news} size="10.5px" />
-        </p>
-      </section>
+            <IndexBand top items={[
+        { label: "FILED", value: String(ARTICLES.length).padStart(2, "0") + " STORIES" },
+        { label: "LATEST", value: (ARTICLES[0] || {}).date || "\u2014" },
+        { label: "DESK", value: "HIDDEN STATE" },
+      ]} />
+      <PageHead flush kicker="DISPATCHES" title={t("dailyNews")} sub={<Instagram account={SOCIAL.news} size="10.5px" />} />
 
       <div className="max-w-[1180px] mx-auto px-[18px] mt-4">
         <div className="flex gap-6 overflow-x-auto no-scrollbar"

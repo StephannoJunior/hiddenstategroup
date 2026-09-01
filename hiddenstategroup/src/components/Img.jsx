@@ -1,4 +1,6 @@
+import { theme } from "../lib/theme";
 import React, { useEffect, useRef, useState } from "react";
+import SETS from "../content/imagesets.json";
 
 /*
   Img — one image component so every picture behaves the same.
@@ -42,16 +44,35 @@ export default function Img({
 
   const placeholder = isTransparent
     ? "transparent"
-    : style["background"] || style["backgroundColor"] || "#E8DEC7";
+    : style["background"] || style["backgroundColor"] || theme.sunk;
 
-  const small = src && src.endsWith(".webp") ? src.replace(".webp", "-sm.webp") : null;
+  /*
+    WHICH WIDTHS EXIST.
 
-  return (
+    `imagesets.json` is written by scripts/images.mjs and lists, per picture,
+    the widths that were actually produced. Reading it rather than guessing is
+    what makes the AVIF markup safe: an image the script has not been run over
+    has no entry, gets the old two-file behaviour, and cannot end up pointing
+    at a file that was never made.
+
+    The old `-sm` pair had a second problem beyond being hand-made. The
+    browser was told "700w" and "1400w" but never how wide the picture would
+    be ON THE PAGE, so it had to assume the full viewport and generally chose
+    the larger file anyway. The `sizes` attribute is what turns a srcset from
+    a suggestion into a decision.
+  */
+  const set = SETS[src];
+  const widths = set?.w || [];
+  const srcsetFor = (ext) => widths.map((w) => `${set.base}-${w}.${ext} ${w}w`).join(", ");
+
+  const small = !set && src && src.endsWith(".webp") ? src.replace(".webp", "-sm.webp") : null;
+
+  const img = (
     <img
       ref={ref}
       src={src}
-      srcSet={small ? `${small} 700w, ${src} 1400w` : undefined}
-      sizes={small ? sizes : undefined}
+      srcSet={set ? srcsetFor("webp") : small ? `${small} 700w, ${src} 1400w` : undefined}
+      sizes={set || small ? sizes : undefined}
       alt={alt}
       loading={eager ? "eager" : "lazy"}
       decoding="async"
@@ -59,14 +80,46 @@ export default function Img({
       onLoad={() => setLoaded(true)}
       onError={() => setLoaded(true)}
       data-transparent={isTransparent ? "" : undefined}
+      /*
+        DEVELOPING, not fading.
+
+        A photograph used to fade up from the paper tone, which is a website's
+        idea of a picture arriving. This is a print's: it comes up flat and
+        overexposed and resolves into full tone, the way a sheet does in a
+        tray. The two states are in the stylesheet so the timing lives with
+        the rest of the site's motion rather than in this file.
+
+        Logos are exempt. A wordmark that sepia-tones itself on the way in
+        looks like a rendering fault, not a flourish.
+      */
+      data-develop={isTransparent ? undefined : (loaded ? "dry" : "wet")}
       className={className}
       style={{
         ...style,
         backgroundColor: placeholder,
-        opacity: loaded ? 1 : 0,
-        transition: "opacity 420ms ease",
+        ...(isTransparent
+          ? { opacity: loaded ? 1 : 0, transition: "opacity 420ms ease" }
+          : null),
       }}
       {...rest}
     />
+  );
+
+  /*
+    AVIF first, WebP second, and the browser takes the first it understands.
+    No detection, no JavaScript, no flash of the wrong one — <picture> is one
+    of the few things in a browser that does exactly what it says.
+
+    A logo is never wrapped: transparent artwork gains nothing from AVIF here
+    and the extra element only complicates the layout around it.
+  */
+  if (!set || isTransparent) return img;
+
+  return (
+    <picture>
+      <source type="image/avif" srcSet={srcsetFor("avif")} sizes={sizes} />
+      <source type="image/webp" srcSet={srcsetFor("webp")} sizes={sizes} />
+      {img}
+    </picture>
   );
 }

@@ -6,7 +6,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  PageHead, IndexBand, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import { ARTISTS, ROSTER_NOTE, useArtists } from "../lib/data";
 import { SOCIAL } from "../lib/social";
@@ -62,16 +62,14 @@ export default function Artists() {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
-      <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
-        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          {t("theRoster")}
-        </h1>
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
-        <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2 }}>
-          {t("rosterSub")}
-        </p>
-      </section>
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
+            <IndexBand top items={[
+        { label: "ROSTER", value: String(ARTISTS.length).padStart(2, "0") + " ARTISTS" },
+        { label: "DISCIPLINE", value: "DJ / PRODUCER" },
+        { label: "BOOKING", value: "VIA THE AGENCY" },
+      ]} />
+      <PageHead flush kicker="REPRESENTED BY HIDDEN STATE" title={t("theRoster")} sub={t("rosterSub")} />
 
       <div className="max-w-[1180px] mx-auto px-[18px] pb-4">
         {artists.map((a) => <Card key={a.id} a={a} />)}

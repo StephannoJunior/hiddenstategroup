@@ -23,8 +23,28 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   let reloading = false;
 
+  /*
+    WAS THERE A WORKER IN CHARGE WHEN THIS PAGE LOADED?
+
+    This is the whole question, and it has to be asked NOW — by the time
+    controllerchange fires, a controller always exists, so asking then always
+    says yes.
+
+      no  → this is a first install. Nothing on screen is stale, because the
+            page was fetched from the network moments ago. Reloading here
+            reloads the site in a visitor's face for no reason at all, and it
+            was doing that to every first-time visitor.
+      yes → an old version was in charge and a new one has just taken over.
+            That is the case worth a reload, and the only one.
+
+    The smoke test found this: three pages "did not load" because the page
+    navigated out from under the test mid-check. They were reloading
+    themselves.
+  */
+  const hadController = !!navigator.serviceWorker.controller;
+
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloading) return;
+    if (!hadController || reloading) return;
     reloading = true;
     window.location.reload();
   });

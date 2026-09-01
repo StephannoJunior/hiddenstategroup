@@ -5,7 +5,7 @@
 html,
 body,
 #root {
-  background: #F3EBD9;
+  background: var(--hs-paper, #EDE4D0);
   margin: 0;
   min-height: 100%;
 }
@@ -25,14 +25,17 @@ body {
   scrollbar-width: none;
 }
 
-/* Night-edition press details */
+/* The drop cap. Bodoni set very large and in the accent — on a page whose
+   headlines are already Bodoni, the initial reads as the same voice getting
+   louder rather than as a different one arriving. */
 .hs-drop::first-letter {
-  font-family: 'Fraunces', serif;
+  font-family: 'Bodoni Moda', Georgia, serif;
+  font-weight: 900;
   float: left;
-  font-size: 58px;
-  line-height: 0.84;
-  padding: 4px 9px 0 0;
-  color: #16130E;
+  font-size: 66px;
+  line-height: 0.78;
+  padding: 5px 10px 0 0;
+  color: var(--hs-accent, #6E2118);
 }
 
 /* The floating bar sits over the page at every size now, so the footer needs
@@ -49,18 +52,20 @@ footer {
 /* Newsprint grain. Painted straight onto the background: no blend
    mode, because that is what broke iOS here once. */
 body {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  /* Set from the console — see applyLook in src/lib/site.jsx. The fallback is
+     the normal setting, so the page is never bare if the fetch is slow. */
+  background-image: var(--hs-grain, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='4'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.062'/%3E%3C/svg%3E"));
 }
 
 /* A hairline between columns, the way a broadsheet sets them. */
 @media (min-width: 768px) {
   .columns-2, [class*="columns-2"] {
-    column-rule: 1px solid #D8CBAE;
+    column-rule: 1px solid var(--hs-rule, #C9BCA0);
   }
 }
 
-/* Fraunces carries an optical-size axis: larger settings tighten the
-   letterforms, which is what stops big headlines looking loose. */
+/* Bodoni Moda carries an optical-size axis: larger settings thin the hairs
+   and tighten the fit, which is what stops big headlines looking loose. */
 h1, h2 { font-optical-sizing: auto; }
 
 /* Punctuation hangs slightly outside the measure in good typesetting. */
@@ -85,7 +90,7 @@ h1, h2 { font-optical-sizing: auto; }
 img[src$=".webp"]:not([data-transparent]),
 img[src$=".jpg"]:not([data-transparent]),
 img[src$=".jpeg"]:not([data-transparent]) {
-  background-color: #E8DEC7;
+  background-color: var(--hs-sunk, #E5DAC2);
 }
 
 /* Logos and any other transparent artwork must never gain a backing. */
@@ -99,7 +104,7 @@ img[data-transparent] {
    navigating without a mouse. */
 a:focus-visible,
 button:focus-visible {
-  outline: 2px solid #8A6A28;
+  outline: 2px solid var(--hs-accent, #6E2118);
   outline-offset: 3px;
 }
 
@@ -116,11 +121,83 @@ button:focus-visible {
   }
 }
 
-/* Sensible printing, in case anyone actually prints a page. */
+/* Bodoni is a high-contrast face: its hairlines are genuinely hair-thin, and
+   at small sizes they break up. Nothing under 20px is ever set in it — the
+   display sizes get it, EB Garamond takes everything else. This rule is the
+   safety net for anywhere that forgets. */
+h1, h2, h3 { text-rendering: optimizeLegibility; }
+
+/* ═══════════════════════════════════════════════════════════════
+   PRINTED
+   Someone printing a page should get a sheet of paper, not a
+   screenshot of a website. Navigation is useless on paper, dark
+   panels waste a cartridge, and a link whose address you cannot
+   see is not a link at all.
+   ═══════════════════════════════════════════════════════════════ */
+@page {
+  margin: 18mm 16mm;
+}
+
 @media print {
-  header, footer, nav, .demoflag { display: none !important; }
-  body { background: #fff; }
-  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9pt; }
+  /* Nothing that only works by being tapped. */
+  header, nav, .demoflag,
+  [data-glassbar], [data-print="hide"],
+  button, select, input, textarea, form {
+    display: none !important;
+  }
+
+  html, body, #root, [data-page] {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* The grain is a screen effect. On paper it is grey mud. */
+  body { background-image: none !important; }
+
+  /* Ink panels invert: white ground, rule above and below, so an index
+     band still reads as a band without flooding the page. */
+  [data-ink] {
+    background: #fff !important;
+    color: #000 !important;
+    border-top: 2px solid #000;
+    border-bottom: 1px solid #000;
+  }
+  [data-ink] * { color: #000 !important; }
+
+  /* Photographs print small and once. A full-bleed hero across a sheet of
+     A4 is a page of toner and no information. */
+  img {
+    max-height: 78mm !important;
+    width: auto !important;
+    filter: grayscale(1) contrast(1.1) !important;
+    page-break-inside: avoid;
+    opacity: 1 !important;
+  }
+
+  /* Anything told to reveal itself must be visible on paper — a printer
+     never scrolls, so an observer never fires. */
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  h1, h2, h3 { page-break-after: avoid; }
+  p, blockquote, figure, tr { page-break-inside: avoid; }
+  p { orphans: 3; widows: 3; }
+
+  /* The address, so a printed page is still usable. Internal links get the
+     domain put back on the front; mailto and tel are left as they read. */
+  a[href^="http"]::after { content: " (" attr(href) ")"; }
+  a[href^="/"]::after { content: " (hiddenstategroup.com" attr(href) ")"; }
+  a::after {
+    font-family: "Space Mono", ui-monospace, monospace;
+    font-size: 8.5pt;
+    color: #444;
+    word-break: break-all;
+  }
+  a[href^="mailto"]::after, a[href^="tel"]::after, a[href^="#"]::after { content: ""; }
+
+  body { font-size: 10.5pt; line-height: 1.45; }
 }
 
 /* Route changes fade in rather than snapping. Kept short — anything
@@ -138,13 +215,18 @@ main, [data-page] {
    The masthead is a single row: 76px on phones, 92px on desktop. Pages carry
    pt-[104px] for the phone case; this tops it up slightly on desktop. The
    section navigation now lives in the floating bar, not the header. */
-@media (min-width: 1024px) {
-  [data-page] > section:first-of-type,
-  [data-page] > article:first-of-type,
-  [data-page] > div:first-of-type > section:first-of-type {
-    padding-top: 124px;
-  }
-}
+/*  REMOVED — and deliberately.
+
+    This padded "the first section on the page" to clear the taller desktop
+    masthead. Once pages began opening with an ink IndexBand, the first
+    <section> was no longer the thing at the top: it was the Sleeve holding
+    the hero photograph. So the rule pushed 124px of padding into a section
+    whose background is INK, and every page with a band opened on a black
+    strip above the picture.
+
+    The clearance now belongs to the components that actually sit at the top —
+    IndexBand's `top` prop and PageHead — where it can be reasoned about
+    instead of guessed at by position.  */
 
 /* ═══════════════════════════════════════════════════════════════
    FINE TYPESETTING
@@ -156,7 +238,7 @@ main, [data-page] {
    ascenders and descenders like lowercase letters — the 3 and 5 drop below
    the line, the 6 and 8 rise. Lining figures (all cap-height) are a
    twentieth-century convention and make dates shout inside a sentence.
-   EB Garamond and Fraunces both carry the alternate set. */
+   EB Garamond and Bodoni Moda both carry the alternate set. */
 body,
 .hs-drop,
 p, blockquote, figcaption, h1, h2, h3 {
@@ -166,7 +248,7 @@ p, blockquote, figcaption, h1, h2, h3 {
 
 /* Utility type stays on lining figures — a dateline or a catalogue number
    should align in a column, which old-style figures deliberately do not. */
-[style*="Space Grotesk"] {
+[style*="Space Mono"] {
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: "lnum" 1, "tnum" 1;
 }
@@ -190,27 +272,27 @@ h1, h2 {
   display: flex;
   align-items: center;
   gap: 14px;
-  color: #8A6A28;
+  color: var(--hs-accent, #6E2118);
 }
 .hs-fleuron::before,
 .hs-fleuron::after {
   content: "";
   flex: 1;
-  border-top: 1px solid #C4B593;
+  border-top: 1px solid var(--hs-rule, #C9BCA0);
 }
 
 /* A pull quote, set large and italic, hung between rules. */
 .hs-pullquote {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: "Bodoni Moda", Georgia, serif;
   font-style: italic;
   font-size: clamp(21px, 4.2vw, 30px);
   line-height: 1.3;
-  color: #16130E;
+  color: #14120E;
   text-align: center;
   margin: 34px 0;
   padding: 22px 0;
-  border-top: 1px solid #16130E;
-  border-bottom: 1px solid #16130E;
+  border-top: 1px solid var(--hs-ink, #14120E);
+  border-bottom: 1px solid var(--hs-ink, #14120E);
 }
 
 /* Three columns once the page is genuinely wide. Two columns across a
@@ -225,8 +307,8 @@ h1, h2 {
 
 /* True double rule — thick over thin, the classic newspaper divider. */
 .hs-double-rule {
-  border-top: 3px solid #16130E;
-  border-bottom: 1px solid #16130E;
+  border-top: 3px solid var(--hs-ink, #14120E);
+  border-bottom: 1px solid var(--hs-ink, #14120E);
   height: 4px;
   margin: 0;
 }
@@ -235,4 +317,254 @@ h1, h2 {
    text edge stays optically straight. */
 blockquote, .hs-pullquote {
   hanging-punctuation: first last;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOVEMENT
+   The site is a printed thing and should mostly hold still. What
+   follows is the small amount of movement that does real work:
+   sections arriving as you reach them, a link drawing its own
+   rule, a control that answers a press, and photographs that
+   develop rather than appear.
+   ═══════════════════════════════════════════════════════════════ */
+
+/*
+  SECTIONS ARRIVE.
+
+  The default is VISIBLE. The script marks each section pending only after it
+  has confirmed it can observe them, so a browser without IntersectionObserver,
+  a crawler, a reader mode or a printer all get the whole page — the failure
+  mode of a reveal effect must never be an invisible site.
+*/
+[data-reveal="pending"] {
+  opacity: 0;
+  transform: translateY(18px);
+}
+[data-reveal="in"] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 620ms cubic-bezier(0.22, 1, 0.36, 1) var(--hs-reveal-delay, 0ms),
+    transform 720ms cubic-bezier(0.22, 1, 0.36, 1) var(--hs-reveal-delay, 0ms);
+}
+
+/*
+  LINKS DRAW THEIR OWN UNDERLINE.
+
+  A rule that grows from the left rather than a colour that switches. Scoped
+  to prose — links inside paragraphs and lists — because a nav item or a
+  photograph wrapped in a link should not sprout a line under it.
+
+  background-size is animated rather than a pseudo-element's width: it does
+  not create a new box, so it cannot disturb the line's own layout, and it
+  survives a link breaking across two lines, which a positioned underline
+  does not.
+*/
+[data-page] p > a,
+[data-page] li > a,
+[data-page] .hs-prose a {
+  color: inherit;
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 1px;
+  padding-bottom: 1px;
+  transition: background-size 260ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms ease;
+}
+[data-page] p > a:hover,
+[data-page] li > a:hover,
+[data-page] .hs-prose a:hover {
+  color: var(--hs-accent, #6E2118);
+  background-size: 100% 2px;
+}
+
+/* A link that has not been touched yet draws itself in on hover instead. */
+.hs-underline-grow {
+  background-size: 0% 1px;
+}
+.hs-underline-grow:hover {
+  background-size: 100% 1px;
+}
+
+/*
+  EVERYTHING ANSWERS A PRESS.
+
+  A control with no pressed state feels broken on a phone, where there is no
+  hover to tell you the tap landed. Kept to two percent: enough to register,
+  not enough to look like a game.
+
+  :active only — never a permanent transform, which would create a containing
+  block and is exactly what has broken the floating bar on iOS before.
+*/
+[data-page] button:not([data-nopress]):active,
+[data-page] a[role="button"]:active,
+[data-page] label[data-press]:active {
+  transform: scale(0.978);
+}
+[data-page] button:not([data-nopress]),
+[data-page] a[role="button"] {
+  transition: transform 120ms ease, background-color 180ms ease,
+              color 180ms ease, border-color 180ms ease;
+}
+
+/*
+  PHOTOGRAPHS DEVELOP.
+
+  They used to fade up from the paper tone, which is a website's idea of an
+  image arriving. This is a print's idea: the picture comes up flat and
+  overexposed and resolves into full tone, the way a sheet does in a tray.
+
+  filter and opacity are both cheap to animate and neither creates a stacking
+  context that could clip the bar.
+*/
+[data-develop="wet"] {
+  opacity: 0;
+  filter: grayscale(1) contrast(0.72) brightness(1.14) sepia(0.28);
+}
+[data-develop="dry"] {
+  opacity: 1;
+  filter: none;
+  transition: opacity 520ms ease, filter 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+  THE COUNTDOWN ROLLS.
+
+  A digit is a strip of the ten numerals moved up by whole steps, so the new
+  number arrives from the direction time is going. The strip is clipped by a
+  parent with a fixed height and one digit's worth of overflow hidden.
+*/
+.hs-roll {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  line-height: 1;
+}
+.hs-roll-strip {
+  display: block;
+  transition: transform 520ms cubic-bezier(0.34, 1.2, 0.44, 1);
+  will-change: transform;
+}
+.hs-roll-strip span {
+  display: block;
+  line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/*
+  RUNNING HEADS AND FOLIOS.
+
+  What a publication puts in its margins so you know where you are without
+  scrolling back. Hidden below a laptop, where there is no margin to put them
+  in and the header is a tap away.
+*/
+.hs-folio {
+  display: none;
+}
+@media (min-width: 1280px) {
+  .hs-folio {
+    display: block;
+    position: fixed;
+    left: 22px;
+    bottom: 26px;
+    z-index: 40;
+    pointer-events: none;
+    font-family: "Space Mono", ui-monospace, monospace;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    color: var(--hs-ink2, #4A443A);
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    opacity: 0.72;
+  }
+}
+
+/*
+  A BLED PHOTOGRAPH.
+
+  Printed to the trim, with its caption hanging in the margin beside it
+  rather than sitting underneath. Only where the page is wide enough to have
+  a margin to hang into.
+*/
+.hs-bleed-figure {
+  position: relative;
+  margin: 0;
+}
+.hs-bleed-figure figcaption {
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--hs-ink2, #4A443A);
+  margin-top: 8px;
+  padding: 0 18px;
+}
+@media (min-width: 1100px) {
+  .hs-bleed-figure figcaption {
+    position: absolute;
+    top: 0;
+    right: -132px;
+    width: 118px;
+    margin-top: 0;
+    padding: 0;
+    text-align: left;
+    line-height: 1.7;
+  }
+}
+
+
+/*
+  THE MARK GOING ON.
+
+  A wipe from the left with a soft leading edge, so the logo arrives the way
+  ink meets paper rather than sliding in from off-screen. clip-path is used
+  rather than a width animation: it moves nothing and reflows nothing, so it
+  cannot shift the line of type underneath it while it runs.
+*/
+@keyframes hs-ink-on {
+  from {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.2;
+    filter: blur(3px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0.4px);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    filter: none;
+  }
+}
+.hs-ink-on {
+  animation: hs-ink-on 1150ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
+}
+
+/*
+  THE SKIP LINK. Off-screen until focused, then a plain solid plate at the top
+  left. Deliberately not animated — somebody arriving here is navigating, not
+  browsing, and a link that slides into place is a link they are waiting for.
+*/
+.hs-skip {
+  position: fixed;
+  top: 8px;
+  left: -9999px;
+  z-index: 200;
+  padding: 12px 18px;
+  background: var(--hs-ink, #14120E);
+  color: var(--hs-paper, #EDE4D0);
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-decoration: none;
+}
+.hs-skip:focus {
+  left: 8px;
+}
+
+/* The target of the skip link needs somewhere to land that is not hidden
+   under the fixed masthead. */
+#main {
+  scroll-margin-top: 120px;
 }

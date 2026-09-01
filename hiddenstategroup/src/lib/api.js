@@ -7,6 +7,31 @@
 */
 
 const TOKEN_KEY = "hs-session-token";
+const GUEST_KEY = "hs-guest-pass";
+
+/*
+  WHO IS SIGNED IN CAN CHANGE WITHOUT THE ADDRESS CHANGING.
+
+  The login form sits on the page it protects, so signing in never navigates
+  anywhere — the same URL simply starts showing the console. Anything drawn
+  differently for a signed-in person (the glass bar's team tabs) therefore has
+  no reason to redraw, and keeps showing what it drew before until the next
+  tap or a reload. That was the bug: sign in as boss, and the extra tabs only
+  turned up after touching another tab.
+
+  So the token is announced. Every change of session — signing in, signing
+  out, a session expiring mid-request, a guest opening or losing their pass —
+  fires one event, and whoever cares listens for it.
+*/
+export const AUTH_EVENT = "hs-auth-change";
+
+export function announceAuthChange() {
+  try {
+    window.dispatchEvent(new Event(AUTH_EVENT));
+  } catch {
+    /* no window while building; nothing is listening then anyway */
+  }
+}
 
 export const getToken = () => {
   try {
@@ -17,12 +42,40 @@ export const getToken = () => {
 };
 
 export const setToken = (token) => {
+  const before = getToken();
   try {
     if (token) sessionStorage.setItem(TOKEN_KEY, token);
     else sessionStorage.removeItem(TOKEN_KEY);
   } catch {
     /* private browsing blocks this; the session lasts this page only */
   }
+  // Only when it genuinely changed. A failed request clearing an already
+  // empty token should not send everyone off to re-check the server.
+  if ((before || null) !== (token || null)) announceAuthChange();
+};
+
+/*
+  A guest's own pass code. Not a login — see MyPass — but the bar shows a
+  different tab for someone holding one, so it changes the same way and is
+  announced through the same event.
+*/
+export const getGuestPass = () => {
+  try {
+    return localStorage.getItem(GUEST_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setGuestPass = (code) => {
+  const before = getGuestPass();
+  try {
+    if (code) localStorage.setItem(GUEST_KEY, code);
+    else localStorage.removeItem(GUEST_KEY);
+  } catch {
+    /* private browsing blocks this; the pass still works this visit */
+  }
+  if ((before || null) !== (code || null)) announceAuthChange();
 };
 
 /*
@@ -197,7 +250,29 @@ export async function fetchSiteSettings() {
 }
 
 export const fetchSettings = () => call("/settings");
-export const saveSettings = (settings) => call("/settings", { method: "PATCH", body: { settings } });
+
+/*
+  The same problem the login had, in a different place.
+
+  The public site reads its settings once, when it boots. Saving from the
+  console changed them on the server but nothing on screen — the banner, the
+  countdown, the bar's own width and labels — while the settings screen
+  cheerfully said "changes apply straight away". Now a successful save says so
+  out loud and SiteProvider fetches again.
+*/
+export const SETTINGS_EVENT = "hs-settings-change";
+
+export async function saveSettings(settings) {
+  const res = await call("/settings", { method: "PATCH", body: { settings } });
+  if (res.ok) {
+    try {
+      window.dispatchEvent(new Event(SETTINGS_EVENT));
+    } catch {
+      /* no window while building */
+    }
+  }
+  return res;
+}
 
 // Edit an account: name, contact, role, what it can do, or a new password.
 export const editMember = (username, changes) =>
@@ -207,6 +282,73 @@ export const setMemberActive = (username, active) =>
   call(`/team/${encodeURIComponent(username)}`, { method: "PATCH", body: { active } });
 export const deleteMember = (username) =>
   call(`/team/${encodeURIComponent(username)}`, { method: "DELETE" });
+
+/*
+  ── THE SONG POOL ──────────────────────────────────────────────────────────
+  Reading a pool and adding to one are both public: a request box nobody can
+  see the results of is a suggestion box, and people stop using those. Only
+  moderating needs a login, and the server decides that, not this file.
+*/
+/*
+  READERSHIP. A day, a path, a number — no cookie, no identifier, nothing that
+  could be joined back to a person, which is why there is no banner to click.
+
+  sendBeacon is used where it exists because it survives the page being closed;
+  a normal request from a tab that is going away is often cancelled, which is
+  exactly what makes naive page counters undercount the pages people leave on.
+*/
+export function countView(path) {
+  const payload = JSON.stringify({ path });
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon("/api/hit", new Blob([payload], { type: "application/json" }));
+      return;
+    }
+  } catch (e) { /* fall through */ }
+  call("/hit", { method: "POST", body: { path }, auth: false }).catch(() => {});
+}
+
+export const readership = (days = 30) => call(`/views?days=${days}`);
+
+// ── backups ─────────────────────────────────────────────────────────────────
+export const listBackups = () => call("/backups");
+export const makeBackup = () => call("/backups", { method: "POST" });
+// Not a plain link: the file is behind the session, so the token has to travel
+// with the request and the download is built from what comes back.
+export async function downloadBackup(name) {
+  const res = await fetch(`/api/backups/${encodeURIComponent(name)}`, {
+    headers: { authorization: `Bearer ${getToken() || ""}` },
+  });
+  if (!res.ok) return { ok: false, error: "That backup could not be fetched." };
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoked on the next tick — revoking immediately can cancel the save in
+  // Safari before it has read the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return { ok: true };
+}
+
+export const publicParties = () => call("/public-parties", { auth: false });
+
+// What is this link? Used while typing a session in, so the name and the icon
+// fill themselves in rather than being copied by hand from another tab.
+export const resolveLink = (url) => call(`/resolve?url=${encodeURIComponent(url)}`);
+
+export const listSongs = (pool, party) =>
+  // sent WITH auth when a token exists, because the team's view of a pool
+  // includes what has been hidden from everyone else
+  call(`/songs?pool=${encodeURIComponent(pool)}&party=${encodeURIComponent(party || "")}`);
+
+export const addSong = (entry) => call("/songs", { method: "POST", body: entry, auth: false });
+export const editSong = (id, status) =>
+  call(`/songs/${id}`, { method: "PATCH", body: { status } });
+export const deleteSong = (id) => call(`/songs/${id}`, { method: "DELETE" });
 
 // ── guest list requests ─────────────────────────────────────────────────────
 export const submitRequest = (req) =>

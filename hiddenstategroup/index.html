@@ -4,10 +4,43 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Hidden State — record label, booking agency, and artist roster." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!--
+      THE TYPEFACES, ASKED FOR IN THE HEAD.
+
+      These used to be requested by a hook that ran inside useEffect — which
+      means the browser did not learn the site had custom type until React had
+      downloaded, parsed and mounted. Every visitor read a paragraph of Georgia
+      first. Asking here starts the download while the HTML is still being
+      parsed, before a line of JavaScript runs.
+
+      The id is load-bearing: useGoogleFonts() checks for #hs-fonts and does
+      nothing when it already exists, so no page needed editing.
+    -->
+    <link rel="preload" as="style" href="/fonts/fonts.css" />
+    <link id="hs-fonts" rel="stylesheet" href="/fonts/fonts.css" />
+
+    <!--
+      THE OPENING PHOTOGRAPH.
+
+      The largest thing painted on the home page, and the browser could only
+      discover it after parsing the bundle. Named here, it starts immediately.
+
+      IT MUST NAME THE FILE THE PAGE WILL ACTUALLY USE. This pointed at
+      /club.webp, which was right until the photographs were cut into widths
+      and AVIF — after that the page chose /club-800.avif and this preload had
+      fetched a second, unused copy of the same picture. A preload that misses
+      is worse than none: it is a whole file downloaded for nothing, competing
+      with the one that is needed.
+
+      With `type` set, a browser that cannot read AVIF ignores this line and
+      loads the WebP as normal.
+    -->
+    <link rel="preload" as="image" type="image/avif"
+          imagesrcset="/club-480.avif 480w, /club-800.avif 800w"
+          imagesizes="100vw" fetchpriority="high" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#16130E" />
+    <meta name="theme-color" content="#14120E" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.jpg" />
     <link rel="icon" href="/icons/icon-192.jpg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -20,7 +53,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <title>Hidden State</title>
   </head>
-  <body style="background: #F3EBD9">
+  <body style="background: #EDE4D0">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

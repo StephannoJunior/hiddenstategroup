@@ -4,7 +4,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  PageHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import { ARTISTS } from "../lib/data";
 import { EMAILS } from "../lib/contacts";
@@ -26,17 +26,10 @@ export default function About() {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
 
-      <section className="max-w-[1180px] mx-auto px-[18px] pt-[104px] text-center">
-        <h1 className="m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(30px,8vw,52px)" }}>
-          About
-        </h1>
-        <div className="mt-2" style={{ borderTop: "2px solid " + theme.ink }} />
-        <div style={{ borderTop: "1px solid " + theme.ink, marginTop: "3px" }} />
-        <p className="mt-3 mb-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-          FROM ANOTHER STATE OF MIND
-        </p>
-      </section>
+      <PageHead kicker="THE ECOSYSTEM" title="About" sub="FROM ANOTHER STATE OF MIND" />
 
       <section className="max-w-[900px] mx-auto px-[18px] pt-8">
         <h2 className="mb-5" style={{ ...fontDisplay, fontWeight: 300, color: theme.ink, fontSize: "clamp(25px,5.4vw,42px)", lineHeight: 1.16 }}>

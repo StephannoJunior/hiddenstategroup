@@ -1,0 +1,344 @@
+{
+ "/artists/b-mike.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/artists/b-mike"
+ },
+ "/artists/claire-cruz.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/artists/claire-cruz"
+ },
+ "/artists/dj-mario.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/artists/dj-mario"
+ },
+ "/artists/dj-stephanno-model1.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/artists/dj-stephanno-model1"
+ },
+ "/artists/tess-wich.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/artists/tess-wich"
+ },
+ "/booth.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/booth"
+ },
+ "/club.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/club"
+ },
+ "/events/december-secret.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/events/december-secret"
+ },
+ "/events/euphoria/02.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/02"
+ },
+ "/events/euphoria/03.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/03"
+ },
+ "/events/euphoria/04.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/04"
+ },
+ "/events/euphoria/05.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/05"
+ },
+ "/events/euphoria/06.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/06"
+ },
+ "/events/euphoria/07.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/07"
+ },
+ "/events/euphoria/08.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/08"
+ },
+ "/events/euphoria/09.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/09"
+ },
+ "/events/euphoria/10.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/10"
+ },
+ "/events/euphoria/11.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/11"
+ },
+ "/events/euphoria/12.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/12"
+ },
+ "/events/euphoria/13.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/13"
+ },
+ "/events/euphoria/14.webp": {
+  "w": [
+   480,
+   800,
+   1400
+  ],
+  "base": "/events/euphoria/14"
+ },
+ "/events/euphoria-poster.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/events/euphoria-poster"
+ },
+ "/news/astryon-launch.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/astryon-launch"
+ },
+ "/news/dj-mario.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/dj-mario"
+ },
+ "/news/dj-tengu.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/dj-tengu"
+ },
+ "/news/posters/astryon-launch.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/astryon-launch"
+ },
+ "/news/posters/b-mike.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/b-mike"
+ },
+ "/news/posters/black-coffee.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/black-coffee"
+ },
+ "/news/posters/claire-cruz.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/claire-cruz"
+ },
+ "/news/posters/creamfields-armin-van-buuren.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/creamfields-armin-van-buuren"
+ },
+ "/news/posters/creamfields-calvin-harris.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/creamfields-calvin-harris"
+ },
+ "/news/posters/creamfields-martin-garrix.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/creamfields-martin-garrix"
+ },
+ "/news/posters/creamfields-tiesto.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/creamfields-tiesto"
+ },
+ "/news/posters/dj-mario.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/dj-mario"
+ },
+ "/news/posters/dj-stephanno-model1.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/dj-stephanno-model1"
+ },
+ "/news/posters/dj-tengu.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/dj-tengu"
+ },
+ "/news/posters/indira-paganotto.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/indira-paganotto"
+ },
+ "/news/posters/miss-monique.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/miss-monique"
+ },
+ "/news/posters/stephanno-astryon.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/stephanno-astryon"
+ },
+ "/news/posters/tess-wich.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/news/posters/tess-wich"
+ },
+ "/portrait.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/portrait"
+ },
+ "/records/aymara.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/records/aymara"
+ },
+ "/records/kasbah.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/records/kasbah"
+ },
+ "/records/mestizo.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/records/mestizo"
+ },
+ "/records/nenge.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/records/nenge"
+ },
+ "/records/sing-chu.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/records/sing-chu"
+ },
+ "/records/to-the-unknown.webp": {
+  "w": [
+   480,
+   800
+  ],
+  "base": "/records/to-the-unknown"
+ }
+}

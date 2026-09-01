@@ -6,7 +6,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  DetailHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import { EVENTS } from "../lib/data";
 import Gallery from "../components/Gallery";
@@ -30,6 +30,8 @@ export default function EventDetail() {
     return (
       <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
         <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
         <section className="max-w-[1180px] mx-auto px-[18px] pt-[140px] pb-24 text-center">
           <h1 style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(28px,6vw,44px)" }}>
             We couldn't find that event.
@@ -52,46 +54,21 @@ export default function EventDetail() {
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
 
-      <article className="max-w-[900px] mx-auto px-[18px] pt-[104px] pb-16">
-        <Link to="/events" className="inline-flex items-center gap-2 mb-6"
-              style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.18em", color: theme.ink2 }}>
-          <ArrowLeft size={12} strokeWidth={1.5} /> ALL EVENTS
-        </Link>
+      <DetailHead
+        items={[
+          { label: "STATUS", value: past ? "PAST EVENT" : "UPCOMING" },
+          { label: "DATE", value: (e.date || "TBA").toUpperCase() },
+          ...(place ? [{ label: "WHERE", value: place.toUpperCase() }] : []),
+        ]}
+        image={e.artwork}
+        meta={past ? "FROM THE ARCHIVE" : "UPCOMING"}
+        title={e.name}
+        sub={e.subtitle}
+        backTo="/events" backLabel="ALL EVENTS" />
 
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(26px,6.5vw,42px)" }}>
-          Hidden State
-        </h1>
-        <div className="flex justify-between py-1.5 mt-2"
-             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
-                      borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
-          <span style={{ color: past ? theme.ink2 : theme.brass }}>{past ? "PAST EVENT" : "UPCOMING"}</span>
-          <span>{e.date}</span>
-        </div>
-
-        <h2 className="text-center mt-6 mb-1"
-            style={{ ...fontDisplay, fontWeight: 400, color: theme.ink, fontSize: "clamp(32px,8vw,58px)", lineHeight: 1.05 }}>
-          {e.name}
-        </h2>
-        {e.subtitle && (
-          <p className="text-center m-0" style={{ ...fontDisplay, fontStyle: "italic", fontSize: "22px", color: theme.brass }}>
-            {e.subtitle}
-          </p>
-        )}
-        {place && (
-          <p className="text-center py-2.5 mt-4 m-0"
-             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.ink2,
-                      borderTop: "2px solid " + theme.ink, borderBottom: "2px solid " + theme.ink }}>
-            {place.toUpperCase()}
-          </p>
-        )}
-
-        {e.artwork ? (
-          <figure className="m-0 mt-6">
-            <Img src={e.artwork} alt={e.name} className="w-full block"
-                 style={{ background: theme.raised, filter: past ? "grayscale(55%)" : "none" }} />
-          </figure>
-        ) : (
-          <div className="mt-6 flex flex-col items-center justify-center text-center px-5 py-16"
+      <article className="max-w-[900px] mx-auto px-[18px] pt-8 pb-16">
+        {!e.artwork && (
+          <div className="flex flex-col items-center justify-center text-center px-5 py-16"
                style={{ background: theme.ink, color: theme.bg }}>
             <span style={{ ...fontUtility, fontSize: "15px", letterSpacing: "0.32em" }}>
               {e.name.split(" ")[0].toUpperCase()}

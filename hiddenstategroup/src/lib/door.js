@@ -47,6 +47,39 @@ export const saveRoster = (roster) => write(ROSTER_KEY, roster);
 export const getQueue = () => read(QUEUE_KEY, []);
 export const clearQueue = () => write(QUEUE_KEY, []);
 
+/*
+  THE CODE INSIDE A SCAN.
+
+  A pass QR carries "HS|CODE|ROTATING", but a typed or printed code arrives on
+  its own. One function reads both, and everything that touches a code calls
+  it — the scanner used to work this out in two places with two different
+  conditions, and one of them was wrong: it fell back to storing the WHOLE
+  payload whenever the pass happened to have no name on it. The server then
+  looked for a pass whose code was "HS|ABC123|4821", found nothing, and the
+  admission was lost without an error anywhere.
+*/
+export const codeOf = (payload) => {
+  const parts = String(payload || "").split("|");
+  return (parts.length > 1 ? parts[1] : parts[0]) || "";
+};
+
+/*
+  Remove only the entries the server confirmed it has finished with, and leave
+  everything else queued.
+
+  This is the difference between a queue and a hope. Emptying it on a
+  successful response assumed the server took all of it, which it does not
+  when there are more than five hundred entries or when one of them is
+  malformed.
+*/
+export function dequeue(codes) {
+  const done = new Set((codes || []).filter(Boolean));
+  if (!done.size) return getQueue();
+  const left = getQueue().filter((e) => !done.has(e.code));
+  write(QUEUE_KEY, left);
+  return left;
+}
+
 export function queueAdmission(code, party) {
   const queue = getQueue();
   // Never queue the same pass twice — a double tap should not become two

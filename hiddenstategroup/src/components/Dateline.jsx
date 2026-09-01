@@ -14,7 +14,7 @@ import { useLang, LANGS } from "../lib/lang";
   the page constantly.
 */
 
-export function LiveDateline() {
+export function LiveDateline({ tone } = {}) {
   const { lang } = useLang();
   const [now, setNow] = useState(() => new Date());
 
@@ -63,7 +63,10 @@ export function LiveDateline() {
 
   return (
     <span
-      style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.14em", color: theme.ink2, whiteSpace: "nowrap" }}
+      style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.14em",
+               // `tone` lets the same dateline sit on the masthead's paper and
+               // in the footer's ink without a second component.
+               color: tone === "light" ? "rgba(237,228,208,0.62)" : theme.ink2, whiteSpace: "nowrap" }}
       title={zone ? `Your time — ${zone}` : undefined}
     >
       <span className="hidden md:inline">{date.toUpperCase()} · {time}</span>

@@ -2,8 +2,9 @@ import { usePageMeta } from "../lib/seo";
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Nothing,
   Nav, Footer, useGoogleFonts,
-  fontDisplay, fontUtility, fontText, fontMasthead, theme,
+  IndexBand, PageHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import DoorGate from "../components/DoorGate";
 import * as api from "../lib/api";
@@ -23,9 +24,9 @@ import * as api from "../lib/api";
 */
 
 const STATE = {
-  ADMITTED: { fg: "#1E4620", label: "VALID" },
-  REFUSED:  { fg: "#7A2E2E", label: "REJECTED" },
-  AWAITING: { fg: "#8C887E", label: "AWAITING" },
+  ADMITTED: { fg: theme.good, label: "VALID" },
+  REFUSED:  { fg: theme.bad, label: "REJECTED" },
+  AWAITING: { fg: theme.ink2, label: "AWAITING" },
 };
 
 const REASON = {
@@ -85,17 +86,16 @@ function PassListScreen({ role }) {
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
+      {/* where the skip link lands */}
+      <span id="main" tabIndex={-1} />
 
-      <section className="max-w-[720px] mx-auto px-[18px] pt-[104px] pb-16">
-        <h1 className="text-center m-0" style={{ ...fontMasthead, color: theme.ink, fontSize: "clamp(24px,6vw,38px)" }}>
-          Door List
-        </h1>
-        <div className="flex justify-between py-1.5 mt-2"
-             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em", color: theme.ink2,
-                      borderTop: "1px solid " + theme.ink, borderBottom: "1px solid " + theme.ink }}>
-          <span>{party ? party.name : "NO NIGHT SET"}</span>
-          <span>{rows.length} ISSUED</span>
-        </div>
+      <IndexBand top items={[
+        { label: "THE NIGHT", value: party ? party.name.toUpperCase() : "NO NIGHT SET" },
+        { label: "ISSUED", value: String(rows.length).padStart(2, "0") },
+      ]} />
+      <PageHead flush kicker="AT THE DOOR" title="Door list" />
+
+      <section className="max-w-[720px] mx-auto px-[18px] pb-16">
 
         {/* the three numbers that matter, big enough to read at a glance */}
         <div className="grid grid-cols-3 gap-3 mt-5">
@@ -117,6 +117,11 @@ function PassListScreen({ role }) {
         </div>
 
         <div className="mt-7" style={{ borderTop: "1px solid " + theme.ink }}>
+          {rows.length === 0 && (
+            <Nothing note="Passes appear the moment they are issued. If you are expecting names here, check the night selected above is the right one.">
+              Nobody on the list yet.
+            </Nothing>
+          )}
           {rows.map((r) => {
             const st = stateOf(r);
             const s = STATE[st] || STATE.AWAITING;
