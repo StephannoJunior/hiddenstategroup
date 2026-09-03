@@ -31,6 +31,10 @@ const MixArtist = lazy(() => import("./pages/MixArtist"));
 const About = lazy(() => import("./pages/About"));
 const Contact = lazy(() => import("./pages/Contact"));
 const SongPool = lazy(() => import("./pages/SongPool"));
+const Demos = lazy(() => import("./pages/Demos"));
+const Bookings = lazy(() => import("./pages/Bookings"));
+const Wall = lazy(() => import("./pages/Wall"));
+const Kit = lazy(() => import("./pages/Kit"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Passes — kept out of the main navigation deliberately. A guest reaches
@@ -219,6 +223,19 @@ export default function App() {
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/pool" element={<SongPool />} />
+              <Route path="/demos" element={<Demos />} />
+              <Route path="/bookings" element={<Bookings />} />
+
+              {/*
+                Two pages reached only by a link nobody can guess — a headcount
+                on a screen in the corner of a room, and an artist's press kit
+                sent to a promoter. Neither has a way in from the site, and
+                neither is in the sitemap: the token in the address is the
+                whole of the authorisation, so a page that advertises its own
+                existence is a page inviting people to try tokens.
+              */}
+              <Route path="/wall/:token" element={<Wall />} />
+              <Route path="/kit/:token" element={<Kit />} />
 
               <Route path="/pass/:code" element={<Pass />} />
               <Route path="/mypass" element={<MyPass />} />

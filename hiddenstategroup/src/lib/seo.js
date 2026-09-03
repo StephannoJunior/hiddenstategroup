@@ -25,10 +25,28 @@ function setTag(selector, attr, value) {
   el.setAttribute(attr, value);
 }
 
-export function usePageMeta({ title = null, description = "", image = null, type = "website" }) {
+export function usePageMeta({ title = null, description = "", image = null, type = "website", noIndex = false }) {
   useEffect(() => {
     const full = title ? `${title} — ${SITE}` : SITE;
     document.title = full;
+
+    /*
+      KEEPING A PAGE OUT OF SEARCH.
+
+      Two pages exist only behind an unguessable link — an artist's press kit
+      and the headcount on a wall. Neither is in the sitemap and neither is
+      linked from anywhere, but that is not enough on its own: a token pasted
+      into a chat app that prefetches links, or into a browser that syncs
+      history, is a token that can find its way to a crawler.
+
+      Removed again when a page that does not ask for it mounts, because this
+      tag lives in the document head and would otherwise be inherited by every
+      page visited afterwards — silently de-indexing the whole site after one
+      visit to a press kit.
+    */
+    const robots = document.head.querySelector('meta[name="robots"]');
+    if (noIndex) setTag('meta[name="robots"]', "content", "noindex, nofollow");
+    else if (robots) robots.remove();
 
     setTag('meta[name="description"]', "content", description);
     setTag('meta[property="og:title"]', "content", full);
@@ -44,7 +62,7 @@ export function usePageMeta({ title = null, description = "", image = null, type
       document.head.appendChild(link);
     }
     link.setAttribute("href", BASE + window.location.pathname);
-  }, [title, description, image, type]);
+  }, [title, description, image, type, noIndex]);
 }
 
 /*

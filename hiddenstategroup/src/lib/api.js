@@ -141,8 +141,19 @@ export const fetchPass = (code) =>
   call(`/pass/${encodeURIComponent(code)}`, { auth: false });
 
 // ── the door ────────────────────────────────────────────────────────────────
-export const scan = (payload) => call("/scan", { method: "POST", body: { payload } });
-export const scanByCode = (code) => call("/scan", { method: "POST", body: { code } });
+/*
+  DIRECTION IS SENT, NEVER INFERRED — N03.
+
+  The server could work out that somebody already inside must be leaving, and
+  that would be wrong: a camera reading the same pass twice would become an
+  accidental exit, and the next real scan would then let a stranger in on a
+  code that should have been spent. So the scanner says which way the person
+  is going, and the default is in.
+*/
+export const scan = (payload, direction = "IN") =>
+  call("/scan", { method: "POST", body: { payload, direction } });
+export const scanByCode = (code, direction = "IN") =>
+  call("/scan", { method: "POST", body: { code, direction } });
 
 // The door's own copy of the guest list, for working without signal.
 export const fetchRoster = (party) => call(`/roster?party=${encodeURIComponent(party)}`);
@@ -499,3 +510,78 @@ export function watchForFaults() {
 // The console's reading of the above. Both need manageTeam.
 export const listOops = () => call("/oops");
 export const clearOops = () => call("/oops", { method: "DELETE" });
+
+/*
+  ══════════════════════════════════════════════════════════════════════════
+  THE SECOND EIGHTEEN
+  ══════════════════════════════════════════════════════════════════════════
+*/
+
+// ── N04 · a note on a name ──────────────────────────────────────────────────
+// An empty note deletes it, so there is one call rather than a set and a clear.
+export const setDoorNote = (code, note, tone) =>
+  call(`/passes/${encodeURIComponent(code)}/note`, { method: "PUT", body: { note, tone } });
+
+// ── share links · N01, L02, G09 ─────────────────────────────────────────────
+export const makeShareLink = (kind, ref, label, expires) =>
+  call("/share", { method: "POST", body: { kind, ref, label, expires } });
+export const listShareLinks = (kind) =>
+  call(`/share${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`);
+export const revokeShareLink = (token) =>
+  call(`/share/${encodeURIComponent(token)}`, { method: "DELETE" });
+
+// ── N01 · the number on the wall ────────────────────────────────────────────
+// No auth by design: the whole point is a screen propped up in a corner that
+// nobody has to sign into.
+export const readWall = (token) =>
+  call(`/wall/${encodeURIComponent(token)}`, { auth: false });
+
+// ── G06 · the running order ─────────────────────────────────────────────────
+export const listSetTimes = (party) =>
+  call(`/settimes?party=${encodeURIComponent(party || "")}`, { auth: false });
+export const saveSetTimes = (party, sets) =>
+  call("/settimes", { method: "PUT", body: { party, sets } });
+
+// ── G07 · add to calendar ───────────────────────────────────────────────────
+// Not a fetch — a plain address the browser downloads. Returned as a string so
+// a link can point straight at it and the phone's calendar handles the rest.
+export const calendarLink = (party) => `/api/ics/${encodeURIComponent(party)}.ics`;
+
+// ── N05 · the waiting list ──────────────────────────────────────────────────
+export const readWaitlist = (party) =>
+  call(`/waitlist?party=${encodeURIComponent(party || "")}`);
+export const offerPlace = (party, id, anyway) =>
+  call("/waitlist/offer", { method: "POST", body: { party, id, anyway } });
+
+// ── G08 · the morning after ─────────────────────────────────────────────────
+// dryRun answers "how many would this reach" without sending anything, which
+// is the question anyone sensible asks before pressing send.
+export const sendAfter = (party, subject, body, opts = {}) =>
+  call("/afters", { method: "POST", body: { party, subject, body, ...opts } });
+export const listAfters = () => call("/afters");
+
+// ── L01 · demos ─────────────────────────────────────────────────────────────
+export const submitDemo = (demo) => call("/demos", { method: "POST", body: demo, auth: false });
+export const listDemos = (status) =>
+  call(`/demos${status && status !== "ALL" ? `?status=${encodeURIComponent(status)}` : ""}`);
+export const judgeDemo = (id, status, verdict, reply) =>
+  call(`/demos/${id}`, { method: "PATCH", body: { status, verdict, reply } });
+
+// ── L04 · bookings ──────────────────────────────────────────────────────────
+export const submitBooking = (b) => call("/bookings", { method: "POST", body: b, auth: false });
+export const listBookings = () => call("/bookings");
+export const decideBooking = (id, status, note) =>
+  call(`/bookings/${id}`, { method: "PATCH", body: { status, note } });
+
+// ── L02 · the press kit ─────────────────────────────────────────────────────
+export const readKitByLink = (token) =>
+  call(`/epk/link/${encodeURIComponent(token)}`, { auth: false });
+export const readKit = (artistId) => call(`/epk/artist/${artistId}`);
+export const saveKit = (artistId, kit) =>
+  call(`/epk/artist/${artistId}`, { method: "PUT", body: kit });
+
+// ── L03 · where a record lives ──────────────────────────────────────────────
+export const listReleaseLinks = (record) =>
+  call(`/links?record=${encodeURIComponent(record)}`, { auth: false });
+export const saveReleaseLinks = (record, links) =>
+  call("/links", { method: "PUT", body: { record, links } });

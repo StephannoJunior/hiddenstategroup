@@ -685,11 +685,36 @@ const DEFAULT_SETTINGS = {
   // Whether the public guest list form accepts requests.
   guestListOpen: true,
 
+  /*
+    ── THE WAITING LIST — N05 ───────────────────────────────────────────────
+
+    A full night used to turn every later request away permanently. Now the
+    request joins a queue instead, in the order it arrived, which is the only
+    order anyone accepts as fair.
+
+    Offering a place is deliberate and stays deliberate: there is no automatic
+    promotion when a pass is cancelled. Someone else's pass issuing itself a
+    second after you revoke one is the kind of thing you want to have chosen.
+  */
+  waitlistOpen: true,
+  waitlistMessage: "The list is full for this one — you are on the waiting list, and we will write if a place comes free.",
+
   // Ask for ID on every pass, not only sold tickets.
   idOnEveryPass: false,
 
   // Shown at the foot of every email.
   emailSignoff: "Hidden State",
+
+  /*
+    ── DEMOS AND BOOKINGS — L01, L04 ────────────────────────────────────────
+    Both refused on the server when closed. The page hides the form as a
+    courtesy; this is what actually says no.
+  */
+  demosOpen: true,
+  demosClosedMessage: "We are not listening to demos at the moment. Try again in a few weeks.",
+  demosNote: "One link — SoundCloud, Drive, wherever it lives. We listen to everything and answer what we can.",
+  bookingsOpen: true,
+  bookingsNote: "Tell us the date, the room and the budget and we can answer in one reply instead of five.",
 
   /*
     ── THE SONG POOL ────────────────────────────────────────────────────────
@@ -913,6 +938,14 @@ const PUBLIC_SETTINGS = [
   // visitor a second copy of something they already have.
   "poolOpen", "poolEventOpen", "poolHouseOpen", "poolNeedPass", "poolRequireName",
   "poolHeadline", "poolSub", "poolNote", "poolClosedMessage",
+  /*
+    Demos and bookings publish only whether they are open and the line above
+    each form. The rate limits are not here for the same reason the pool's are
+    not: they are enforced on this side, and a limit nobody can read is a
+    limit nobody games.
+  */
+  "demosOpen", "demosNote", "demosClosedMessage",
+  "bookingsOpen", "bookingsNote",
 ];
 
 async function getSettings(env) {
@@ -1786,11 +1819,72 @@ async function handleApi(request, env, url, ctx) {
       }
     }
 
-    const already = await env.DB.prepare(
-      "SELECT scanned_at FROM scans WHERE code = ? AND party_id = ? AND result = 'ADMITTED'"
+    /*
+      ── N02 + N03 · HOW MANY OF THEM ARE IN, AND ARE THEY STILL IN ──────
+
+      This used to be one question — "has this code been admitted?" — enforced
+      by a UNIQUE index in the database. That was correct while a pass meant
+      one person who came in once, and it makes both of the things below
+      impossible:
+
+        N02  a pass that admits four people is scanned four times
+        N03  someone steps outside for a cigarette and comes back
+
+      So the index is dropped and the rule moves here, where it can COUNT
+      rather than simply refuse. `inHere` is admissions minus exits for this
+      code: it goes up when one of the party comes in and down when one of
+      them leaves, and the door refuses only once all `admits` places are
+      taken. Nothing is weakened — a screenshotted single pass still stops
+      working the moment its one place is used.
+
+      Every scan is still one row in `scans`. The history is unchanged, and a
+      run of refusals against one code still stands out exactly as before.
+    */
+    const tally = await env.DB.prepare(
+      "SELECT " +
+      "  SUM(CASE WHEN result = 'ADMITTED' THEN 1 ELSE 0 END) AS ins, " +
+      "  SUM(CASE WHEN result = 'EXIT' THEN 1 ELSE 0 END) AS outs, " +
+      "  MAX(CASE WHEN result = 'ADMITTED' THEN scanned_at END) AS last_in " +
+      "FROM scans WHERE code = ? AND party_id = ?"
     ).bind(code, pass.party_id).first();
 
-    if (already) {
+    const admits = Math.max(1, Number(pass.admits) || 1);
+    const inHere = Math.max(0, Number(tally?.ins || 0) - Number(tally?.outs || 0));
+    const already = tally && tally.last_in ? { scanned_at: tally.last_in } : null;
+
+    /*
+      A NOTE ON A NAME — N04.
+
+      Read before any decision is returned, so it travels with a refusal as
+      well as an admission. A STOP note on someone who is being turned away
+      anyway still tells the door WHY, which is the difference between an
+      awkward conversation and an argument.
+    */
+    const doorNote = await env.DB.prepare(
+      "SELECT note, tone FROM door_notes WHERE code = ?"
+    ).bind(code).first().catch(() => null);
+
+    /*
+      GOING OUT — N03.
+
+      An explicit direction, sent by the scanner, never inferred. Inferring it
+      from "they are already inside, so this must be them leaving" turns the
+      camera-reads-it-twice case into an accidental exit, and then the next
+      real scan lets a stranger in on a used code.
+    */
+    if (String(body.direction || "IN").toUpperCase() === "OUT") {
+      if (inHere <= 0) {
+        await record("REFUSED", "NOT_INSIDE");
+        return json({ ok: false, reason: "NOT_INSIDE", name: pass.name, doorNote });
+      }
+      await record("EXIT", null);
+      return json({
+        ok: true, out: true, name: pass.name, kind: pass.kind,
+        stillIn: inHere - 1, admits, doorNote,
+      });
+    }
+
+    if (already && inHere >= admits) {
       /*
         A camera left pointing at the same pass reads it again a moment later.
         Reporting ALREADY USED there looks to staff like a refusal, and they
@@ -1803,11 +1897,18 @@ async function handleApi(request, env, url, ctx) {
       if (secondsSince <= settings.scanCooldown) {
         return json({
           ok: true, repeat: true, name: pass.name, kind: pass.kind, tier: pass.tier,
-          ticketRef: pass.ticket_ref, idRequired: !!pass.id_required, admits: pass.admits || 1,
+          ticketRef: pass.ticket_ref, idRequired: !!pass.id_required, admits,
+          inHere, doorNote,
         });
       }
       await record("REFUSED", "USED");
-      return json({ ok: false, reason: "USED", name: pass.name, at: already.scanned_at });
+      return json({
+        ok: false, reason: "USED", name: pass.name, at: already.scanned_at,
+        // On a pass for more than one, "used" needs to say how many — a door
+        // told only "already used" cannot tell a fifth person on a four-pass
+        // from a stranger with a screenshot.
+        admits, inHere, doorNote,
+      });
     }
 
     /*
@@ -1825,10 +1926,19 @@ async function handleApi(request, env, url, ctx) {
     const capacity = Number(pass.capacity) || 0;
     let inside = 0;
     if (capacity > 0) {
+      /*
+        Now that people can leave and come back, a headcount that only adds up
+        admissions is wrong within an hour of doors — and it is wrong in the
+        dangerous direction, reporting a room fuller than it is and turning
+        people away from space that exists.
+      */
       const cnt = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM scans WHERE party_id = ? AND result = 'ADMITTED'"
+        "SELECT " +
+        "  SUM(CASE WHEN result = 'ADMITTED' THEN 1 ELSE 0 END) AS ins, " +
+        "  SUM(CASE WHEN result = 'EXIT' THEN 1 ELSE 0 END) AS outs " +
+        "FROM scans WHERE party_id = ?"
       ).bind(pass.party_id).first();
-      inside = Number(cnt?.n || 0);
+      inside = Math.max(0, Number(cnt?.ins || 0) - Number(cnt?.outs || 0));
 
       if (inside >= capacity && settings.capacityFullAction === "REFUSE") {
         await record("REFUSED", "FULL");
@@ -1852,7 +1962,11 @@ async function handleApi(request, env, url, ctx) {
       // asks regardless of what the individual pass says.
       idRequired: settings.idOnEveryPass || !!pass.id_required,
       note: pass.note,
-      admits: pass.admits || 1,
+      admits,
+      // How many of this pass's places are now taken, so a door holding a
+      // pass for four can say "2 of 4 in" instead of just "admitted".
+      inHere: inHere + 1,
+      doorNote,
     });
   }
 
@@ -1876,8 +1990,25 @@ async function handleApi(request, env, url, ctx) {
     if (!partyId) return fail("Which event?");
 
     const rows = await env.DB.prepare(
+      /*
+        COUNTS, NOT A FLAG.
+
+        The roster used to carry `admitted_at` — one timestamp, meaning "this
+        pass has been used". A pass that admits four cannot be described that
+        way, and neither can somebody who has stepped outside. So the door
+        gets the same two numbers the server works from: how many have come
+        in on this code, and how many have gone back out.
+
+        The door note travels with it. A note that only exists online is a
+        note that is missing at exactly the moment the basement kills the
+        signal, which is when the door is least able to go and ask someone.
+      */
       "SELECT p.code, p.name, p.kind, p.tier, p.ticket_ref, p.id_required, p.status, p.admits, " +
-      "  (SELECT scanned_at FROM scans s WHERE s.code = p.code AND s.result = 'ADMITTED' LIMIT 1) AS admitted_at " +
+      "  (SELECT COUNT(*) FROM scans s WHERE s.code = p.code AND s.party_id = p.party_id AND s.result = 'ADMITTED') AS ins, " +
+      "  (SELECT COUNT(*) FROM scans s WHERE s.code = p.code AND s.party_id = p.party_id AND s.result = 'EXIT') AS outs, " +
+      "  (SELECT MIN(scanned_at) FROM scans s WHERE s.code = p.code AND s.party_id = p.party_id AND s.result = 'ADMITTED') AS admitted_at, " +
+      "  (SELECT n.note FROM door_notes n WHERE n.code = p.code) AS door_note, " +
+      "  (SELECT n.tone FROM door_notes n WHERE n.code = p.code) AS door_tone " +
       "FROM passes p WHERE p.party_id = ?"
     ).bind(partyId).all();
 
@@ -1925,9 +2056,27 @@ async function handleApi(request, env, url, ctx) {
 
     for (const e of entries) {
       if (!e.code || !e.party) { rejected.push(e.code || null); continue; }
-      const already = await env.DB.prepare(
-        "SELECT scanned_at FROM scans WHERE code = ? AND party_id = ? AND result = 'ADMITTED'"
+      /*
+        A QUEUED ADMISSION IS ONLY A CONFLICT ONCE THE PLACES ARE FULL.
+
+        This used to reject any offline admission for a code that had been
+        admitted before — which, on a pass that admits four, threw away the
+        second, third and fourth people the moment the door went offline.
+        They were let in at the door and then vanished from the record.
+      */
+      const seen = await env.DB.prepare(
+        "SELECT " +
+        "  SUM(CASE WHEN result = 'ADMITTED' THEN 1 ELSE 0 END) AS ins, " +
+        "  SUM(CASE WHEN result = 'EXIT' THEN 1 ELSE 0 END) AS outs, " +
+        "  MAX(CASE WHEN result = 'ADMITTED' THEN scanned_at END) AS last_in " +
+        "FROM scans WHERE code = ? AND party_id = ?"
       ).bind(e.code, e.party).first();
+      const room = await env.DB.prepare(
+        "SELECT admits FROM passes WHERE code = ?"
+      ).bind(e.code).first();
+      const allowed = Math.max(1, Number(room?.admits) || 1);
+      const held = Math.max(0, Number(seen?.ins || 0) - Number(seen?.outs || 0));
+      const already = held >= allowed && seen?.last_in ? { scanned_at: seen.last_in } : null;
 
       if (already) {
         // Someone was admitted twice — once offline, once elsewhere. Worth
@@ -1958,8 +2107,12 @@ async function handleApi(request, env, url, ctx) {
 
     const partyId = url.searchParams.get("party");
     const rows = await env.DB.prepare(
-      "SELECT p.code, p.name, p.kind, p.tier, p.ticket_ref, p.note, p.status, p.email, p.admits, " +
-      "  (SELECT scanned_at FROM scans s WHERE s.code = p.code AND s.result = 'ADMITTED' LIMIT 1) AS admitted_at, " +
+      "SELECT p.code, p.name, p.kind, p.tier, p.note, p.status, p.email, p.admits, p.ticket_ref, " +
+      "  (SELECT COUNT(*) FROM scans s WHERE s.code = p.code AND s.result = 'ADMITTED') AS ins, " +
+      "  (SELECT COUNT(*) FROM scans s WHERE s.code = p.code AND s.result = 'EXIT') AS outs, " +
+      "  (SELECT n.note FROM door_notes n WHERE n.code = p.code) AS door_note, " +
+      "  (SELECT n.tone FROM door_notes n WHERE n.code = p.code) AS door_tone, " +
+      "  (SELECT MIN(scanned_at) FROM scans s WHERE s.code = p.code AND s.result = 'ADMITTED') AS admitted_at, " +
       "  (SELECT COUNT(*) FROM scans s WHERE s.code = p.code AND s.result = 'REFUSED') AS refusals, " +
       "  (SELECT reason FROM scans s WHERE s.code = p.code AND s.result = 'REFUSED' ORDER BY s.id DESC LIMIT 1) AS last_reason " +
       "FROM passes p WHERE p.party_id = ? ORDER BY p.issued_at DESC"
@@ -2900,6 +3053,573 @@ async function handleApi(request, env, url, ctx) {
     return json({ ok: true });
   }
 
+  /*
+    ═══════════════════════════════════════════════════════════════════════
+    THE SECOND EIGHTEEN.
+
+    Everything below was added in one pass, so it shares three ideas rather
+    than inventing three of each:
+
+      · SHARE LINKS. A door display on a wall, an artist's press kit sent to
+        a promoter, and a guest forwarding an invite are the same problem —
+        read access to one object, no login, revocable. One table, one
+        lookup, one place to get the security right.
+      · PUBLIC FORMS ARE RATE-LIMITED AND SETTING-GATED, always on the
+        server. The page hiding a closed form is a courtesy; the refusal is
+        here.
+      · NOTHING PUBLIC RETURNS AN EMAIL ADDRESS. Not a demo's, not a
+        booking's, not a guest's. The console sees them; the internet does
+        not, whatever a page chooses to draw.
+    ═══════════════════════════════════════════════════════════════════════
+  */
+
+  /*
+    ── N04 · A NOTE ON A NAME ───────────────────────────────────────────────
+    Written by whoever can issue passes, read by the door at the moment a code
+    scans. Kept in its own table so the migration that adds it cannot half
+    apply, and so removing a note is a delete rather than a nulled column.
+  */
+  if (path.match(/^\/passes\/[^/]+\/note$/) && method === "PUT") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const code = decodeURIComponent(path.split("/")[2]).toUpperCase();
+
+    const note = String(body.note || "").slice(0, 200).trim();
+    const tone = ["INFO", "GOOD", "WARN", "STOP"].includes(body.tone) ? body.tone : "INFO";
+    if (!note) {
+      await env.DB.prepare("DELETE FROM door_notes WHERE code = ?").bind(code).run();
+      return json({ ok: true, cleared: true });
+    }
+    await env.DB.prepare(
+      "INSERT INTO door_notes (code, note, tone, created_at, created_by) VALUES (?, ?, ?, ?, ?) " +
+      "ON CONFLICT (code) DO UPDATE SET note = excluded.note, tone = excluded.tone, " +
+      "  created_at = excluded.created_at, created_by = excluded.created_by"
+    ).bind(code, note, tone, now(), who.username).run();
+    return json({ ok: true });
+  }
+
+  /*
+    ── SHARE LINKS ──────────────────────────────────────────────────────────
+
+    THE TOKEN. 32 characters from crypto.getRandomValues, not Math.random and
+    not a hash of anything guessable. This string IS the authorisation — there
+    is nothing else to get past — so it has to be long enough that guessing is
+    hopeless and random enough that seeing one tells you nothing about the
+    next.
+  */
+  if (path === "/share" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+
+    const kind = ["DOOR", "EPK", "INVITE"].includes(body.kind) ? body.kind : null;
+    if (!kind) return fail("What kind of link?");
+    const ref = String(body.ref || "").slice(0, 120);
+    if (!ref) return fail("A link has to point at something.");
+
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const token = [...bytes].map((b) => b.toString(36).padStart(2, "0")).join("").slice(0, 32);
+
+    /*
+      A DOOR LINK DIES WITH THE NIGHT. It is pasted into a group chat and
+      forgotten, and a headcount that is still readable next March is a small
+      leak that nobody will ever remember to close. An EPK link is meant to
+      live in a promoter's inbox for a year, so it does not expire — it gets
+      revoked instead, which is a decision someone makes rather than a
+      surprise.
+    */
+    let expires = body.expires || null;
+    if (!expires && kind === "DOOR") {
+      expires = new Date(Date.now() + 36 * 3600 * 1000).toISOString();
+    }
+
+    await env.DB.prepare(
+      "INSERT INTO share_links (token, kind, ref, label, expires_at, created_at, created_by) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(token, kind, ref, String(body.label || "").slice(0, 80) || null,
+           expires, now(), who.username).run();
+
+    return json({ ok: true, token, expires });
+  }
+
+  if (path === "/share" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const kind = url.searchParams.get("kind");
+    const rows = kind
+      ? await env.DB.prepare(
+          "SELECT * FROM share_links WHERE kind = ? ORDER BY created_at DESC LIMIT 100"
+        ).bind(kind).all()
+      : await env.DB.prepare(
+          "SELECT * FROM share_links ORDER BY created_at DESC LIMIT 100"
+        ).all();
+    return json({ ok: true, links: rows.results || [] });
+  }
+
+  // Revoking rather than deleting: the row stays, so "this link was made,
+  // used eleven times, and killed on the 4th" remains answerable.
+  if (path.startsWith("/share/") && method === "DELETE") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const token = decodeURIComponent(path.slice(7));
+    await env.DB.prepare("UPDATE share_links SET revoked = 1 WHERE token = ?").bind(token).run();
+    return json({ ok: true });
+  }
+
+  /*
+    One reader for all three kinds, so the checks — does it exist, is it
+    revoked, has it expired — are written once and cannot drift apart.
+  */
+  const openShare = async (token, kind) => {
+    const row = await env.DB.prepare(
+      "SELECT * FROM share_links WHERE token = ?"
+    ).bind(token).first();
+    if (!row || row.revoked) return null;
+    if (row.kind !== kind) return null;
+    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return null;
+    // Counted, so a link that is being passed around shows it.
+    await env.DB.prepare(
+      "UPDATE share_links SET uses = uses + 1, last_used = ? WHERE token = ?"
+    ).bind(now(), token).run().catch(() => {});
+    return row;
+  };
+
+  /*
+    ── N01 · THE NUMBER ON THE WALL ─────────────────────────────────────────
+
+    Everything a screen propped up in a corner needs and nothing else: how
+    many are in, how many are expected, and the room's limit. No names — a
+    display in a public room must not be a guest list anyone can photograph.
+  */
+  if (path.startsWith("/wall/") && method === "GET") {
+    const link = await openShare(decodeURIComponent(path.slice(6)), "DOOR");
+    if (!link) return fail("This link is not working.", 404);
+
+    const party = await env.DB.prepare(
+      "SELECT id, name, date_label, capacity, doors_close_at FROM parties WHERE id = ?"
+    ).bind(link.ref).first();
+    if (!party) return fail("No such night.", 404);
+
+    const cnt = await env.DB.prepare(
+      "SELECT " +
+      "  SUM(CASE WHEN result = 'ADMITTED' THEN 1 ELSE 0 END) AS ins, " +
+      "  SUM(CASE WHEN result = 'EXIT' THEN 1 ELSE 0 END) AS outs " +
+      "FROM scans WHERE party_id = ?"
+    ).bind(link.ref).first();
+
+    const expected = await env.DB.prepare(
+      "SELECT SUM(admits) AS n FROM passes WHERE party_id = ? AND status = 'ACTIVE'"
+    ).bind(link.ref).first();
+
+    const ins = Number(cnt?.ins || 0);
+    const outs = Number(cnt?.outs || 0);
+    return json({
+      ok: true,
+      party: { name: party.name, date: party.date_label },
+      inside: Math.max(0, ins - outs),
+      admitted: ins,
+      outside: outs,
+      expected: Number(expected?.n || 0),
+      capacity: Number(party.capacity) || 0,
+      closed: new Date(party.doors_close_at).getTime() < Date.now(),
+      at: now(),
+    });
+  }
+
+  /*
+    ── G06 · THE RUNNING ORDER ──────────────────────────────────────────────
+    Public to read, because it is the thing guests refresh all night.
+  */
+  if (path === "/settimes" && method === "GET") {
+    const partyId = url.searchParams.get("party");
+    if (!partyId) return json({ ok: true, sets: [] });
+    const rows = await env.DB.prepare(
+      "SELECT id, name, at_label, room, note, sort_order FROM set_times " +
+      "WHERE party_id = ? ORDER BY sort_order ASC, id ASC"
+    ).bind(partyId).all().catch(() => ({ results: [] }));
+    return json({ ok: true, sets: rows.results || [] });
+  }
+
+  if (path === "/settimes" && method === "PUT") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const partyId = String(body.party || "");
+    if (!partyId) return fail("Which event?");
+
+    /*
+      REPLACED WHOLE, not patched row by row. A running order is edited as a
+      list — reordered, one line deleted, two added — and sending the finished
+      list is the only version of that which cannot end up half-applied when
+      the phone loses signal between the third and fourth request.
+    */
+    const sets = Array.isArray(body.sets) ? body.sets.slice(0, 40) : [];
+    await env.DB.prepare("DELETE FROM set_times WHERE party_id = ?").bind(partyId).run();
+    let i = 0;
+    for (const s of sets) {
+      const name = String(s.name || "").slice(0, 80).trim();
+      if (!name) continue;
+      await env.DB.prepare(
+        "INSERT INTO set_times (party_id, name, at_label, room, note, sort_order, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).bind(partyId, name, String(s.at || "").slice(0, 40) || null,
+             String(s.room || "").slice(0, 40) || null,
+             String(s.note || "").slice(0, 120) || null, i++, now()).run();
+    }
+    return json({ ok: true, saved: i });
+  }
+
+  /*
+    ── G07 · ADD TO CALENDAR ────────────────────────────────────────────────
+
+    An .ics file, built here rather than in the browser, because the phone
+    that most needs this is the one being handed a link in a message and it
+    should not have to run any JavaScript to save a date.
+
+    THE FOLDING. iCalendar lines are limited to 75 octets and a long venue
+    name silently breaks a file that no calendar will then open. `fold` is not
+    a nicety.
+  */
+  if (path.startsWith("/ics/") && method === "GET") {
+    const partyId = decodeURIComponent(path.slice(5)).replace(/\.ics$/, "");
+    const party = await env.DB.prepare(
+      "SELECT id, name, date_label, venue, starts_at, doors_close_at FROM parties WHERE id = ? AND archived = 0"
+    ).bind(partyId).first();
+    if (!party) return new Response("Not found", { status: 404 });
+
+    const stamp = (iso) => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    };
+    const start = stamp(party.starts_at || party.doors_close_at);
+    const end = stamp(party.doors_close_at);
+    if (!start) return new Response("No date", { status: 404 });
+
+    const esc = (t) => String(t || "").replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");
+    const fold = (line) => {
+      const out = [];
+      let s = line;
+      while (s.length > 74) { out.push(s.slice(0, 74)); s = " " + s.slice(74); }
+      out.push(s);
+      return out.join("\r\n");
+    };
+
+    const body_ = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Hidden State//EN",
+      "CALSCALE:GREGORIAN",
+      "BEGIN:VEVENT",
+      `UID:${party.id}@hiddenstategroup.com`,
+      `DTSTAMP:${stamp(now())}`,
+      `DTSTART:${start}`,
+      end ? `DTEND:${end}` : null,
+      fold(`SUMMARY:${esc("Hidden State — " + party.name)}`),
+      party.venue ? fold(`LOCATION:${esc(party.venue)}`) : null,
+      fold(`DESCRIPTION:${esc("Doors and details: https://hiddenstategroup.com/events")}`),
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].filter(Boolean).join("\r\n");
+
+    return new Response(body_, {
+      headers: {
+        "content-type": "text/calendar; charset=utf-8",
+        "content-disposition": `attachment; filename="hidden-state-${party.id}.ics"`,
+        "cache-control": "public, max-age=300",
+      },
+    });
+  }
+
+  /*
+    ── L01 · DEMOS ──────────────────────────────────────────────────────────
+
+    A LINK, NOT A FILE. Accepting uploads would mean storing strangers' audio,
+    deciding how long to keep it, and answering for it — for a queue that is
+    read once and mostly answered no. Everyone sends a link anyway.
+  */
+  if (path === "/demos" && method === "POST") {
+    const cfg = await getSettings(env);
+    if (!cfg.demosOpen) return fail(cfg.demosClosedMessage || "Demos are closed at the moment.", 403);
+
+    const artist = String(body.artist || "").slice(0, 80).trim();
+    const email = String(body.email || "").slice(0, 160).trim();
+    const link = String(body.url || "").slice(0, 500).trim();
+    if (!artist || !email || !link) return fail("A name, an address and a link, please.");
+    if (!/^https?:\/\//i.test(link)) return fail("That does not look like a link.");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail("That address does not look right.");
+
+    /*
+      ONE PER ADDRESS PER DAY. Not a general rate limit — a specific one, and
+      the honest reason is that the same person sends the same link four times
+      when they get no answer within an hour. Counting by address rather than
+      by connection is what actually stops that.
+    */
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM demos WHERE email = ? AND created_at > ?"
+    ).bind(email, since).first();
+    if (Number(recent?.n || 0) >= 2) {
+      return fail("We already have yours — give us a few days to listen.", 429);
+    }
+
+    await env.DB.prepare(
+      "INSERT INTO demos (artist, email, url, title, note, socials, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(artist, email, link, String(body.title || "").slice(0, 120) || null,
+           String(body.note || "").slice(0, 600) || null,
+           String(body.socials || "").slice(0, 200) || null, now()).run();
+
+    return json({ ok: true });
+  }
+
+  if (path === "/demos" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const status = url.searchParams.get("status");
+    const rows = status && status !== "ALL"
+      ? await env.DB.prepare(
+          "SELECT * FROM demos WHERE status = ? ORDER BY created_at DESC LIMIT 300"
+        ).bind(status).all()
+      : await env.DB.prepare("SELECT * FROM demos ORDER BY created_at DESC LIMIT 300").all();
+    return json({ ok: true, demos: rows.results || [] });
+  }
+
+  if (path.startsWith("/demos/") && method === "PATCH") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const id = decodeURIComponent(path.slice(7));
+    const status = ["NEW", "HEARD", "YES", "MAYBE", "NO"].includes(body.status) ? body.status : null;
+    if (!status) return fail("Unknown verdict.");
+
+    const row = await env.DB.prepare("SELECT * FROM demos WHERE id = ?").bind(id).first();
+    if (!row) return fail("No such demo.", 404);
+
+    await env.DB.prepare(
+      "UPDATE demos SET status = ?, verdict = ?, decided_by = ?, heard_at = COALESCE(heard_at, ?) WHERE id = ?"
+    ).bind(status, String(body.verdict || row.verdict || "").slice(0, 500) || null,
+           who.username, now(), id).run();
+
+    /*
+      ANSWERING IS A SEPARATE, DELIBERATE ACT.
+
+      Marking something NO and having a letter leave immediately is how you
+      send a rejection you meant to reconsider. `reply: true` has to be asked
+      for, and it is recorded, so nobody is ever answered twice.
+    */
+    let told = false;
+    if (body.reply && row.email && !row.replied_at) {
+      const cfg = await getSettings(env);
+      const yes = status === "YES" || status === "MAYBE";
+      told = true;
+      ctx.waitUntil(sendNote(env, {
+        to: row.email,
+        subject: yes ? "About your demo" : "Thank you for the demo",
+        text: yes
+          ? `${row.artist},\n\nWe listened, and we would like to talk. Someone will write ` +
+            `to you properly in the next few days.\n\n${cfg.emailSignoff || "Hidden State"}\n`
+          : `${row.artist},\n\nThank you for sending it — we listened. It is not right for ` +
+            `us at the moment, which is a decision about fit and not about the work.\n\n` +
+            `Please do send us the next one.\n\n${cfg.emailSignoff || "Hidden State"}\n`,
+      }));
+      await env.DB.prepare("UPDATE demos SET replied_at = ? WHERE id = ?").bind(now(), id).run();
+    }
+    return json({ ok: true, told });
+  }
+
+  /*
+    ── L04 · BOOKINGS ───────────────────────────────────────────────────────
+    The questions you would have to ask anyway, asked once, up front.
+  */
+  if (path === "/bookings" && method === "POST") {
+    const cfg = await getSettings(env);
+    if (!cfg.bookingsOpen) return fail("Bookings are closed at the moment.", 403);
+
+    const promoter = String(body.promoter || "").slice(0, 100).trim();
+    const email = String(body.email || "").slice(0, 160).trim();
+    if (!promoter || !email) return fail("A name and an address, please.");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail("That address does not look right.");
+
+    const since = new Date(Date.now() - 3600 * 1000).toISOString();
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM bookings WHERE email = ? AND created_at > ?"
+    ).bind(email, since).first();
+    if (Number(recent?.n || 0) >= 3) return fail("We have your enquiry.", 429);
+
+    const t = (v, n) => String(v || "").slice(0, n) || null;
+    await env.DB.prepare(
+      "INSERT INTO bookings (promoter, company, email, phone, artist, date_label, city, country, " +
+      "  venue, capacity, budget, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(promoter, t(body.company, 100), email, t(body.phone, 40), t(body.artist, 80),
+           t(body.date, 60), t(body.city, 60), t(body.country, 60), t(body.venue, 100),
+           t(body.capacity, 40), t(body.budget, 60), t(body.note, 800), now()).run();
+
+    // Told immediately, because a booking enquiry that sits unseen for a week
+    // is a date that has gone to somebody else.
+    const cfgB = await getSettings(env);
+    if (cfgB.accountCopyTo) {
+      ctx.waitUntil(sendNote(env, {
+        to: cfgB.accountCopyTo,
+        subject: `Booking enquiry — ${promoter}${body.artist ? " for " + body.artist : ""}`,
+        text: `${promoter}${body.company ? " (" + body.company + ")" : ""}\n` +
+              `${email}${body.phone ? " · " + body.phone : ""}\n\n` +
+              `Artist: ${body.artist || "—"}\nWhen: ${body.date || "—"}\n` +
+              `Where: ${[body.venue, body.city, body.country].filter(Boolean).join(", ") || "—"}\n` +
+              `Capacity: ${body.capacity || "—"}\nBudget: ${body.budget || "—"}\n\n` +
+              `${body.note || ""}\n`,
+      }));
+    }
+    return json({ ok: true });
+  }
+
+  if (path === "/bookings" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const rows = await env.DB.prepare(
+      "SELECT * FROM bookings ORDER BY created_at DESC LIMIT 200"
+    ).all();
+    return json({ ok: true, bookings: rows.results || [] });
+  }
+
+  if (path.startsWith("/bookings/") && method === "PATCH") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const id = decodeURIComponent(path.slice(10));
+    const status = ["NEW", "TALKING", "HELD", "CONFIRMED", "NO"].includes(body.status)
+      ? body.status : null;
+    if (!status) return fail("Unknown status.");
+    await env.DB.prepare(
+      "UPDATE bookings SET status = ?, reply_note = ?, decided_by = ?, decided_at = ? WHERE id = ?"
+    ).bind(status, String(body.note || "").slice(0, 600) || null, who.username, now(), id).run();
+    return json({ ok: true });
+  }
+
+  /*
+    ── L02 · THE PRESS KIT ──────────────────────────────────────────────────
+
+    WHAT THE PUBLIC LINK RETURNS is deliberately not the row. `contact` is an
+    address and belongs to whoever we put in it, and a press kit link ends up
+    in forwarded email threads with people we have never met. It is sent only
+    when the artist's own record says it should be.
+  */
+  if (path.startsWith("/epk/link/") && method === "GET") {
+    const link = await openShare(decodeURIComponent(path.slice(10)), "EPK");
+    if (!link) return fail("This link is not working.", 404);
+
+    const artist = await env.DB.prepare(
+      "SELECT id, name, alias, type, genres, country, location, descr, bio, photo, poster, instagram " +
+      "FROM artists WHERE id = ?"
+    ).bind(link.ref).first();
+    if (!artist) return fail("No such artist.", 404);
+
+    const kit = await env.DB.prepare("SELECT * FROM epk WHERE artist_id = ?")
+      .bind(link.ref).first().catch(() => null);
+
+    const jsonish = (v) => { try { return JSON.parse(v || "[]"); } catch { return []; } };
+    return json({
+      ok: true,
+      artist,
+      kit: kit ? {
+        bioShort: kit.bio_short, bioLong: kit.bio_long,
+        rider: kit.rider, hospitality: kit.hospitality,
+        photos: jsonish(kit.photos), logos: jsonish(kit.logos), links: jsonish(kit.links),
+        contact: kit.contact,
+        updatedAt: kit.updated_at,
+      } : null,
+    });
+  }
+
+  if (path.startsWith("/epk/artist/") && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const id = decodeURIComponent(path.slice(12));
+    const kit = await env.DB.prepare("SELECT * FROM epk WHERE artist_id = ?").bind(id).first();
+    const links = await env.DB.prepare(
+      "SELECT token, label, uses, last_used, revoked, created_at FROM share_links " +
+      "WHERE kind = 'EPK' AND ref = ? ORDER BY created_at DESC"
+    ).bind(String(id)).all().catch(() => ({ results: [] }));
+    return json({ ok: true, kit: kit || null, links: links.results || [] });
+  }
+
+  if (path.startsWith("/epk/artist/") && method === "PUT") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const id = Number(decodeURIComponent(path.slice(12)));
+    if (!id) return fail("Which artist?");
+
+    const asJson = (v) => JSON.stringify(Array.isArray(v) ? v.slice(0, 40) : []);
+    await env.DB.prepare(
+      "INSERT INTO epk (artist_id, bio_short, bio_long, rider, hospitality, photos, logos, links, " +
+      "  contact, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT (artist_id) DO UPDATE SET bio_short = excluded.bio_short, " +
+      "  bio_long = excluded.bio_long, rider = excluded.rider, hospitality = excluded.hospitality, " +
+      "  photos = excluded.photos, logos = excluded.logos, links = excluded.links, " +
+      "  contact = excluded.contact, updated_at = excluded.updated_at, updated_by = excluded.updated_by"
+    ).bind(id, String(body.bioShort || "").slice(0, 600) || null,
+           String(body.bioLong || "").slice(0, 3000) || null,
+           String(body.rider || "").slice(0, 4000) || null,
+           String(body.hospitality || "").slice(0, 2000) || null,
+           asJson(body.photos), asJson(body.logos), asJson(body.links),
+           String(body.contact || "").slice(0, 200) || null, now(), who.username).run();
+    return json({ ok: true });
+  }
+
+  /*
+    ── L03 · WHERE A RECORD LIVES ───────────────────────────────────────────
+
+    `presave` rows are shown before the release date and hidden after it, and
+    the ordinary ones the other way round. The switch is the date on the
+    record, so release day happens by itself at midnight in whatever timezone
+    the reader is in, and nobody has to be awake for it.
+  */
+  if (path === "/links" && method === "GET") {
+    const slug = url.searchParams.get("record");
+    if (!slug) return json({ ok: true, links: [] });
+    const rows = await env.DB.prepare(
+      "SELECT id, label, url, presave, sort_order FROM release_links " +
+      "WHERE record_slug = ? ORDER BY sort_order ASC, id ASC"
+    ).bind(slug).all().catch(() => ({ results: [] }));
+    return json({ ok: true, links: rows.results || [] });
+  }
+
+  if (path === "/links" && method === "PUT") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const slug = String(body.record || "");
+    if (!slug) return fail("Which record?");
+    const list = Array.isArray(body.links) ? body.links.slice(0, 20) : [];
+
+    await env.DB.prepare("DELETE FROM release_links WHERE record_slug = ?").bind(slug).run();
+    let i = 0;
+    for (const l of list) {
+      const label = String(l.label || "").slice(0, 40).trim();
+      const href = String(l.url || "").slice(0, 500).trim();
+      if (!label || !/^https?:\/\//i.test(href)) continue;
+      await env.DB.prepare(
+        "INSERT INTO release_links (record_slug, label, url, presave, sort_order) VALUES (?, ?, ?, ?, ?)"
+      ).bind(slug, label, href, l.presave ? 1 : 0, i++).run();
+    }
+    return json({ ok: true, saved: i });
+  }
+
+  /*
+    ── U01 · SOMETHING WATCHING FROM OUTSIDE ────────────────────────────────
+
+    /api/health tells you whether the database, the bucket and the mail key
+    are answering. It cannot tell you the site is up, because if the Worker is
+    gone then so is the check — that answer has to come from outside
+    Cloudflare.
+
+    This is what an external monitor should point at. Plain text, no database
+    query, no JSON to parse, cache explicitly forbidden: it is up if and only
+    if these four characters come back. A monitor that watched /api/health
+    instead would go red every time the mail key expired, and a monitor that
+    cries wolf is worse than none.
+  */
+  if (path === "/up") {
+    return new Response("UP\n", {
+      headers: { "content-type": "text/plain", "cache-control": "no-store" },
+    });
+  }
+
   if (path === "/public-parties" && method === "GET") {
     const rows = await env.DB.prepare(
       "SELECT id, name, date_label FROM parties WHERE archived = 0 AND doors_close_at > ? " +
@@ -3197,9 +3917,62 @@ async function handleApi(request, env, url, ctx) {
     const people = Math.max(1, Math.min(cfg.maxPeoplePerRequest, Number(body.people) || 1));
     const note = String(body.note || "").slice(0, 150);
 
+    /*
+      ── G09 · WHO BROUGHT THEM ───────────────────────────────────────────
+
+      A guest forwards their invite; the person who accepts arrives with the
+      forwarder's pass code in the link. It is never shown to the person
+      filling the form and never asked for — it rides along in the address,
+      which is the only way this is ever going to be filled in honestly.
+
+      Checked against the passes table rather than stored as given, so the
+      column holds a real code or nothing at all.
+    */
+    let referrer = null;
+    if (body.from) {
+      const src = await env.DB.prepare(
+        "SELECT code FROM passes WHERE code = ? AND status = 'ACTIVE'"
+      ).bind(String(body.from).toUpperCase().slice(0, 20)).first().catch(() => null);
+      referrer = src ? src.code : null;
+    }
+
+    /*
+      ── N05 · THE WAITING LIST ───────────────────────────────────────────
+
+      Counted in PLACES, not passes: a pass that admits four takes four of the
+      room. Counting rows here would have let a full night keep accepting
+      requests until it was several hundred people over.
+
+      A night with no capacity set is not full — it is unlimited, and treating
+      an unset number as zero would put every request straight onto a waiting
+      list for a room with no limit.
+    */
+    let waiting = false;
+    let position = 0;
+    if (body.party) {
+      const room = await env.DB.prepare(
+        "SELECT capacity FROM parties WHERE id = ?"
+      ).bind(body.party).first();
+      const cap = Number(room?.capacity) || 0;
+      if (cap > 0 && cfg.waitlistOpen) {
+        const taken = await env.DB.prepare(
+          "SELECT SUM(admits) AS n FROM passes WHERE party_id = ? AND status = 'ACTIVE'"
+        ).bind(body.party).first();
+        if (Number(taken?.n || 0) + people > cap) {
+          waiting = true;
+          const ahead = await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM requests WHERE party_id = ? AND status = 'WAITING'"
+          ).bind(body.party).first();
+          position = Number(ahead?.n || 0) + 1;
+        }
+      }
+    }
+
     await env.DB.prepare(
-      "INSERT INTO requests (party_id, name, email, phone, note, people, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(body.party || null, body.name, body.email, body.phone || null, note, people, now()).run();
+      "INSERT INTO requests (party_id, name, email, phone, note, people, status, referrer, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(body.party || null, body.name, body.email, body.phone || null, note, people,
+           waiting ? "WAITING" : "PENDING", referrer, now()).run();
 
     // Tell someone. Sent in the background so the guest is not left waiting on
     // an email service to answer before their request is accepted.
@@ -3211,6 +3984,17 @@ async function handleApi(request, env, url, ctx) {
       request: { name: body.name, email: body.email, phone: body.phone, note, people },
       party,
     }));
+
+    /*
+      Telling someone they are ninth is worth more than telling them the list
+      is full. A number is a thing to wait for; "full" is a door closing.
+    */
+    if (waiting) {
+      return json({
+        ok: true, waiting: true, position,
+        message: cfg.waitlistMessage,
+      });
+    }
 
     // The line to show them comes from settings, so it can be changed without
     // a deploy.
@@ -3306,6 +4090,202 @@ async function handleApi(request, env, url, ctx) {
     }
 
     return json({ ok: true, status: "APPROVED", code: pooled.code, email });
+  }
+
+  /*
+    ── N05 · THE QUEUE, AND OFFERING A PLACE ────────────────────────────────
+
+    The waiting list is not a table. It is the requests for a night whose
+    status is WAITING, in the order they arrived — which is the only ordering
+    anyone has ever accepted as fair, and the only one that needs no
+    explaining.
+  */
+  if (path === "/waitlist" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "seeList")) return fail("Not allowed.", 403);
+    const partyId = url.searchParams.get("party");
+    if (!partyId) return json({ ok: true, queue: [], room: 0 });
+
+    const rows = await env.DB.prepare(
+      "SELECT id, name, email, phone, people, note, referrer, created_at FROM requests " +
+      "WHERE party_id = ? AND status = 'WAITING' ORDER BY created_at ASC LIMIT 200"
+    ).bind(partyId).all().catch(() => ({ results: [] }));
+
+    const party = await env.DB.prepare(
+      "SELECT capacity FROM parties WHERE id = ?"
+    ).bind(partyId).first();
+    const taken = await env.DB.prepare(
+      "SELECT SUM(admits) AS n FROM passes WHERE party_id = ? AND status = 'ACTIVE'"
+    ).bind(partyId).first();
+
+    const cap = Number(party?.capacity) || 0;
+    return json({
+      ok: true,
+      queue: rows.results || [],
+      // How many places have actually come free. This is the number that
+      // decides whether offering the next person is honest.
+      room: cap > 0 ? Math.max(0, cap - Number(taken?.n || 0)) : 0,
+      capacity: cap,
+      issued: Number(taken?.n || 0),
+    });
+  }
+
+  /*
+    OFFERING A PLACE ISSUES THE PASS.
+
+    There is no accept-or-decline step, and that is a decision rather than a
+    shortcut. A guest list place is not a ticket: nobody else is kept out
+    while one person decides, so an offer that has to be claimed adds a
+    deadline, a reminder, an expiry and a second failure mode in exchange for
+    nothing. "A place came free — here is your pass" is the whole flow, and if
+    they do not come it costs exactly what any other no-show costs.
+  */
+  if (path === "/waitlist/offer" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Only the boss can offer a place.", 403);
+
+    const partyId = String(body.party || "");
+    if (!partyId) return fail("Which event?");
+
+    const req = body.id
+      ? await env.DB.prepare(
+          "SELECT * FROM requests WHERE id = ? AND status = 'WAITING'"
+        ).bind(body.id).first()
+      : await env.DB.prepare(
+          "SELECT * FROM requests WHERE party_id = ? AND status = 'WAITING' ORDER BY created_at ASC LIMIT 1"
+        ).bind(partyId).first();
+    if (!req) return fail("Nobody is waiting.", 404);
+
+    /*
+      CHECKED AGAIN HERE, not trusted from the screen that asked. The console
+      may have been showing a room that had space when it loaded and none by
+      the time the button was pressed — two people at two phones working
+      through the same queue is exactly how a room ends up over its limit.
+    */
+    const party = await env.DB.prepare(
+      "SELECT name, date_label, venue, minimum_age, capacity FROM parties WHERE id = ?"
+    ).bind(partyId).first();
+    const cap = Number(party?.capacity) || 0;
+    if (cap > 0 && !body.anyway) {
+      const taken = await env.DB.prepare(
+        "SELECT SUM(admits) AS n FROM passes WHERE party_id = ? AND status = 'ACTIVE'"
+      ).bind(partyId).first();
+      if (Number(taken?.n || 0) + Math.max(1, req.people || 1) > cap) {
+        return fail("There is no room for that many yet.", 409);
+      }
+    }
+
+    const pooled = await env.DB.prepare(
+      "SELECT code FROM code_pool WHERE used = 0 ORDER BY RANDOM() LIMIT 1"
+    ).first();
+    if (!pooled) return fail("The code pool is empty.", 409);
+
+    await env.DB.batch([
+      env.DB.prepare("UPDATE code_pool SET used = 1, used_at = ? WHERE code = ?").bind(now(), pooled.code),
+      env.DB.prepare(
+        "INSERT INTO passes (code, party_id, name, email, phone, kind, note, id_required, admits, issued_at, issued_by) " +
+        "VALUES (?, ?, ?, ?, ?, 'GUEST', ?, 1, ?, ?, ?)"
+      ).bind(pooled.code, partyId, req.name, req.email, req.phone, req.note,
+             Math.max(1, req.people || 1), now(), who.username),
+      env.DB.prepare(
+        "UPDATE requests SET status = 'APPROVED', pass_code = ?, decided_at = ?, decided_by = ? WHERE id = ?"
+      ).bind(pooled.code, now(), who.username, req.id),
+    ]);
+
+    const email = await sendPassEmail(env, {
+      to: req.email, name: req.name, code: pooled.code,
+      party: party || { name: partyId, date_label: "", venue: null, minimum_age: 16 },
+      kind: "GUEST",
+    });
+    if (email.sent) {
+      await env.DB.prepare("UPDATE passes SET emailed_at = ? WHERE code = ?")
+        .bind(now(), pooled.code).run();
+    }
+
+    return json({ ok: true, code: pooled.code, name: req.name, email });
+  }
+
+  /*
+    ── G08 · THE MORNING AFTER ──────────────────────────────────────────────
+
+    One letter, the day after, to the people who ACTUALLY CAME — not to
+    everyone who was issued a pass, and certainly not to a mailing list. The
+    difference matters: a list of people who turned up is worth something and
+    a list of people who once clicked a form is not.
+
+    WHAT STOPS IT BEING SPAM, in order of how much it matters:
+      · it goes only to addresses that scanned in at that specific night;
+      · it is recorded in `afters`, and a night that has been written to
+        cannot be written to again by accident;
+      · it is sent by hand from the console, never on a schedule. Nobody has
+        ever wanted an automatic letter about a party.
+  */
+  if (path === "/afters" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
+
+    const partyId = String(body.party || "");
+    const subject = String(body.subject || "").slice(0, 160).trim();
+    const text = String(body.body || "").slice(0, 4000).trim();
+    if (!partyId || !subject || !text) return fail("An event, a subject and something to say.");
+
+    const done = await env.DB.prepare(
+      "SELECT sent_at, sent_to FROM afters WHERE party_id = ? ORDER BY id DESC LIMIT 1"
+    ).bind(partyId).first().catch(() => null);
+    if (done && !body.anyway) {
+      return json({
+        ok: false, already: true, at: done.sent_at, to: done.sent_to,
+        error: `Already sent to ${done.sent_to} people. Send it again only if you mean to.`,
+      });
+    }
+
+    /*
+      DISTINCT, because a pass that admits four scans four times and its one
+      address must not receive four letters. This is the entire reason the
+      query is not a simple join.
+    */
+    const rows = await env.DB.prepare(
+      "SELECT DISTINCT p.email, p.name FROM passes p " +
+      "JOIN scans s ON s.code = p.code AND s.party_id = p.party_id " +
+      "WHERE p.party_id = ? AND s.result = 'ADMITTED' AND p.email IS NOT NULL AND p.email != ''"
+    ).bind(partyId).all().catch(() => ({ results: [] }));
+
+    const people = rows.results || [];
+    if (!people.length) return fail("Nobody who came left an address.", 404);
+    if (body.dryRun) return json({ ok: true, would: people.length });
+
+    const cfg = await getSettings(env);
+    /*
+      Sent in the background and one at a time. A hundred letters is a hundred
+      requests to the mail service, and firing them all at once is how an
+      account gets rate-limited into sending forty of them.
+    */
+    ctx.waitUntil((async () => {
+      for (const person of people) {
+        await sendNote(env, {
+          to: person.email,
+          subject,
+          text: `${person.name ? person.name.split(" ")[0] + "," : "Hello,"}\n\n${text}\n\n` +
+                `${cfg.emailSignoff || "Hidden State"}\n`,
+        }).catch(() => {});
+      }
+    })());
+
+    await env.DB.prepare(
+      "INSERT INTO afters (party_id, sent_to, subject, body, sent_at, sent_by) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(partyId, people.length, subject, text, now(), who.username).run();
+
+    return json({ ok: true, sent: people.length });
+  }
+
+  if (path === "/afters" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
+    const rows = await env.DB.prepare(
+      "SELECT a.*, y.name AS party_name FROM afters a LEFT JOIN parties y ON y.id = a.party_id " +
+      "ORDER BY a.sent_at DESC LIMIT 50"
+    ).all().catch(() => ({ results: [] }));
+    return json({ ok: true, letters: rows.results || [] });
   }
 
   if (path === "/requests" && method === "GET") {

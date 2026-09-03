@@ -2191,6 +2191,9 @@ const SETTING_SECTIONS = [
   "THE FLOATING BAR",
   "THE SITE",
   "THE GUEST LIST",
+  "THE WAITING LIST",
+  "DEMOS",
+  "BOOKINGS",
   "EMAIL",
 ];
 
@@ -2874,6 +2877,57 @@ function Settings({ parties }) {
           </p>
           <textarea rows={2} value={values.requestThanksMessage}
                     onChange={(e) => set("requestThanksMessage", e.target.value)}
+                    style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }} />
+        </div>
+      </Section>
+
+      <Section title="THE WAITING LIST" {...saver("THE WAITING LIST")}>
+        <Switch k="waitlistOpen" label="Queue people when a night is full"
+                help="A request that arrives at a full night joins a queue in the order it came, instead of being turned away for good. Offering a place is always a decision you make — nothing issues itself." />
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            What someone sees when they land on the queue
+          </p>
+          <textarea rows={2} value={values.waitlistMessage}
+                    onChange={(e) => set("waitlistMessage", e.target.value)}
+                    style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }} />
+          <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+            Their position is shown underneath this, in figures. A number is
+            something to wait for; "full" is a door closing.
+          </p>
+        </div>
+      </Section>
+
+      <Section title="DEMOS" {...saver("DEMOS")}>
+        <Switch k="demosOpen" label="Accept demos"
+                help="Turned off, the form is hidden and anything sent to it is refused by the server — not just by the page." />
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            What the form says above itself
+          </p>
+          <textarea rows={2} value={values.demosNote}
+                    onChange={(e) => set("demosNote", e.target.value)}
+                    style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }} />
+        </div>
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            What it says when demos are closed
+          </p>
+          <textarea rows={2} value={values.demosClosedMessage}
+                    onChange={(e) => set("demosClosedMessage", e.target.value)}
+                    style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }} />
+        </div>
+      </Section>
+
+      <Section title="BOOKINGS" {...saver("BOOKINGS")}>
+        <Switch k="bookingsOpen" label="Accept booking enquiries"
+                help="Every enquiry is emailed to the address in EMAIL as it arrives, so a date does not sit unseen for a week." />
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            What the booking form says above itself
+          </p>
+          <textarea rows={2} value={values.bookingsNote}
+                    onChange={(e) => set("bookingsNote", e.target.value)}
                     style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }} />
         </div>
       </Section>

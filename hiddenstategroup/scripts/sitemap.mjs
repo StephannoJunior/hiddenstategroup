@@ -32,6 +32,14 @@ const SECTIONS = [
   ["/", 1.0], ["/news", 0.9], ["/artists", 0.9], ["/events", 0.9],
   ["/agency", 0.8], ["/records", 0.8], ["/mixes", 0.7],
   ["/about", 0.6], ["/contact", 0.6], ["/pool", 0.5],
+  /*
+    Demos and bookings ARE public and worth finding — a promoter searching
+    "hidden state booking" should land on the form rather than on a contact
+    page. What is deliberately absent is /wall/… and /kit/…: those are reached
+    only by a link nobody can guess, and listing them here would be publishing
+    the one thing that keeps them private.
+  */
+  ["/demos", 0.6], ["/bookings", 0.7],
 ];
 
 async function main() {
