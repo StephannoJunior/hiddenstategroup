@@ -1,4 +1,5 @@
 import { theme } from "../lib/theme";
+import { reportOops } from "../lib/api";
 import React from "react";
 
 /*
@@ -26,10 +27,20 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    // Left as console output on purpose. Sending errors to a third party
-    // would mean routing visitor data off-site, which is not worth doing
-    // without a decision about it first.
     console.error("Caught by boundary:", error, info);
+
+    /*
+      And told to our own server — never a third party. A component that
+      throws while rendering is the failure a visitor is least likely to
+      report and most likely to be stopped by, so it is the one worth
+      hearing about. What leaves the browser is the message, the component
+      that broke, and a trimmed stack. Nothing that identifies anyone.
+    */
+    const where = (info && info.componentStack
+      ? info.componentStack.trim().split("\n")[0].trim()
+      : "render");
+    reportOops(error && error.message ? error.message : String(error), where,
+      error && error.stack ? error.stack : "");
   }
 
   render() {

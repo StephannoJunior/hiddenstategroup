@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { fontDisplay, fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
+import { useSite } from "../lib/site";
 
 /*
   Countdown — ticking down to a fixed moment.
@@ -105,6 +106,8 @@ function Rolling({ value, size }) {
 
 export default function Countdown({ target = DECEMBER_13, label = null, compact = false }) {
   const { t } = useLang();
+  const site = useSite();
+  const rolls = site.motionRoll !== false;
   const [left, setLeft] = useState(() => remaining(target));
 
   useEffect(() => {
@@ -168,7 +171,9 @@ export default function Countdown({ target = DECEMBER_13, label = null, compact 
                 fontFeatureSettings: '"tnum" 1, "lnum" 1',
               }}
             >
-              <Rolling value={u.value} size={size} />
+              {rolls
+                ? <Rolling value={u.value} size={size} />
+                : String(u.value).padStart(2, "0")}
             </span>
             <span
               className="mt-1.5"

@@ -25,11 +25,12 @@
 // You rarely need to: Vite already fingerprints JS and CSS filenames, so a
 // changed file is automatically a new file. This is for the rare case of
 // clearing something stubborn.
-const CACHE_VERSION = "hidden-state-v4";
+const CACHE_VERSION = "hidden-state-v5";
 const OFFLINE_URL = "/";
 
 const PRECACHE = [
   "/",
+  "/mypass",
   "/manifest.webmanifest",
   "/icons/icon-192.jpg",
   "/icons/apple-touch-icon.jpg",
@@ -114,7 +115,68 @@ self.addEventListener("fetch", (event) => {
     loaded from cache would look like the API is missing entirely. These
     always go straight to the network.
   */
-  if (target.pathname.startsWith("/api/")) return;
+  /*
+    ── G02 · A PASS THAT WORKS WITH NO SIGNAL ──────────────────────────────
+
+    The API is otherwise never cached, and that rule is right: a cached guest
+    list at a door would show who was admitted an hour ago and call it now.
+
+    ONE EXCEPTION — a guest's own pass. It is the one API answer where being
+    slightly old is far better than being absent, because the alternative is
+    somebody standing outside with a white screen. One bar of reception is
+    worse than none: the request hangs rather than failing, and network-first
+    means watching it hang.
+
+    So a pass is served from the phone INSTANTLY and refreshed in the
+    background. Two things make that safe:
+
+      · the rotating number still needs the network, and the page says so
+      · THE DOOR IS THE AUTHORITY, not this page. A pass cancelled since it
+        was cached still shows here and is still refused at the door, because
+        the scanner asks the server every time. This page is a convenience;
+        it was never the check.
+  */
+  const isOwnPass = /^\/api\/pass\/[^/]+$/.test(target.pathname);
+
+  if (target.pathname.startsWith("/api/") && !isOwnPass) return;
+
+  if (isOwnPass) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_VERSION);
+        const hit = await cache.match(request);
+        const live = fetch(request)
+          .then((res) => {
+            if (res && res.ok) cache.put(request, res.clone());
+            return res;
+          })
+          .catch(() => null);
+        // Cached first when there is one, and the network only when there is
+        // not — which is what makes it instant on a bad connection instead of
+        // merely survivable on none.
+        return hit || (await live) || Response.error();
+      })()
+    );
+    return;
+  }
+
+  /*
+    The pass PAGE, as well as its data. A guest whose phone has the answer
+    but not the page to show it in is no better off.
+  */
+  if (request.mode === "navigate" && /^\/pass\//.test(target.pathname)) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_VERSION);
+        const hit = await cache.match(request);
+        const live = fetch(request)
+          .then((res) => { if (res && res.ok) cache.put(request, res.clone()); return res; })
+          .catch(() => null);
+        return hit || (await live) || (await caches.match(OFFLINE_URL)) || Response.error();
+      })()
+    );
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(

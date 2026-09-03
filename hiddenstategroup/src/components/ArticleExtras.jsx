@@ -13,19 +13,38 @@ export function ReadingProgress() {
 
   useEffect(() => {
     let queued = false;
+    let max = 0;
+
+    /*
+      Same fix as the folio: scrollHeight forces a full layout, so it is read
+      on arrival and on resize rather than on every frame of every scroll. An
+      article is exactly where this matters most — it is the longest thing on
+      the site and the one page people actually scroll all the way down.
+    */
+    const measure = () => {
+      const h = document.documentElement;
+      max = h.scrollHeight - h.clientHeight;
+      read();
+    };
+    const read = () => {
+      queued = false;
+      setPct(max > 0 ? Math.min(100, (document.documentElement.scrollTop / max) * 100) : 0);
+    };
     const onScroll = () => {
       if (queued) return;
       queued = true;
-      requestAnimationFrame(() => {
-        queued = false;
-        const h = document.documentElement;
-        const max = h.scrollHeight - h.clientHeight;
-        setPct(max > 0 ? Math.min(100, (h.scrollTop / max) * 100) : 0);
-      });
+      requestAnimationFrame(read);
     };
+
+    measure();
+    const settle = setTimeout(measure, 900);
     window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
+    window.addEventListener("resize", measure, { passive: true });
+    return () => {
+      clearTimeout(settle);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", measure);
+    };
   }, []);
 
   return (

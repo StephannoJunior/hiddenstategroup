@@ -6,6 +6,7 @@ import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 import * as api from "../lib/api";
 import { useSite } from "../lib/site";
+import { Spring, driveSprings, glassStyle, lipStyle, specStyle, lozengeStyle } from "../lib/liquid";
 
 /*
   GlassBar — floating navigation on phones.
@@ -66,9 +67,9 @@ const TABS = [
 
 // The closed pill's size. Fixed rather than measured, because the morph has
 // to know where it is going before it starts.
-const PILL_W = 188;
-const PILL_H = 52;
-const BAR_H = 68;
+const PILL_W = 190;
+const PILL_H = 58;
+const BAR_H = 76;
 
 export default function GlassBar() {
   // On desktop the bar is simply always open — there is room for it, and a
@@ -103,7 +104,6 @@ export default function GlassBar() {
   const [openState, setOpen] = useState(false);
   const open = isDesktop || openState;
   const [pressing, setPressing] = useState(false);
-  const [sheen, setSheen] = useState({ x: 50, y: 50, on: false });
   const tapTimer = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -243,13 +243,17 @@ export default function GlassBar() {
     tapTimer.current = setTimeout(() => { tapTimer.current = null; }, DOUBLE_TAP_MS);
   };
 
-  const trackSheen = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setSheen({
-      x: ((e.clientX - r.left) / r.width) * 100,
-      y: ((e.clientY - r.top) / r.height) * 100,
-      on: true,
-    });
+  /*
+    The specular leans with a drag. Written straight to the node rather than
+    held in state: this fires on every pointermove, and a re-render per move
+    would recompute the tab list, the permissions and the layout each time.
+  */
+  const drift = useRef(0);
+  const leanTo = (px) => {
+    drift.current = Math.max(-18, Math.min(18, px));
+    if (specRef.current) {
+      specRef.current.style.transform = `translate3d(${drift.current}px,0,0)`;
+    }
   };
 
   /*
@@ -468,40 +472,239 @@ export default function GlassBar() {
     read as frosted plastic. Real glass shows what is behind it, slightly
     brighter and slightly more saturated than it really is.
   */
-  const glass = {
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.12) 42%, rgba(255,255,255,0.20) 100%)",
-    backdropFilter: "blur(20px) saturate(190%) brightness(1.07)",
-    WebkitBackdropFilter: "blur(20px) saturate(190%) brightness(1.07)",
-    border: "1px solid rgba(22,19,14,0.09)",
-    boxShadow: [
-      // the lit band just inside the top edge — this is the light bending,
-      // and it is why the panel reads as thick rather than as a rectangle
-      "inset 0 1px 0 rgba(255,255,255,0.62)",
-      "inset 0 6px 14px -8px rgba(255,255,255,0.55)",
-      // the underside: dimmer, and slightly warm from the paper below it
-      "inset 0 -1px 0 rgba(255,255,255,0.26)",
-      "inset 0 -8px 16px -10px rgba(22,19,14,0.10)",
-      // three shadows, not one. A single shadow reads as a sticker.
-      "0 1px 1px rgba(22,19,14,0.05)",
-      "0 8px 20px -6px rgba(22,19,14,0.10)",
-      "0 26px 50px -18px rgba(22,19,14,0.16)",
-    ].join(", "),
-  };
+  /*
+    THE MATERIAL now comes from lib/liquid.js, so the bar and anything else
+    dressed in glass cannot drift apart. `finish` is a console setting.
 
-  const sheenLayer = (
-    <span
-      aria-hidden="true"
-      className="absolute inset-0"
-      style={{
-        borderRadius: "inherit",
-        background: `radial-gradient(160px circle at ${sheen.x}% ${sheen.y}%, rgba(255,255,255,0.50), rgba(255,255,255,0) 66%)`,
-        opacity: sheen.on ? 1 : 0,
-        transition: `opacity ${ms(320)}ms ${EASE}`,
-        pointerEvents: "none",
-      }}
-    />
-  );
+    What changed from the old hand-written block: the backdrop is CONTRAST
+    RE-MAPPED rather than merely blurred and tinted, which is what keeps the
+    labels readable over a photograph as well as over paper; the single-pixel
+    border became a masked lip with a faint warm/cool split, because glass is
+    thick and thickness reads as bent light rather than an outline; and the
+    specular drifts instead of sitting still.
+  */
+  const finish = site.barFinish || "INK";
+  const glass = glassStyle(finish, theme.ink);
+
+  /*
+    Two layers over the pane, under the contents: the lip that gives the edge
+    thickness, and the specular streak that drifts with a drag. The old
+    radial "sheen" that followed the finger is gone — it read as a torch being
+    shone on a surface rather than as light behaving.
+  */
+  const specRef = useRef(null);
+  const lipLayer = <span aria-hidden="true" style={lipStyle(finish)} />;
+  const specLayer = <span ref={specRef} aria-hidden="true" style={specStyle(finish, 0)} />;
+
+  /*
+    ── THE GEOMETRY, ON SPRINGS ───────────────────────────────────────────
+
+    The pill and the open bar are the same pane at two sizes, and the pane
+    travels between them on springs rather than a CSS transition.
+
+    WHY THIS IS WORTH THE EXTRA CODE. A transition has a duration, and a
+    duration cannot be interrupted: tap the bar twice quickly and the second
+    transition restarts from a standstill — the motion stops dead and begins
+    again. That dead stop is the "slow, sticky" feeling that survived every
+    round of easing-curve tuning, because the curve was never the problem.
+    A spring has velocity, and when the target changes it carries that
+    velocity into the new one.
+
+    The press squash lives on the same loop, so a tap that lands mid-open
+    blends into the movement already happening instead of fighting it.
+
+    Nothing here goes through state: this writes to the node about sixty
+    times a second, and a re-render at that rate would recompute the tab
+    list, the permissions and the layout every frame.
+  */
+  const paneRef = useRef(null);
+  const stageW = useRef(0);
+
+  const springs = useRef(null);
+  if (!springs.current) {
+    springs.current = {
+      /*
+        LOWER DAMPING THAN BEFORE, ON PURPOSE.
+
+        At damping 26 against stiffness 250 this was very nearly critically
+        damped — it arrived exactly on its mark and stopped, which is correct
+        and lifeless. Liquid does not stop; it arrives, goes very slightly
+        past, and settles. Twenty is enough overshoot to read as weight and
+        not enough to read as a bounce.
+
+        The width is the wobbliest and the height the tightest, which is the
+        right way round: a widening capsule reads as something being poured
+        sideways, and a height that overshoots just looks like a mistake.
+      */
+      w: new Spring(PILL_W, { stiffness: 235, damping: 20 }),
+      h: new Spring(PILL_H, { stiffness: 260, damping: 25 }),
+      m: new Spring(-PILL_W / 2, { stiffness: 235, damping: 20 }),
+      /*
+        THE RADIUS IS SPRUNG TOO. A capsule whose corners snap while its
+        width flows is the one detail that gives away that a shape is being
+        resized rather than poured. Damped a little less than the rest so the
+        corners arrive just after the edges do — which is what a heavy liquid
+        actually does.
+      */
+      r: new Spring(PILL_H / 2, { stiffness: 215, damping: 19 }),
+      s: new Spring(1, { stiffness: 520, damping: 21 }),
+      /*
+        THE SELECTION, ON THE SAME LOOP AS EVERYTHING ELSE.
+
+        This used to be a CSS transition plus a `stretch` value held in state
+        and cleared by a 250ms timer, and it was wrong three ways at once:
+
+          · the timer (250ms) was shorter than the transition (520ms), so the
+            width was still travelling outward when it was told to come back.
+            It never reached its target and never rested — it just wobbled.
+          · the stretch was added to the width while the transform was already
+            at the destination, so the capsule grew OUT FROM the tab it had
+            arrived at instead of reaching ACROSS to it. On a short hop the
+            movement is only a few pixels, so what you actually saw was a pill
+            sitting still and inflating.
+          · the direction test read `lastX.current`, which the effect had
+            already overwritten with the new position one tick earlier. It was
+            comparing a number to itself, so it was false every time and the
+            leftward case never ran at all.
+
+        None of that is tunable. The whole idea was wrong: a stretch is not a
+        thing you schedule, it is a thing that FALLS OUT of moving fast. So
+        the position and width are springs now, and the stretch is read from
+        the position spring's velocity every frame — which means it is exactly
+        zero at rest, largest in the middle of the flight, and self-correcting
+        if you tap somewhere else halfway through. No timer to get wrong.
+      */
+      lx: new Spring(0, { stiffness: 265, damping: 22 }),
+      lw: new Spring(0, { stiffness: 310, damping: 26 }),
+    };
+  }
+
+  const rig = useRef(null);
+  /*
+    A LAYOUT effect, not an ordinary one. The pane has no inline width until
+    this rig writes one, and an ordinary effect runs after the browser has
+    already painted — which is one frame of a full-width, unstyled bar before
+    it snaps to a pill. Layout effects run before that paint.
+  */
+  useLayoutEffect(() => {
+    rig.current = driveSprings(
+      springs.current,
+      ({ w, h, m, r, s, lx, lw }) => {
+        /*
+          THE SELECTION, WRITTEN FROM ITS OWN VELOCITY.
+
+          `extra` is how far the capsule is stretched, and it is read from how
+          fast it is travelling — not from a timer, not from how far it has to
+          go. At rest the velocity is zero, so the stretch is zero and the
+          capsule is exactly the width of the tab it is on. There is no state
+          to leave behind and nothing to clean up.
+
+          WHICH END LEADS. Moving right, the right edge runs ahead and the
+          left edge stays put: the left is `lx` and the width grows. Moving
+          left, the left edge leads, so the left is pulled back by the same
+          amount. That is the difference between a capsule reaching across to
+          the next tab and one inflating where it stands.
+
+          Stretched by WIDTH, never scaleX — scaling a capsule turns its round
+          ends into ellipses and it stops reading as liquid.
+        */
+        const loz = lozRef.current;
+        if (loz) {
+          const vel = springs.current.lx.vel;
+          const extra = Math.min(Math.abs(vel) * 0.045, 72);
+          loz.style.width = (lw + extra) + "px";
+          loz.style.transform = `translate3d(${lx - (vel < 0 ? extra : 0)}px,0,0)`;
+          loz.style.borderRadius = Math.min(20, (lw + extra) / 2) + "px";
+        }
+
+        const node = paneRef.current;
+        if (!node) return;
+        node.style.width = w + "px";
+        node.style.height = h + "px";
+        node.style.marginLeft = m + "px";
+        node.style.borderRadius = r + "px";
+        /*
+          THE SQUASH GOES ON THE STAGE, NOT ON THE PANE.
+
+          The pane clips and has a border-radius; adding a transform to that
+          pair is the exact Safari combination that stopped it clipping its
+          children and threw the tabs off the side of the screen. The stage
+          does neither, so scaling it is free — and scaling the parent moves
+          the glass and its contents together, which is what a squashed
+          physical object does anyway.
+        */
+        const stage = stageRef.current;
+        if (stage) {
+          stage.style.transformOrigin = "50% 100%";
+          stage.style.transform = s === 1 ? "none" : `scale(${s})`;
+        }
+      },
+      () => still
+    );
+    // Size it immediately, so the first painted frame is already correct.
+    rig.current.set({ w: PILL_W, h: PILL_H, m: -PILL_W / 2, r: PILL_H / 2, s: 1, lx: 0, lw: 0 });
+    rig.current.kick();
+    return () => rig.current?.stop();
+  }, [still]);
+
+  /*
+    Targets. The open bar fills the stage, so its width is measured rather
+    than assumed — a percentage cannot be sprung.
+  */
+  useLayoutEffect(() => {
+    const node = stageRef.current;
+    if (node) stageW.current = node.getBoundingClientRect().width;
+    const w = open ? (stageW.current || PILL_W) : PILL_W;
+    const h = open ? BAR_H : PILL_H;
+    rig.current?.to({
+      w,
+      h,
+      m: open ? -(w / 2) : -PILL_W / 2,
+      // A full capsule, always — the radius follows the height rather than
+      // being a number someone chose once.
+      r: h / 2,
+      s: pressing && !open ? 0.938 : 1,
+    });
+  }, [open, pressing, available, allTabs.length]);
+
+
+  /*
+    Hand the measured position to the springs.
+
+    `animate` is false the first time a selection appears and on a correction
+    (fonts landing, the phone rotating) — those SNAP, because a lozenge that
+    slides in from nowhere on load reads as a bug. Only a change of selection
+    travels, and it travels because the target moved, not because anything
+    told it to animate.
+
+    A LAYOUT effect, so the node carries the right position before the browser
+    paints the frame it first appears in.
+  */
+  const lozRef = useRef(null);
+  useLayoutEffect(() => {
+    const node = lozRef.current;
+    if (!lozenge) {
+      if (node) node.style.opacity = "0";
+      return;
+    }
+    if (lozenge.animate) rig.current?.to({ lx: lozenge.x, lw: lozenge.w });
+    else rig.current?.set({ lx: lozenge.x, lw: lozenge.w });
+    if (node) node.style.opacity = "1";
+  }, [lozenge]);
+
+  /*
+    WHAT COLOUR THE TABS ARE, now that the selection is a LIGHT lens instead
+    of a black block.
+
+    This is not cosmetic. The old rule was `active ? theme.bg : theme.ink` —
+    cream on near-black. Put that same cream on the new pale lens and the
+    selected tab becomes invisible, which is the worst possible thing for the
+    one tab that must always be readable. So the lit colour follows the
+    finish: ink on the pale finishes, stock on the dark one, and the accent
+    for the label so the selection is signalled by more than a shape.
+  */
+  const onGlass = finish === "INK" ? theme.bg : theme.ink;
+  const litInk = finish === "INK" ? theme.bg : theme.brass;
 
   const stageWidth = Math.min(1080, Math.max(560, allTabs.length * (tabWidth + 6)));
 
@@ -548,10 +751,11 @@ export default function GlassBar() {
           */}
           <div
             className="absolute overflow-hidden"
-            onPointerDown={(e) => { if (!open) { setPressing(true); trackSheen(e); } }}
-            onPointerMove={(e) => pressing && trackSheen(e)}
-            onPointerUp={() => { setPressing(false); setSheen((s) => ({ ...s, on: false })); }}
-            onPointerLeave={() => { setPressing(false); setSheen((s) => ({ ...s, on: false })); }}
+            onPointerDown={() => { if (!open) setPressing(true); }}
+            
+            onPointerUp={() => { setPressing(false); leanTo(0); }}
+            onPointerLeave={() => { setPressing(false); leanTo(0); }}
+            ref={paneRef}
             style={{
               ...glass,
               bottom: 0,
@@ -570,22 +774,25 @@ export default function GlassBar() {
                 squash — which only ever happens while the bar is closed and
                 there is nothing inside it to clip.
               */
-              left: open ? "0%" : "50%",
-              marginLeft: open ? "0px" : `-${PILL_W / 2}px`,
-              width: open ? "100%" : `${PILL_W}px`,
-              height: open ? `${BAR_H}px` : `${PILL_H}px`,
-              borderRadius: open ? "26px" : "26px",
-              transform: pressing && !open ? "scale(0.955)" : "none",
-              transition: [
-                `width ${ms(260)}ms ${SPRING}`,
-                `height ${ms(260)}ms ${SPRING}`,
-                `left ${ms(260)}ms ${SPRING}`,
-                `margin-left ${ms(260)}ms ${SPRING}`,
-                `transform ${ms(340)}ms ${SPRING}`,
-              ].join(", "),
+              /*
+                WIDTH, HEIGHT, MARGIN AND SCALE ARE NOT SET HERE.
+
+                They are driven by springs writing straight to this node, in
+                the effect below. React must not also write them or the two
+                fight every frame — whichever ran last would win, and the
+                animation would stutter in a way that looks like a dropped
+                frame and is actually a disagreement.
+
+                `left` stays at 0 and the centring is done with margin-left,
+                for the same reason as before: this element clips and has a
+                radius, and adding a transform to that pair is what makes
+                Safari stop clipping its children.
+              */
+              left: "50%",
             }}
           >
-            {sheenLayer}
+            {lipLayer}
+            {specLayer}
 
             {/* ── closed: the pill's own contents ── */}
             <Link
@@ -675,26 +882,57 @@ export default function GlassBar() {
                   The lozenge. One of them, moved — never a background switched
                   on and off.
                 */}
-                {lozenge && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute"
-                    style={{
-                      top: "6px",
-                      bottom: "6px",
-                      left: 0,
-                      width: `${lozenge.w}px`,
-                      transform: `translateX(${lozenge.x}px)`,
-                      borderRadius: "16px",
-                      background: theme.ink,
-                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.20), 0 2px 8px -2px rgba(22,19,14,0.35)",
-                      transition: lozenge.animate
-                        ? `transform ${ms(380)}ms ${SPRING}, width ${ms(380)}ms ${SPRING}`
-                        : "none",
-                      pointerEvents: "none",
-                    }}
-                  />
-                )}
+                <span
+                  aria-hidden="true"
+                  className="absolute"
+                  ref={lozRef}
+                  style={{
+                    /*
+                      A ROUNDED RECTANGLE, NOT A CIRCLE.
+
+                      This stretched from 6px below the top to 6px above the
+                      bottom, which at a 76px bar is 64px tall — TALLER than a
+                      tab is wide once there are nine of them. With a full
+                      capsule radius on top of that, the selection stopped
+                      being a lozenge and became a circle sitting behind the
+                      icon, which is what it looked like on the live site.
+
+                      So it is sized to its CONTENTS — an icon and a label,
+                      about 46px — and centred.
+                    */
+                    top: "50%",
+                    height: "46px",
+                    marginTop: "-23px",
+                    left: 0,
+
+                    /*
+                      WIDTH, TRANSFORM AND RADIUS ARE NOT SET HERE.
+
+                      They belong to the spring loop, which writes them
+                      straight to this node about sixty times a second. Naming
+                      any of them in this style object would mean React
+                      reasserting a stale value on its next render and
+                      snatching the capsule back mid-flight — which is a real
+                      bug, not a theoretical one.
+
+                      The element is always mounted and hidden with opacity
+                      instead of being conditionally rendered, so the loop
+                      always has something to write to and there is never a
+                      frame where a freshly-mounted node has no geometry.
+                    */
+                    opacity: 0,
+
+                    /*
+                      A thicker piece of the same glass, not a black block cut
+                      out of it. The old solid fill was the single thing that
+                      most made this bar read as a website: the selected tab
+                      became a different material instead of a deeper part of
+                      the same one.
+                    */
+                    ...lozengeStyle(finish),
+                    pointerEvents: "none",
+                  }}
+                />
 
                 {allTabs.map(({ href, key, Icon }, i) => {
                   /*
@@ -733,8 +971,9 @@ export default function GlassBar() {
                         flex: crowded ? "0 0 auto" : "1 1 0",
                         width: crowded ? `${tabWidth}px` : undefined,
                         minWidth: crowded ? `${tabWidth}px` : 0,
-                          padding: "8px 2px",
-                        borderRadius: "16px",
+                        padding: "8px 2px",
+                        // A capsule, to match the lens that lands behind it.
+                        borderRadius: "999px",
                         gap: "5px",
                         // Each tab arrives a beat after the one before it.
                         // Together they read as the bar unrolling rather than
@@ -754,7 +993,7 @@ export default function GlassBar() {
                         ].join(", "),
                       }}
                     >
-                      <Icon size={19} strokeWidth={1.6} color={active ? theme.bg : theme.ink} aria-hidden="true"
+                      <Icon size={19} strokeWidth={active ? 1.9 : 1.6} color={active ? litInk : onGlass} aria-hidden="true"
                             style={{ transition: `color ${ms(300)}ms ${EASE}` }} />
                       {showLabels && (
                         <span
@@ -762,7 +1001,8 @@ export default function GlassBar() {
                             ...fontUtility,
                             fontSize: `${labelSize}px`,
                             letterSpacing: "0.02em",
-                            color: active ? theme.bg : theme.ink,
+                            color: active ? litInk : onGlass,
+                            fontWeight: active ? 700 : 400,
                             whiteSpace: "nowrap",
                             overflow: "hidden",
                             textOverflow: "ellipsis",

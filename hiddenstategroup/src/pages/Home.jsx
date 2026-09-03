@@ -94,23 +94,24 @@ const HEROES = { club: "/club.webp", booth: "/booth.webp", portrait: "/portrait.
 
   sessionStorage, not localStorage: once per visit, not once per lifetime.
 */
-function useFirstArrival() {
+function useFirstArrival(enabled = true) {
   const [first, setFirst] = useState(false);
   useEffect(() => {
+    if (!enabled) return;
     try {
       if (sessionStorage.getItem("hs-marked")) return;
       sessionStorage.setItem("hs-marked", "1");
     } catch { /* private window — treat every arrival as the first */ }
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     setFirst(true);
-  }, []);
+  }, [enabled]);
   return first;
 }
 
 function Mark() {
   const site = useSite();
   const src = HEROES[site.heroImage] || HEROES.club;
-  const inked = useFirstArrival();
+  const inked = useFirstArrival(site.motionLogoInk !== false);
   // The height is set in the console because how tall an opening photograph
   // should be depends on the photograph, and that changes.
   const vw = Number(site.heroHeightVw) > 0 ? Number(site.heroHeightVw) : 46;

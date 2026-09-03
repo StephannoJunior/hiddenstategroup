@@ -1,11 +1,13 @@
 import { usePageMeta } from "../lib/seo";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
+  Nothing,
   Nav, Footer, useGoogleFonts, PageHead, IndexBand, Field, inputStyle,
   fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
 import * as api from "../lib/api";
+import { useSite } from "../lib/site";
 
 /*
   THE POOL — what people want to hear.
@@ -30,7 +32,7 @@ const POOLS = [
   { id: "HOUSE", label: "THE HOUSE LIST" },
 ];
 
-function Entry({ s, team, onStatus, onDelete }) {
+function Entry({ s, team, onStatus, onDelete, mode, showVotes, onVote, busy }) {
   const dim = s.status === "HIDDEN";
   return (
     <div className="flex items-center gap-4 py-3.5"
@@ -56,6 +58,33 @@ function Entry({ s, team, onStatus, onDelete }) {
           {[s.artist, s.by_name && `asked by ${s.by_name}`].filter(Boolean).join(" · ")}
         </span>
       </span>
+
+      {mode === "VOTE" && (
+        /*
+          A ballot line. The count sits with the button rather than beside the
+          title, so the thing you press and the thing that changes are the
+          same object — press it again to take the vote back.
+        */
+        <button onClick={() => onVote(s)} disabled={busy}
+                aria-pressed={!!s.mine}
+                aria-label={s.mine ? `Take back your vote for ${s.title || "this"}` : `Vote for ${s.title || "this"}`}
+                className="flex items-center gap-2 shrink-0"
+                style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em",
+                         cursor: busy ? "default" : "pointer", padding: "8px 12px",
+                         color: s.mine ? theme.bg : theme.ink,
+                         background: s.mine ? theme.ink : "transparent",
+                         border: `1px solid ${s.mine ? theme.ink : theme.rule}`,
+                         opacity: busy ? 0.55 : 1,
+                         transition: "background 180ms ease, color 180ms ease" }}>
+          <span>{s.mine ? "PICKED" : "PICK"}</span>
+          {showVotes && (
+            <span style={{ fontVariantNumeric: "tabular-nums",
+                           color: s.mine ? theme.bg : theme.brass }}>
+              {String(s.votes ?? 0).padStart(2, "0")}
+            </span>
+          )}
+        </button>
+      )}
 
       {s.status === "PLAYED" && (
         <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em", color: theme.brass }}>
@@ -95,12 +124,42 @@ export default function SongPool() {
     description: "Put a song in the pool — paste a link and we'll take it from there.",
   });
 
+  const site = useSite();
+
   const [params, setParams] = useSearchParams();
   const [pool, setPool] = useState(params.get("pool") === "HOUSE" ? "HOUSE" : "EVENT");
+  const [listHidden, setListHidden] = useState(false);
+
+  /*
+    Only the pools that are open are offered. If the night's pool is closed
+    but the house list is not, the tabs collapse to one rather than showing a
+    choice that refuses you after you have typed a link.
+  */
+  const pools = useMemo(
+    () => POOLS.filter((p) =>
+      p.id === "HOUSE" ? site.poolHouseOpen !== false : site.poolEventOpen !== false),
+    [site.poolHouseOpen, site.poolEventOpen]
+  );
+
+  useEffect(() => {
+    if (pools.length && !pools.some((p) => p.id === pool)) setPool(pools[0].id);
+  }, [pools, pool]);
+
+  /*
+    Closed is closed however it happened. The master switch is one way to get
+    there; turning off both pools individually is another, and it has to look
+    the same from outside — otherwise the page offers a form that the server
+    is certain to refuse.
+  */
+  const closed = site.poolOpen === false || pools.length === 0;
   const [parties, setParties] = useState([]);
   const [party, setParty] = useState(params.get("party") || "");
   const [songs, setSongs] = useState([]);
   const [team, setTeam] = useState(false);
+  const [mode, setMode] = useState("ADD");
+  const [showVotes, setShowVotes] = useState(true);
+  const [votesPer, setVotesPer] = useState(3);
+  const [voting, setVoting] = useState(0);
 
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
@@ -122,6 +181,10 @@ export default function SongPool() {
       if (!res.ok) return;
       setSongs(res.songs || []);
       setTeam(!!res.team);
+      setListHidden(!!res.listHidden);
+      setMode(res.mode || "ADD");
+      setShowVotes(res.showVotes !== false);
+      setVotesPer(Number(res.votesPerPerson) || 0);
     });
   }, [pool, party]);
 
@@ -141,7 +204,11 @@ export default function SongPool() {
     setMsg("");
     if (!url.trim()) { setTone("bad"); setMsg("Paste a link to the song first."); return; }
     setBusy(true);
-    const res = await api.addSong({ pool, party, url: url.trim(), name: name.trim() });
+    const res = await api.addSong({
+      pool, party, url: url.trim(), name: name.trim(),
+      // Sent only so the server can check it. It decides; this just supplies.
+      pass: api.getGuestPass() || "",
+    });
     setBusy(false);
     if (!res.ok) { setTone("bad"); setMsg(res.error || "That didn't go through."); return; }
     setTone("good");
@@ -149,6 +216,23 @@ export default function SongPool() {
       ? res.message
       : `Added — ${[res.artist, res.title].filter(Boolean).join(" — ")}.`);
     setUrl("");
+    load();
+  };
+
+  /*
+    Optimistic, because a vote that takes a moment to register feels broken —
+    and then reconciled with what the server actually says, because the limit
+    and the one-vote rule are decided there.
+  */
+  const vote = async (song) => {
+    setVoting(song.id);
+    setSongs((list) => list.map((x) =>
+      x.id === song.id
+        ? { ...x, mine: !x.mine, votes: Math.max(0, (x.votes ?? 0) + (x.mine ? -1 : 1)) }
+        : x));
+    const res = await api.voteSong(song.id);
+    setVoting(0);
+    if (!res.ok) { setTone("bad"); setMsg(res.error || "That vote did not go through."); }
     load();
   };
 
@@ -172,16 +256,29 @@ export default function SongPool() {
 
       <IndexBand top items={[
         { label: "POOL", value: pool === "HOUSE" ? "THE HOUSE LIST" : (chosen?.name || "A NIGHT") },
-        { label: "IN THE POOL", value: String(songs.length).padStart(2, "0") },
-        { label: "PLAYED", value: String(played).padStart(2, "0") },
+        /* When the list is not public the server sends none of it, so a
+           count here would read 00 — which is not "hidden", it is a lie
+           about how many people have put something in. */
+        { label: "IN THE POOL", value: listHidden ? "—" : String(songs.length).padStart(2, "0") },
+        { label: "PLAYED", value: listHidden ? "—" : String(played).padStart(2, "0") },
       ]} />
 
-      <PageHead flush kicker="PUT A SONG IN" title="The Pool"
-                sub="PASTE A LINK — WE'LL FIND THE NAME" />
+      <PageHead flush kicker="PUT A SONG IN"
+                title={site.poolHeadline || "The Pool"}
+                sub={site.poolSub || "PASTE A LINK — WE'LL FIND THE NAME"} />
 
-      <section className="max-w-[760px] mx-auto px-[18px] pb-4">
-        <div className="flex gap-1.5 mb-7">
-          {POOLS.map((p) => {
+      {/* Shut entirely. The page still exists, because a link to it may have
+          gone out already, and a dead link reads worse than a closed door. */}
+      {closed && (
+        <Nothing note="Nothing has been lost — anything already in the pool is still there.">
+          {site.poolClosedMessage || "The pool is closed right now."}
+        </Nothing>
+      )}
+
+      <section className="max-w-[760px] mx-auto px-[18px] pb-4"
+               hidden={closed}>
+        <div className="flex gap-1.5 mb-7" hidden={pools.length < 2}>
+          {pools.map((p) => {
             const on = pool === p.id;
             return (
               <button key={p.id} onClick={() => setPool(p.id)}
@@ -212,17 +309,46 @@ export default function SongPool() {
           )
         )}
 
-        {(pool === "HOUSE" || parties.length > 0) && (
+        {mode === "VOTE" && (
+          <div className="mb-6 px-3 py-3" style={{ border: `1px solid ${theme.ink}`,
+               borderLeft: `3px solid ${theme.brass}` }}>
+            <p className="m-0" style={{ ...fontUtility, fontSize: "9px",
+               letterSpacing: "0.2em", color: theme.brass }}>
+              THIS ONE IS A VOTE
+            </p>
+            <p className="m-0 mt-1.5" style={{ ...fontText, fontSize: "16px",
+               lineHeight: 1.5, color: theme.ink2 }}>
+              {votesPer > 0
+                ? `Pick up to ${votesPer} — press again to take one back.`
+                : "Pick as many as you like — press again to take one back."}
+              {team ? " You can also add options below." : ""}
+            </p>
+          </div>
+        )}
+
+        {(mode !== "VOTE" || team) && (pool === "HOUSE" || parties.length > 0) && (
           <form onSubmit={submit} className="mt-2">
+            {/* Said BEFORE the link is typed, not after it is refused. The
+                server still decides; this only saves somebody the trouble. */}
+            {site.poolNeedPass && !api.getGuestPass() && (
+              <p className="m-0 mb-4 px-3 py-2.5" style={{ ...fontText, fontSize: "16px",
+                 lineHeight: 1.5, color: theme.ink, border: `1px solid ${theme.rule}`,
+                 background: theme.sunk }}>
+                The pool is open to ticket holders. Open your pass on this
+                phone first and this page will know you.
+              </p>
+            )}
+
             <Field label="Link to the song">
               <input value={url} onChange={(e) => setUrl(e.target.value)}
                      placeholder="Spotify, YouTube, SoundCloud, Apple Music…"
                      inputMode="url" autoCapitalize="none" autoCorrect="off"
                      style={inputStyle} />
             </Field>
-            <Field label="Your name (optional)">
+            <Field label={site.poolRequireName ? "Your name" : "Your name (optional)"}>
               <input value={name} onChange={(e) => setName(e.target.value)}
-                     placeholder="So we know who asked" style={inputStyle} />
+                     placeholder="So we know who asked" style={inputStyle}
+                     required={!!site.poolRequireName} />
             </Field>
 
             <button type="submit" disabled={busy} className="w-full mt-4 py-3.5"
@@ -231,6 +357,13 @@ export default function SongPool() {
                              cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
               {busy ? "READING THE LINK…" : "PUT IT IN THE POOL"}
             </button>
+
+            {site.poolNote && (
+              <p className="m-0 mt-3" style={{ ...fontText, fontSize: "15.5px",
+                 lineHeight: 1.5, color: theme.ink2 }}>
+                {site.poolNote}
+              </p>
+            )}
 
             {msg && (
               <p className="m-0 mt-3 px-3 py-2.5"
@@ -244,20 +377,22 @@ export default function SongPool() {
         )}
       </section>
 
-      <section className="max-w-[760px] mx-auto px-[18px] pb-16">
+      <section className="max-w-[760px] mx-auto px-[18px] pb-16"
+               hidden={closed || listHidden}>
         <p className="m-0 mt-9 mb-2" style={{ ...fontUtility, fontSize: "9.5px",
            letterSpacing: "0.2em", color: theme.brass }}>
-          {pool === "HOUSE" ? "THE HOUSE LIST" : "IN THE POOL"}
+          {mode === "VOTE" ? "ON THE BALLOT" : pool === "HOUSE" ? "THE HOUSE LIST" : "IN THE POOL"}
         </p>
         <div style={{ borderTop: `1px solid ${theme.ink}` }}>
           {songs.length === 0 ? (
             <p className="m-0 py-12 text-center"
                style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.16em", color: theme.ink2 }}>
-              NOTHING IN HERE YET — BE FIRST
+              {mode === "VOTE" ? "NO OPTIONS YET — THE TEAM SETS THESE" : "NOTHING IN HERE YET — BE FIRST"}
             </p>
           ) : (
             songs.map((s) => (
-              <Entry key={s.id} s={s} team={team} onStatus={setStatus} onDelete={remove} />
+              <Entry key={s.id} s={s} team={team} onStatus={setStatus} onDelete={remove}
+                     mode={mode} showVotes={showVotes} onVote={vote} busy={voting === s.id} />
             ))
           )}
         </div>

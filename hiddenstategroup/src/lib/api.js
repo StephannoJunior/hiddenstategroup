@@ -150,6 +150,15 @@ export const fetchRoster = (party) => call(`/roster?party=${encodeURIComponent(p
 // Admissions made while offline, sent up once signal returns.
 export const syncAdmissions = (entries) => call("/sync", { method: "POST", body: { entries } });
 
+// ── the door's own tools ────────────────────────────────────────────────────
+export const searchPasses = (q, party) =>
+  call(`/passes/search?q=${encodeURIComponent(q)}&party=${encodeURIComponent(party || "")}`);
+export const admitByHand = (code, reason) =>
+  call("/passes/admit", { method: "POST", body: { code, reason } });
+export const reissuePass = (code) =>
+  call("/passes/reissue", { method: "POST", body: { code } });
+export const activity = (limit = 120) => call(`/activity?limit=${limit}`);
+
 // ── passes ──────────────────────────────────────────────────────────────────
 export const listPasses = (party) => call(`/passes?party=${encodeURIComponent(party)}`);
 export const issuePass = (pass) => call("/passes", { method: "POST", body: pass });
@@ -340,10 +349,37 @@ export const publicParties = () => call("/public-parties", { auth: false });
 // fill themselves in rather than being copied by hand from another tab.
 export const resolveLink = (url) => call(`/resolve?url=${encodeURIComponent(url)}`);
 
+/*
+  WHO IS VOTING — a made-up name, kept in this browser.
+
+  Not a login and not a person: a random string whose only job is to stop the
+  same phone voting twice. It identifies nobody, travels nowhere else, and is
+  cleared with the browser's data like anything else. A poll that demanded an
+  account would lose more votes than it protected.
+*/
+const VOTER_KEY = "hs-voter";
+export function voterId() {
+  try {
+    let v = localStorage.getItem(VOTER_KEY);
+    if (!v) {
+      v = (crypto.randomUUID?.() || String(Math.random()).slice(2) + Date.now().toString(36));
+      localStorage.setItem(VOTER_KEY, v);
+    }
+    return v;
+  } catch {
+    // Private browsing: the vote still counts for this visit, and the server
+    // will simply see a new voter next time.
+    return "anon-" + Math.random().toString(36).slice(2);
+  }
+}
+
+export const voteSong = (id) =>
+  call("/songs/vote", { method: "POST", body: { id, voter: voterId() }, auth: false });
+
 export const listSongs = (pool, party) =>
   // sent WITH auth when a token exists, because the team's view of a pool
   // includes what has been hidden from everyone else
-  call(`/songs?pool=${encodeURIComponent(pool)}&party=${encodeURIComponent(party || "")}`);
+  call(`/songs?pool=${encodeURIComponent(pool)}&party=${encodeURIComponent(party || "")}&voter=${encodeURIComponent(voterId())}`);
 
 export const addSong = (entry) => call("/songs", { method: "POST", body: entry, auth: false });
 export const editSong = (id, status) =>
@@ -366,3 +402,100 @@ export async function nextParty() {
   const res = await call("/next-party", { auth: false });
   return res.ok ? res.party : null;
 }
+
+/*
+  ── FAULT REPORTING ─────────────────────────────────────────────────────────
+
+  When the site breaks in someone else's browser, nobody tells us. They close
+  the tab. The only honest way to find out is for the browser to say so.
+
+  WHAT IS SENT, and nothing else: the message, the file and line it came from,
+  a trimmed stack, and the path of the page. The server adds a coarse browser
+  family (iOS Safari / Chrome / …) and drops the rest of the user-agent, which
+  is a fingerprint. No address, no identifier, no session, no referrer — this
+  is our own building, not an analytics product, and a fault report is not a
+  reason to start collecting visitors.
+*/
+
+// Sent, this page load. Two guards, both against noise rather than malice:
+// the same fault repeating in a render loop would otherwise send hundreds of
+// identical requests, and a page that is thoroughly broken should not spend
+// what is left of its life reporting it.
+const seenFaults = new Set();
+let faultsSent = 0;
+const FAULT_CAP = 6;
+
+export function reportOops(message, where, stack) {
+  const msg = String(message || "").slice(0, 300).trim();
+  if (!msg) return;
+
+  /*
+    "Script error." is what a browser gives for a failure inside a script it
+    loaded from another origin — nearly always a browser extension or an
+    injected script, never our code. It carries no message, no file and no
+    line, so it can never be acted on. Reporting it fills the list with rows
+    that mean "something, somewhere".
+  */
+  if (msg === "Script error." || msg === "Script error") return;
+
+  const key = msg + "|" + (where || "");
+  if (seenFaults.has(key) || faultsSent >= FAULT_CAP) return;
+  seenFaults.add(key);
+  faultsSent += 1;
+
+  // Deliberately not awaited and never allowed to throw. A failure to report
+  // a fault must not itself become a fault.
+  call("/oops", {
+    method: "POST",
+    auth: false,
+    body: {
+      message: msg,
+      where: String(where || "").slice(0, 200),
+      stack: String(stack || "").slice(0, 900),
+      path: (typeof location !== "undefined" ? location.pathname : ""),
+    },
+  }).catch(() => {});
+}
+
+/*
+  Two listeners, because there are two ways for something to go wrong and
+  each fires only its own:
+
+    error              — a thrown exception that reached the top
+    unhandledrejection — a promise that failed with nobody catching it, which
+                         is how a broken fetch usually surfaces
+
+  React's error boundary catches a third kind — a component that throws while
+  rendering — and reports through the same function.
+*/
+export function watchForFaults() {
+  if (typeof window === "undefined") return;
+
+  window.addEventListener("error", (e) => {
+    // A failed <img> or <script> also fires "error", with no message on it.
+    // Those are worth knowing about but are not exceptions; the filename is
+    // the whole story, so it goes in as one.
+    if (!e.message && e.target && e.target.src) {
+      reportOops("Failed to load: " + String(e.target.src).slice(0, 160), "resource", "");
+      return;
+    }
+    reportOops(
+      e.message,
+      e.filename ? `${String(e.filename).split("/").pop()}:${e.lineno}` : "",
+      e.error && e.error.stack ? e.error.stack : ""
+    );
+  }, true);
+
+  window.addEventListener("unhandledrejection", (e) => {
+    const r = e.reason;
+    reportOops(
+      r && r.message ? r.message : String(r),
+      "promise",
+      r && r.stack ? r.stack : ""
+    );
+  });
+}
+
+// The console's reading of the above. Both need manageTeam.
+export const listOops = () => call("/oops");
+export const clearOops = () => call("/oops", { method: "DELETE" });

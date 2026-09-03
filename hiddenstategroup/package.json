@@ -12,7 +12,11 @@
     "sitemap": "node scripts/sitemap.mjs",
     "prebuild": "node scripts/sitemap.mjs",
     "images": "node scripts/images.mjs",
-    "test:door": "node scripts/door-test.mjs"
+    "test:door": "node scripts/door-test.mjs",
+    "test:restore": "node scripts/restore.mjs --drill",
+    "check": "node scripts/check.mjs",
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:try": "npm run build && wrangler versions upload"
   },
   "dependencies": {
     "jsqr": "^1.4.0",
@@ -30,6 +34,7 @@
     "postcss": "^8.4.0",
     "sharp": "^0.35.4",
     "tailwindcss": "^3.4.0",
-    "vite": "^5.2.0"
+    "vite": "^5.2.0",
+    "wrangler": "^4.129.0"
   }
 }

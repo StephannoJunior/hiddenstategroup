@@ -1,6 +1,6 @@
 import Img from "./Img";
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { X, Search } from "lucide-react";
 import { MARK_SJ, MARK_SEAL, MARK_NOPROBLEM } from "../lib/marks";
 import { ARTISTS } from "../lib/data";
@@ -500,8 +500,98 @@ export const NAV_ITEMS = [
   { label: "ABOUT", href: "/about", desc: "The Ecosystem" },
 ];
 
+/*
+  ── THE WAY IN ───────────────────────────────────────────────────────────
+
+  Press and hold the wordmark for a second and the staff login opens.
+
+  WHY IT IS HIDDEN. The bar builds its last tab one of two ways: signed in as
+  team you get a CONSOLE tab, otherwise you get a PASS tab. There is no third
+  case — so the moment the boss holds a guest pass, the pass tab replaces the
+  only route into the console, and the one link to the login lives on /mypass,
+  which the pass tab no longer goes to. Holding a pass made the door vanish.
+
+  The alternative was a CONSOLE tab visible to every visitor. This was chosen
+  instead: nothing on the public site announces that a staff door exists.
+
+  THE THREE THINGS THAT MAKE A LONG PRESS WORK ON A PHONE:
+
+    1. iOS offers its own menu (Save Image, Copy) when you hold a picture, and
+       that menu would open on top of this. -webkit-touch-callout: none and a
+       cancelled context menu are what suppress it.
+    2. A held finger drifts. Cancelling on any movement at all would make this
+       fire perhaps one time in three, so movement is allowed up to 10px.
+    3. The press is followed by a click, and that click would navigate home
+       immediately after the login opened. A flag set when the hold fires lets
+       the click be swallowed exactly once.
+
+  No setPointerCapture. Capturing retargets the following click to the
+  capturing element, which is what silently broke every tab in the floating
+  bar once already.
+*/
+const HOLD_SLOP = 10;
+
+function useHoldForTheDoor(to = "/admins-staff-boss") {
+  const navigate = useNavigate();
+  const site = useSite();
+
+  // Both settable from the console. The address itself always works, so
+  // turning the hold off removes the shortcut and not the door.
+  const enabled = site.staffDoorHold !== false;
+  const holdMs = Number(site.staffDoorHoldMs) > 0 ? Number(site.staffDoorHoldMs) : 900;
+  const hold = useRef({ timer: null, fired: false, x: 0, y: 0 });
+
+  const cancel = () => {
+    clearTimeout(hold.current.timer);
+    hold.current.timer = null;
+  };
+
+  const onPointerDown = (e) => {
+    if (!enabled) return;
+    if (e.button !== undefined && e.button !== 0) return;
+    hold.current.fired = false;
+    hold.current.x = e.clientX;
+    hold.current.y = e.clientY;
+    cancel();
+    hold.current.timer = setTimeout(() => {
+      hold.current.fired = true;
+      // The only confirmation there is, on a control with no appearance.
+      if (site.staffDoorBuzz !== false) {
+        try { navigator.vibrate?.(18); } catch { /* not supported */ }
+      }
+      navigate(to);
+    }, holdMs);
+  };
+
+  const onPointerMove = (e) => {
+    if (!hold.current.timer) return;
+    if (Math.abs(e.clientX - hold.current.x) > HOLD_SLOP ||
+        Math.abs(e.clientY - hold.current.y) > HOLD_SLOP) cancel();
+  };
+
+  const onClick = (e) => {
+    if (!hold.current.fired) return;
+    e.preventDefault();
+    hold.current.fired = false;
+  };
+
+  useEffect(() => cancel, []);
+
+  return {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
+    onPointerLeave: cancel,
+    onClick,
+    onContextMenu: (e) => e.preventDefault(),
+    style: { WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" },
+  };
+}
+
 export function Nav() {
   const { t } = useLang();
+  const door = useHoldForTheDoor();
   const site = useSite();
   const navLabel = (item) => {
     const map = { NEWS: "news", RECORDS: "records", AGENCY: "agency", ARTISTS: "artists",
@@ -576,8 +666,15 @@ export function Nav() {
           <Link
             to="/"
             className="absolute left-1/2 top-1/2"
-            style={{ transform: "translate(-50%, -50%)" }}
+            style={{ transform: "translate(-50%, -50%)", ...door.style }}
             aria-label="Hidden State — home"
+            onPointerDown={door.onPointerDown}
+            onPointerMove={door.onPointerMove}
+            onPointerUp={door.onPointerUp}
+            onPointerCancel={door.onPointerCancel}
+            onPointerLeave={door.onPointerLeave}
+            onContextMenu={door.onContextMenu}
+            onClick={door.onClick}
           >
             <Wordmark size="h-[38px] lg:h-[46px]" dark />
           </Link>

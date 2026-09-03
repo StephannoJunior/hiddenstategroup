@@ -140,13 +140,6 @@ export default function MyPass() {
           )}
         </div>
 
-        <p className="text-center m-0 mt-10">
-          <Link to="/admins-staff-boss" className="pb-0.5"
-                style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em",
-                         color: theme.ink2, borderBottom: `1px solid ${theme.rule}` }}>
-            TEAM SIGN IN
-          </Link>
-        </p>
       </section>
 
       <Footer />

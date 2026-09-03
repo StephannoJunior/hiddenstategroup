@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS oops (at TEXT NOT NULL, message TEXT NOT NULL, where_at TEXT, stack TEXT, agent TEXT, path TEXT, n INTEGER NOT NULL DEFAULT 1);

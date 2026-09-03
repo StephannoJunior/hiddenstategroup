@@ -88,6 +88,13 @@ Worth picking one before launch. (Search for `2005` and `EST. 2020` to find them
 
 ---
 
+## Deploying, backups, and what to do when something breaks
+
+All of it is in **RUNBOOK.md** — the commands to check a build, put a version
+on a preview URL without touching the live site, apply a migration, restore a
+backup, and roll back. That file is the one to open at 2am; this one explains
+what the site is.
+
 ## Hosting (Cloudflare)
 
 This site is hosted on Cloudflare, deployed from GitHub. Every push to the

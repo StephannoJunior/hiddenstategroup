@@ -74,6 +74,77 @@ function CountViews() {
   return null;
 }
 
+/*
+  ── ARRIVING BEFORE YOU ASK ──────────────────────────────────────────────
+
+  Pages are loaded on demand, which makes the first view light and every
+  later one wait — tap a tab and the phone fetches a file before anything
+  can be drawn. On a good connection that is a blink; at a venue it is a
+  second of nothing, and a second of nothing reads as a broken tap.
+
+  So the moment a finger lands on a link, or a cursor rests on one, the page
+  behind it starts loading. The download overlaps the time between touching
+  and lifting — 80 to 150 milliseconds that were previously spent doing
+  nothing — and by the time the route actually changes the file is usually
+  already there.
+
+  IT COSTS ALMOST NOTHING WHEN IT IS WRONG. A guess that is not followed is
+  one small file in the cache that would probably have been wanted later
+  anyway. Each route is fetched at most once; `seen` makes a second touch on
+  the same link free.
+
+  pointerdown rather than click on purpose: click fires after the finger
+  lifts, by which time the navigation is already happening and there is
+  nothing left to overlap.
+*/
+const PREFETCH = {
+  "/": () => import("./pages/Home"),
+  "/records": () => import("./pages/Records"),
+  "/agency": () => import("./pages/Agency"),
+  "/artists": () => import("./pages/Artists"),
+  "/events": () => import("./pages/Events"),
+  "/news": () => import("./pages/News"),
+  "/mixes": () => import("./pages/Mixes"),
+  "/about": () => import("./pages/About"),
+  "/contact": () => import("./pages/Contact"),
+  "/pool": () => import("./pages/SongPool"),
+  "/mypass": () => import("./pages/MyPass"),
+  "/console": () => import("./pages/Console"),
+  "/scan": () => import("./pages/Scan"),
+  "/doorlist": () => import("./pages/PassList"),
+  "/guestlist": () => import("./pages/Guestlist"),
+};
+
+function Prefetcher() {
+  useEffect(() => {
+    const seen = new Set();
+
+    const warm = (e) => {
+      const a = e.target.closest?.("a[href]");
+      if (!a) return;
+      const href = a.getAttribute("href");
+      if (!href || !href.startsWith("/")) return;
+
+      // Detail routes share a chunk with their index, so the first segment is
+      // enough — /news/anything is answered by the /news entry.
+      const path = href.split("?")[0];
+      const key = PREFETCH[path] ? path : "/" + (path.split("/")[1] || "");
+      const load = PREFETCH[key];
+      if (!load || seen.has(key)) return;
+      seen.add(key);
+      load().catch(() => seen.delete(key));   // offline: let it try again later
+    };
+
+    document.addEventListener("pointerdown", warm, { passive: true, capture: true });
+    document.addEventListener("pointerover", warm, { passive: true, capture: true });
+    return () => {
+      document.removeEventListener("pointerdown", warm, { capture: true });
+      document.removeEventListener("pointerover", warm, { capture: true });
+    };
+  }, []);
+  return null;
+}
+
 // Shown for the moment a page file is in flight. Deliberately just the paper
 // colour: a spinner that flashes for 80ms is more distracting than nothing.
 /*
@@ -121,6 +192,7 @@ export default function App() {
         <BrowserRouter>
           <ScrollToTop />
           <CountViews />
+          <Prefetcher />
           <Reveals />
           <Folio />
           <GlassBar />

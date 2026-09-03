@@ -1,6 +1,7 @@
 import { theme } from "../lib/theme";
 import React, { useEffect, useRef, useState } from "react";
 import SETS from "../content/imagesets.json";
+import { useSite } from "../lib/site";
 
 /*
   Img — one image component so every picture behaves the same.
@@ -33,6 +34,11 @@ export default function Img({
 }) {
   const ref = useRef(null);
   const [loaded, setLoaded] = useState(false);
+  const site = useSite();
+  // Off, a photograph simply appears — no develop, no fade, nothing to wait
+  // for. The attribute is dropped entirely rather than set to a still state,
+  // so there is no transition left to run.
+  const develops = site.motionDevelop !== false;
 
   useEffect(() => {
     // Already decoded before React got here? Then show it immediately.
@@ -92,7 +98,7 @@ export default function Img({
         Logos are exempt. A wordmark that sepia-tones itself on the way in
         looks like a rendering fault, not a flourish.
       */
-      data-develop={isTransparent ? undefined : (loaded ? "dry" : "wet")}
+      data-develop={isTransparent || !develops ? undefined : (loaded ? "dry" : "wet")}
       className={className}
       style={{
         ...style,

@@ -1,5 +1,5 @@
 import { usePageMeta } from "../lib/seo";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Nothing,
@@ -53,24 +53,26 @@ function PassListScreen({ role }) {
     phone on the door sees. It used to read the scanning device's own storage,
     which meant a second phone knew nothing about the first.
   */
+  /*
+    Hoisted out of the effect so anything that CHANGES the list — reissuing a
+    pass, for one — can ask for a fresh copy immediately rather than waiting
+    up to four seconds for the next poll and looking broken in the meantime.
+  */
+  const load = useCallback(async () => {
+    const p = await api.listParties();
+    if (!p.ok || !p.parties?.length) return;
+    const current = p.parties[0];
+    setParty(current);
+    const res = await api.listPasses(current.id);
+    if (res.ok) setRows(res.passes || []);
+    else setMsg(res.error || "Couldn't load the list.");
+  }, []);
+
   useEffect(() => {
-    let alive = true;
-
-    const load = async () => {
-      const p = await api.listParties();
-      if (!alive || !p.ok || !p.parties?.length) return;
-      const current = p.parties[0];
-      setParty(current);
-      const res = await api.listPasses(current.id);
-      if (!alive) return;
-      if (res.ok) setRows(res.passes || []);
-      else setMsg(res.error || "Couldn't load the list.");
-    };
-
     load();
     const id = setInterval(load, 4000);
-    return () => { alive = false; clearInterval(id); };
-  }, []);
+    return () => clearInterval(id);
+  }, [load]);
 
   // The server returns raw facts; the three states are worked out here.
   const stateOf = (r) =>
@@ -78,6 +80,32 @@ function PassListScreen({ role }) {
       : r.admitted_at ? "ADMITTED"
         : r.refusals > 0 ? "REFUSED"
           : "AWAITING";
+
+
+  /*
+    ── D03 · A REPLACEMENT CODE ──────────────────────────────────────────
+
+    A ticket gets soaked, or smudged, or left at home. The old code is
+    cancelled in the same breath as the new one is made — a lost ticket that
+    still works is two people holding one pass, and the door cannot tell
+    which of them is the guest.
+
+    Deliberately behind a confirmation that names the person: this cancels
+    something, and cancelling the wrong pass at a door is a bad minute.
+  */
+  const reissue = async (r) => {
+    if (r.status === "REVOKED") return;
+    const yes = window.confirm(
+      `Replace ${r.name}'s pass?\n\n` +
+      `${r.code} stops working immediately and a new code is issued.\n` +
+      "Use this when a ticket is lost or unreadable."
+    );
+    if (!yes) return;
+    const res = await api.reissuePass(r.code);
+    if (!res.ok) { setMsg(res.error || "That did not work."); return; }
+    setMsg(`${res.name} now has ${res.code}. The old code is cancelled.`);
+    load();
+  };
 
   const admitted = rows.filter((r) => stateOf(r) === "ADMITTED").length;
   const refused = rows.filter((r) => stateOf(r) === "REFUSED").length;
@@ -129,7 +157,11 @@ function PassListScreen({ role }) {
               <div key={r.code} className="flex items-center gap-3 py-3.5"
                    style={{ borderBottom: "1px solid " + theme.rule }}>
                 <span style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.12em",
-                               color: theme.ink2, width: "72px" }}>
+                               color: theme.ink2, width: "72px", cursor: "pointer" }}
+                      role="button" tabIndex={0}
+                      title="Replace this code — the old one stops working"
+                      onKeyDown={(e) => { if (e.key === "Enter") reissue(r); }}
+                      onClick={() => reissue(r)}>
                   {r.code}
                 </span>
 

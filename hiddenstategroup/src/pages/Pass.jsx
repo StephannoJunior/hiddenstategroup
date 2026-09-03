@@ -1,6 +1,6 @@
 import { usePageMeta } from "../lib/seo";
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts,
   PageHead, fontDisplay, fontUtility, fontText, theme,
@@ -79,6 +79,8 @@ export default function Pass() {
     return () => { alive = false; clearInterval(tick); };
   }, [code]);
 
+  const navigate = useNavigate();
+
   const shell = (children) => (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
@@ -86,7 +88,55 @@ export default function Pass() {
       <span id="main" tabIndex={-1} />
       <PageHead kicker="YOUR ENTRY" title="The Pass"
                 sub="SHOW THIS AT THE DOOR" />
-      <section className="max-w-[520px] mx-auto px-[18px] pb-24">{children}</section>
+
+      {/*
+        A WAY OUT.
+
+        This page had none. Once a pass is stored the floating bar's last tab
+        points straight back here, so opening it was a room with the door
+        painted over — you could reach the pass from anywhere and nothing but
+        the browser's own back button led anywhere else.
+
+        Back goes where you actually came from when there is a history to go
+        back to, and home when there is not — someone opening a pass link
+        cold has no previous page, and a back button that does nothing is
+        worse than no back button.
+      */}
+      <div className="max-w-[520px] mx-auto px-[18px] -mt-2 mb-1">
+        <button
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}
+          style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.18em",
+                   color: theme.ink2, background: "transparent", border: 0,
+                   padding: "8px 0", cursor: "pointer" }}>
+          ← BACK TO THE SITE
+        </button>
+      </div>
+
+      <section className="max-w-[520px] mx-auto px-[18px] pb-24">
+        {children}
+
+        {/*
+          FORGET IT ON THIS DEVICE.
+
+          The stored pass is what puts a PASS tab in the floating bar, and
+          that tab takes the place of the console one. On a phone that is
+          used to run the door as well as to hold a ticket, being able to put
+          it down again matters.
+
+          It navigates away as well as clearing, because this page stores the
+          pass again every time it loads — clearing without leaving would
+          undo itself on the next visit.
+        */}
+        <button
+          onClick={() => { api.setGuestPass(null); navigate("/"); }}
+          className="block mx-auto mt-10"
+          style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.16em",
+                   color: theme.ink2, background: "transparent",
+                   border: `1px solid ${theme.rule}`, padding: "9px 13px",
+                   cursor: "pointer" }}>
+          FORGET THIS PASS ON THIS DEVICE
+        </button>
+      </section>
       <Footer />
     </div>
   );

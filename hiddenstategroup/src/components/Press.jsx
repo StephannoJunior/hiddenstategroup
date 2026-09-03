@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useSite } from "../lib/site";
 
 /*
   PRESS — the two things a publication does that a website usually does not:
@@ -81,8 +82,11 @@ function revealSections(page) {
 
 export function Reveals() {
   const { pathname } = useLocation();
+  const site = useSite();
+  const on = site.motionReveals !== false;
 
   useEffect(() => {
+    if (!on) return undefined;
     if (typeof IntersectionObserver === "undefined") return;
     try {
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -104,7 +108,7 @@ export function Reveals() {
     requestAnimationFrame(find);
 
     return () => stop();
-  }, [pathname]);
+  }, [pathname, on]);
 
   return null;
 }
@@ -128,6 +132,7 @@ const SECTIONS = [
 
 export function Folio() {
   const { pathname } = useLocation();
+  const site = useSite();
   const [pct, setPct] = useState(0);
 
   const name = pathname === "/" ? "HIDDEN STATE"
@@ -135,27 +140,49 @@ export function Folio() {
 
   useEffect(() => {
     let ticking = false;
+    let travel = 0;          // how far this page can scroll
+
+    /*
+      THE HEIGHT IS MEASURED ONCE, NOT EVERY FRAME.
+
+      Reading scrollHeight forces the browser to lay the whole document out
+      before it can answer. Doing that inside a scroll handler — even one
+      throttled to a frame — makes every frame of every scroll pay for a full
+      layout, and it is the single most common reason a page that should be
+      smooth is not. Nothing about the document's height changes while a
+      finger is moving, so it is read on arrival, on resize, and when images
+      finish loading, and never in between.
+    */
+    const measure = () => {
+      travel = document.documentElement.scrollHeight - window.innerHeight;
+      read();
+    };
     const read = () => {
       ticking = false;
-      const h = document.documentElement.scrollHeight - window.innerHeight;
-      setPct(h > 40 ? Math.min(100, Math.max(0, (window.scrollY / h) * 100)) : 0);
+      setPct(travel > 40 ? Math.min(100, Math.max(0, (window.scrollY / travel) * 100)) : 0);
     };
     const onScroll = () => {
-      // One read per frame. Reading scrollHeight on every scroll event forces
-      // the browser to re-measure the whole document, which is the classic way
-      // to make a smooth page stutter.
       if (!ticking) { ticking = true; requestAnimationFrame(read); }
     };
-    read();
+
+    measure();
+    // Lazy images and web fonts both change the height after first paint.
+    const settle = setTimeout(measure, 900);
+    const ro = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(measure) : null;
+    ro?.observe(document.documentElement);
+
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+    window.addEventListener("resize", measure, { passive: true });
     return () => {
+      clearTimeout(settle);
+      ro?.disconnect();
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("resize", measure);
     };
   }, [pathname]);
 
-  if (!name) return null;
+  if (!name || site.showFolio === false) return null;
 
   return (
     <span className="hs-folio" aria-hidden="true" data-print="hide">

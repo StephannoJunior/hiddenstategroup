@@ -2,12 +2,44 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { watchForFaults } from "./lib/api";
+
+/*
+  Listening for faults BEFORE the app mounts, so a failure during the very
+  first render — the kind that leaves a blank page behind — still gets
+  reported. Installed here rather than in App so it survives App itself
+  failing to load.
+*/
+watchForFaults();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+
+/*
+  CLEARING THE FIRST PAINT.
+
+  The Worker writes an opening — the heading, and the photograph where there
+  is one — straight into the HTML, so something true is on screen before any
+  of this has downloaded. Once React has drawn the real page, that opening is
+  faded out and removed.
+
+  TWO FRAMES, not zero. Removing it in the same tick as render() means
+  removing it before the browser has painted what replaced it, which shows a
+  flash of nothing — the exact problem the opening exists to prevent. Two
+  animation frames is one guaranteed paint.
+
+  If this never runs, the opening simply stays. A page showing its own
+  headline is a much better failure than a blank one.
+*/
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  const first = document.getElementById("hs-first");
+  if (!first) return;
+  first.setAttribute("data-gone", "");
+  setTimeout(() => first.remove(), 400);
+}));
 
 /*
   Service worker registration, with automatic updates.

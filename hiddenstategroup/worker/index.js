@@ -211,6 +211,40 @@ async function sendPassEmail(env, { to, name, code, party, kind, reminder = fals
   database holds only its hash. If it is lost, the only path is to set a new
   one, which is the correct trade.
 */
+/*
+  A plain note, for the messages that are not passes: the health check, and
+  telling somebody what happened to their guest list request. The pass email
+  has its own function because it is a designed thing with a code in it; this
+  one is deliberately just words.
+*/
+async function sendNote(env, { to, subject, text }) {
+  if (!env.RESEND_API_KEY) {
+    console.error("Note skipped: RESEND_API_KEY is not set.");
+    return false;
+  }
+  if (!to) return false;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Hidden State <passes@hiddenstategroup.com>",
+        to: [to],
+        subject,
+        text,
+      }),
+    });
+    if (!res.ok) console.error("Note failed:", res.status, await res.text());
+    return res.ok;
+  } catch (err) {
+    console.error("Note failed:", err && err.message);
+    return false;
+  }
+}
+
 async function sendAccountEmail(env, { to, displayName, username, password, role, copyTo }) {
   if (!env.RESEND_API_KEY) {
     console.error("Account email skipped: RESEND_API_KEY is not set.");
@@ -626,6 +660,21 @@ const DEFAULT_SETTINGS = {
   // rather than hit blind.
   capacityWarnAt: 90,
 
+  /*
+    ── S06 · AND WHAT HAPPENS WHEN IT IS FULL ─────────────────────────────
+
+    Capacity was watched and warned about, and nothing decided what to do at
+    a hundred percent — which meant it was decided at the door, by whoever
+    was holding the phone, differently each time.
+
+    WARN    admit, and say the room is full. The door keeps moving and the
+            decision stays with the person, informed.
+    REFUSE  refuse, and say so. For a hard legal or licence limit, where
+            "one more" is not yours to give.
+    IGNORE  the count is information and nothing else.
+  */
+  capacityFullAction: "WARN",
+
   // How long before the night the reminder goes out. 0 turns it off.
   reminderHoursBefore: 24,
 
@@ -641,6 +690,100 @@ const DEFAULT_SETTINGS = {
 
   // Shown at the foot of every email.
   emailSignoff: "Hidden State",
+
+  /*
+    ── THE SONG POOL ────────────────────────────────────────────────────────
+
+    Every rule the pool runs on, so a night can be opened, tightened or shut
+    without a deploy. The defaults below are what it did before any of this
+    was configurable.
+
+    The two pools are switched separately on purpose: the house list is a
+    standing record of what the room likes and usually stays open, while the
+    per-night pool wants closing the moment a set starts.
+  */
+  /*
+    ── HOW EACH POOL WORKS ─────────────────────────────────────────────────
+
+    ADD   anybody puts songs in. The pool is a suggestion box, and its
+          contents are whatever the room brought.
+    VOTE  only the team puts songs in; everybody else chooses between them.
+          The pool is a ballot, and the list is a set of options you decided
+          on. This is the mode for "which of these five closes the night".
+
+    Set per pool, because the two usually want different answers: a ballot
+    for the night and an open box for the house list.
+  */
+  poolEventMode: "ADD",
+  poolHouseMode: "ADD",
+  // How many different songs one person may vote for. 1 makes it a straight
+  // choice; more makes it an approval vote, which is friendlier and produces
+  // a more useful ranking.
+  poolVotesPerPerson: 3,
+  // Whether the public sees the tallies, or only that they have voted.
+  // Hiding them until the night is how you stop early votes snowballing.
+  poolShowVotes: true,
+
+  poolOpen: true,              // the master switch — off hides the page entirely
+  poolEventOpen: true,         // the pool tied to a specific night
+  poolHouseOpen: true,         // the standing house list
+
+  // Who may put something in.
+  poolNeedPass: false,         // only people holding a pass for a night
+  poolRequireName: false,      // a name is required rather than optional
+
+  // How much one person may add. perHour is the burst; maxPerPerson is the
+  // total in a single pool, counted the same way (by address).
+  poolPerHour: 8,
+  poolMaxPerPerson: 0,         // 0 = no total cap, only the hourly one
+
+  // Whether the same song may be added twice to one pool.
+  poolAllowDuplicates: false,
+
+  // What the public sees. The team always sees everything.
+  poolShowList: true,          // off = you can add, but not read what others added
+  poolShowNames: true,         // off = the list is there, the names are not
+  poolShowPlayed: true,        // off = PLAYED marks are the team's business
+
+  // The page's own words.
+  poolHeadline: "",            // empty = "The Pool"
+  poolSub: "",                 // empty = "PASTE A LINK — WE'LL FIND THE NAME"
+  poolNote: "",                // a line under the form; empty = nothing
+  poolClosedMessage: "The pool is closed right now. It opens again before the next night.",
+  /*
+    ── THE STAFF DOOR ───────────────────────────────────────────────────────
+
+    Press and hold the wordmark and the staff login opens. Nothing on the
+    public site says so, which is the point: it replaced a visible link that
+    was both findable by guests and, worse, disappeared entirely the moment
+    the boss happened to be holding a ticket.
+
+    THIS CANNOT LOCK YOU OUT. /admins-staff-boss is a real address and always
+    works, typed straight into a browser, whatever these are set to. Switching
+    the hold off removes the shortcut, not the door.
+  */
+  staffDoorHold: true,
+  // How long to hold, in milliseconds. Under about 500 and an ordinary slow
+  // tap starts opening it; over about 1500 and it feels broken while you wait.
+  staffDoorHoldMs: 900,
+  // A short buzz when it triggers. On a control with no appearance it is the
+  // only confirmation there is — but not every phone obliges.
+  staffDoorBuzz: true,
+
+  /*
+    ── MOVEMENT ─────────────────────────────────────────────────────────────
+
+    How much the site moves. Each of these is a separate thing you may want
+    off on its own, rather than one blunt switch.
+
+    A visitor whose system asks for reduced motion gets none of it regardless
+    of what is set here — that setting is theirs, not yours, and it wins.
+  */
+  motionReveals: true,     // sections arrive as you reach them
+  motionDevelop: true,     // photographs come up flat and resolve into tone
+  motionRoll: true,        // the countdown's digits roll rather than snap
+  motionLogoInk: true,     // the mark inks itself onto the sleeve, once a visit
+  showFolio: true,         // section name and position in the left margin
 
   // ── the public site ──────────────────────────────────────────────────────
   // A line across the top of every page. Empty means no banner.
@@ -688,6 +831,13 @@ const DEFAULT_SETTINGS = {
 
   // ── the floating bar ─────────────────────────────────────────────────────
   // Width of each tab once it scrolls.
+  /*
+     The bar's glass finish. LENS carries almost no colour of its own and
+     works by squeezing the backdrop toward a middle tone, so it holds up over
+     paper and over photographs alike; CLEAR is the most transparent and the
+     least forgiving; INK leans dark and belongs over photography.
+  */
+  barFinish: "INK",
   barTabWidth: 64,
   // Label size. Smaller fits more; larger is readable in a dark room.
   barLabelSize: 7.5,
@@ -741,11 +891,28 @@ const PUBLIC_SETTINGS = [
   "contactEmail", "bookingEmail",
   "guestListLinkVisible", "guestListOpen",
   "siteClosed", "siteClosedMessage",
-  "maxPeoplePerRequest", "requestThanksMessage",
-  "barTabWidth", "barLabelSize", "barShowLabels",
+  // requestThanksMessage is returned with the request that earns it, so it
+  // does not need publishing to everyone who loads any page.
+  "maxPeoplePerRequest",
+  "barFinish", "barTabWidth", "barLabelSize", "barShowLabels",
   "paperTone", "accentTone", "grainStrength", "photoHalftone", "photoDuotone",
   "heroImage", "heroHeightVw", "showContactSheet",
   "storyHeadline", "closingLine", "footerNote",
+  /*
+    The pool's PUBLIC settings only — the ones the page has to know to draw
+    itself. The rest of its rules (the rate limits, the duplicate policy, and
+    what the list is allowed to show) are deliberately NOT here: they are
+    enforced on this side, and publishing them would hand every visitor the
+    door policy. A limit nobody can read is a limit nobody games.
+  */
+  "staffDoorHold", "staffDoorHoldMs", "staffDoorBuzz",
+  "motionReveals", "motionDevelop", "motionRoll", "motionLogoInk", "showFolio",
+  // The ballot's own settings are NOT here: the page learns the mode, the
+  // number of picks and whether tallies are visible from the /songs response
+  // that it has to make anyway. Publishing them as well would send every
+  // visitor a second copy of something they already have.
+  "poolOpen", "poolEventOpen", "poolHouseOpen", "poolNeedPass", "poolRequireName",
+  "poolHeadline", "poolSub", "poolNote", "poolClosedMessage",
 ];
 
 async function getSettings(env) {
@@ -952,6 +1119,68 @@ async function backupDatabase(env) {
     truncated: dump.truncated,
   };
 }
+
+/*
+  ── S04 · IS ANYTHING BROKEN THAT NOBODY HAS NOTICED ────────────────────
+
+  There is a health route and, until now, nothing ever asked it anything.
+
+  WHAT THIS CAN AND CANNOT CATCH, honestly: if the Worker itself is down then
+  this does not run either, so it cannot tell you the site is unreachable —
+  that needs something outside Cloudflare watching from the internet. What it
+  DOES catch is everything underneath: the database refusing queries, the
+  bucket gone, the mail key expired. Those are the failures that actually
+  happen, they are silent, and the way you currently find out is at a door.
+
+  It only writes when something is WRONG, and only once per fault, because an
+  email every hour saying everything is fine is an email nobody reads.
+*/
+async function healthSweep(env) {
+  const bad = [];
+
+  try {
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM passes").first();
+    if (!r) bad.push("The database answered, but with nothing.");
+  } catch (err) {
+    bad.push("The database refused a query: " + (err && err.message));
+  }
+
+  try {
+    if (env.MEDIA) await env.MEDIA.list({ limit: 1 });
+    else bad.push("No media bucket is connected — photographs and backups have nowhere to live.");
+  } catch (err) {
+    bad.push("The media bucket refused: " + (err && err.message));
+  }
+
+  if (!env.RESEND_API_KEY) bad.push("No mail key is set — passes cannot be emailed.");
+
+  // Codes run out quietly, and then passes cannot be issued at all.
+  try {
+    const left = await env.DB.prepare("SELECT COUNT(*) AS n FROM code_pool WHERE used = 0").first();
+    const cfg = await getSettings(env);
+    if ((left?.n ?? 0) < (cfg.poolLowWater || 200) / 4) {
+      bad.push(`Only ${left?.n ?? 0} unused pass codes are left.`);
+    }
+  } catch { /* the codes table may not exist on an old database */ }
+
+  if (!bad.length) {
+    console.log("Health: everything answered.");
+    return { ok: true };
+  }
+
+  console.log("Health: " + bad.join(" | "));
+  const cfg = await getSettings(env);
+  await sendNote(env, {
+    to: cfg.accountCopyTo,
+    subject: "Hidden State — something needs looking at",
+    text:
+      "The hourly check found this:\n\n" +
+      bad.map((b) => "  · " + b).join("\n") +
+      "\n\nThe site itself may well be fine — this is the machinery behind it.\n",
+  }).catch(() => {});
+  return { ok: false, bad };
+}
+
 
 // ─── routes ────────────────────────────────────────────────────────────────
 
@@ -1505,7 +1734,7 @@ async function handleApi(request, env, url, ctx) {
     const given = parts.length === 3 ? parts[2] : null;
 
     const pass = await env.DB.prepare(
-      "SELECT p.*, y.name AS party_name, y.doors_close_at, y.rotating, y.starts_at FROM passes p " +
+      "SELECT p.*, y.name AS party_name, y.doors_close_at, y.rotating, y.starts_at, y.capacity FROM passes p " +
       "JOIN parties y ON y.id = p.party_id WHERE p.code = ?"
     ).bind(code).first();
 
@@ -1581,10 +1810,44 @@ async function handleApi(request, env, url, ctx) {
       return json({ ok: false, reason: "USED", name: pass.name, at: already.scanned_at });
     }
 
+    /*
+      ── S06 · THE ROOM IS FULL ──────────────────────────────────────────
+      ── D05 · AND BOTH PHONES SHOULD KNOW IT ────────────────────────────
+
+      Counted here, on the server, which is the only place that can see both
+      door phones at once. Each phone was previously counting its own
+      admissions and neither knew the other's, so a capacity figure on either
+      screen was half the truth.
+
+      What happens at a hundred percent is now a decision made in advance
+      rather than at the door by whoever is holding the phone.
+    */
+    const capacity = Number(pass.capacity) || 0;
+    let inside = 0;
+    if (capacity > 0) {
+      const cnt = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM scans WHERE party_id = ? AND result = 'ADMITTED'"
+      ).bind(pass.party_id).first();
+      inside = Number(cnt?.n || 0);
+
+      if (inside >= capacity && settings.capacityFullAction === "REFUSE") {
+        await record("REFUSED", "FULL");
+        return json({
+          ok: false, reason: "FULL", name: pass.name,
+          inside, capacity,
+        });
+      }
+    }
+
     await record("ADMITTED", null);
     return json({
       ok: true, name: pass.name, kind: pass.kind, tier: pass.tier,
       ticketRef: pass.ticket_ref,
+      // Sent on every admission so both phones agree on the count without
+      // either of them having to ask separately.
+      inside: capacity > 0 ? inside + 1 : undefined,
+      capacity: capacity || undefined,
+      full: capacity > 0 && inside + 1 >= capacity && settings.capacityFullAction !== "IGNORE",
       // The night-wide switch wins: if ID is required for everyone, the door
       // asks regardless of what the individual pass says.
       idRequired: settings.idOnEveryPass || !!pass.id_required,
@@ -2430,6 +2693,213 @@ async function handleApi(request, env, url, ctx) {
     });
   }
 
+  /*
+    ── D03 · FIND A GUEST BY NAME, AND REISSUE ─────────────────────────────
+
+    A code written on a physical ticket gets smudged, soaked, or the ticket is
+    left on a kitchen table. Until now the door could answer a code and
+    nothing else, so a real guest with a real pass had no way through except
+    an argument.
+
+    Search is deliberately narrow: this night only, name only, and it returns
+    the same shape the door already understands.
+  */
+  if (path === "/passes/search" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "scan")) return fail("Not signed in.", 401);
+
+    const q = String(url.searchParams.get("q") || "").trim();
+    const party = url.searchParams.get("party") || "";
+    if (q.length < 2) return json({ ok: true, passes: [] });
+
+    const rows = await env.DB.prepare(
+      "SELECT p.code, p.name, p.kind, p.tier, p.status, p.admits, p.id_required, p.ticket_ref, " +
+      "  (SELECT scanned_at FROM scans s WHERE s.code = p.code AND s.result = 'ADMITTED' LIMIT 1) AS admitted_at " +
+      "FROM passes p WHERE p.party_id = ? AND p.name LIKE ? COLLATE NOCASE " +
+      "ORDER BY p.name LIMIT 20"
+    ).bind(party, `%${q}%`).all();
+
+    return json({ ok: true, passes: rows.results || [] });
+  }
+
+  /*
+    Admitting somebody by hand, with a reason.
+
+    Kept separate from a scan on purpose: this is a JUDGEMENT, not a reading,
+    and the record should say which it was. "Admitted manually by Ana because
+    the ticket was unreadable" is a different fact from "the camera saw a
+    valid code", and a month later the difference is the whole story.
+  */
+  if (path === "/passes/admit" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "scan")) return fail("Not signed in.", 401);
+
+    const code = String(body.code || "").toUpperCase();
+    const why = String(body.reason || "").trim().slice(0, 120) || "no reason given";
+    const pass = await env.DB.prepare("SELECT * FROM passes WHERE code = ?").bind(code).first();
+    if (!pass) return fail("No such pass.", 404);
+    if (pass.status === "REVOKED") return fail("That pass has been cancelled.", 409);
+
+    const already = await env.DB.prepare(
+      "SELECT scanned_at FROM scans WHERE code = ? AND result = 'ADMITTED'"
+    ).bind(code).first();
+    if (already) return json({ ok: false, reason: "USED", name: pass.name, at: already.scanned_at });
+
+    await env.DB.prepare(
+      "INSERT INTO scans (code, party_id, result, reason, scanned_by, scanned_at) " +
+      "VALUES (?, ?, 'ADMITTED', ?, ?, ?)"
+    ).bind(code, pass.party_id, "by hand: " + why, who.username, now()).run();
+
+    return json({ ok: true, name: pass.name, admits: pass.admits || 1 });
+  }
+
+  /*
+    A replacement code. The old one is cancelled in the same breath — a lost
+    ticket that still works is two people with one pass, and the door cannot
+    tell which of them is the guest.
+  */
+  if (path === "/passes/reissue" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Only the boss can reissue.", 403);
+
+    const code = String(body.code || "").toUpperCase();
+    const old = await env.DB.prepare("SELECT * FROM passes WHERE code = ?").bind(code).first();
+    if (!old) return fail("No such pass.", 404);
+
+    const pooled = await env.DB.prepare(
+      "SELECT code FROM code_pool WHERE used = 0 ORDER BY RANDOM() LIMIT 1"
+    ).first();
+    if (!pooled) return fail("The code pool is empty.", 409);
+
+    await env.DB.batch([
+      env.DB.prepare("UPDATE code_pool SET used = 1, used_at = ? WHERE code = ?").bind(now(), pooled.code),
+      env.DB.prepare(
+        "INSERT INTO passes (code, party_id, name, email, phone, kind, tier, note, id_required, admits, ticket_ref, issued_at, issued_by) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(pooled.code, old.party_id, old.name, old.email, old.phone, old.kind, old.tier,
+             `replaces ${old.code}`, old.id_required, old.admits || 1, old.ticket_ref, now(), who.username),
+      env.DB.prepare(
+        "UPDATE passes SET status = 'REVOKED', revoke_note = ? WHERE code = ?"
+      ).bind(`replaced by ${pooled.code}`, code),
+    ]);
+
+    return json({ ok: true, code: pooled.code, name: old.name });
+  }
+
+  /*
+    ── D04 · THE RECORD YOU WERE ALREADY KEEPING ───────────────────────────
+
+    Every admission stores who scanned it. Every setting stores who changed
+    it. Every account stores who made it. None of it was ever shown anywhere,
+    which meant "who let them in" was answered from memory.
+
+    Three tables, one list, newest first.
+  */
+  if (path === "/activity" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
+
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 120, 1), 400);
+
+    const scans = await env.DB.prepare(
+      "SELECT s.scanned_at AS at, s.result, s.reason, s.scanned_by AS by_who, s.code, p.name " +
+      "FROM scans s LEFT JOIN passes p ON p.code = s.code ORDER BY s.scanned_at DESC LIMIT ?"
+    ).bind(limit).all().catch(() => ({ results: [] }));
+
+    const settings = await env.DB.prepare(
+      "SELECT key, value, updated_at AS at, updated_by AS by_who FROM settings " +
+      "WHERE updated_at IS NOT NULL ORDER BY updated_at DESC LIMIT 60"
+    ).all().catch(() => ({ results: [] }));
+
+    const team = await env.DB.prepare(
+      "SELECT username, role, created_at AS at, created_by AS by_who FROM team " +
+      "ORDER BY created_at DESC LIMIT 40"
+    ).all().catch(() => ({ results: [] }));
+
+    const feed = [
+      ...(scans.results || []).map((r) => ({
+        at: r.at, who: r.by_who, kind: "DOOR",
+        what: r.result === "ADMITTED"
+          ? `admitted ${r.name || r.code}${r.reason ? ` (${r.reason})` : ""}`
+          : `refused ${r.name || r.code}${r.reason ? ` — ${r.reason}` : ""}`,
+        tone: r.result === "ADMITTED" ? "good" : "bad",
+      })),
+      ...(settings.results || []).map((r) => ({
+        at: r.at, who: r.by_who, kind: "SETTING",
+        what: `set ${r.key} to ${String(r.value).slice(0, 40)}`, tone: "plain",
+      })),
+      ...(team.results || []).map((r) => ({
+        at: r.at, who: r.by_who || "—", kind: "TEAM",
+        what: `created the ${String(r.role).toLowerCase()} account ${r.username}`, tone: "plain",
+      })),
+    ].filter((r) => r.at)
+     .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+     .slice(0, limit);
+
+    return json({ ok: true, feed });
+  }
+
+  /*
+    ── S03 · FINDING OUT WHEN IT BREAKS FOR SOMEBODY ELSE ──────────────────
+
+    When the site failed for a visitor, the error went to a console nobody was
+    looking at. You found out by chance, from a screen recording, or never.
+
+    That was a deliberate choice and the reason still stands: sending errors
+    to a third party means routing your visitors' browsing off-site to a
+    company neither of you chose. This is the version that does not — it goes
+    to YOUR server and YOUR database, and nothing leaves.
+
+    WHAT IS DELIBERATELY NOT COLLECTED. No address, no identifier, no session,
+    no referrer, nothing that could pick a person out. A message, where in the
+    code, which page, and what kind of browser. That is enough to fix things
+    and not enough to follow anybody.
+
+    Errors are COUNTED, not listed: one row per distinct message per page,
+    with a tally. A broken component can fire five hundred times in a minute,
+    and five hundred identical rows is a database bill and a page you cannot
+    read.
+  */
+  if (path === "/oops" && method === "POST") {
+    const message = String(body.message || "").slice(0, 300).trim();
+    if (!message) return json({ ok: true });
+
+    const where = String(body.where || "").slice(0, 200);
+    const stack = String(body.stack || "").slice(0, 900);
+    const page = String(body.path || "").split("?")[0].slice(0, 120);
+
+    // The browser family only — the full string is a fingerprint.
+    const ua = request.headers.get("user-agent") || "";
+    const agent =
+      /iPhone|iPad/.test(ua) ? "iOS Safari"
+      : /Android/.test(ua) ? "Android"
+      : /Safari/.test(ua) && !/Chrome/.test(ua) ? "Safari"
+      : /Chrome/.test(ua) ? "Chrome"
+      : /Firefox/.test(ua) ? "Firefox" : "other";
+
+    await env.DB.prepare(
+      "INSERT INTO oops (at, message, where_at, stack, agent, path, n) VALUES (?, ?, ?, ?, ?, ?, 1) " +
+      "ON CONFLICT (message, path) DO UPDATE SET n = n + 1, at = excluded.at"
+    ).bind(now(), message, where, stack, agent, page).run().catch(() => {});
+    return json({ ok: true });
+  }
+
+  if (path === "/oops" && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
+    const rows = await env.DB.prepare(
+      "SELECT at, message, where_at, stack, agent, path, n FROM oops ORDER BY at DESC LIMIT 120"
+    ).all().catch(() => ({ results: [] }));
+    return json({ ok: true, errors: rows.results || [] });
+  }
+
+  if (path === "/oops" && method === "DELETE") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);
+    await env.DB.prepare("DELETE FROM oops").run().catch(() => {});
+    return json({ ok: true });
+  }
+
   if (path === "/public-parties" && method === "GET") {
     const rows = await env.DB.prepare(
       "SELECT id, name, date_label FROM parties WHERE archived = 0 AND doors_close_at > ? " +
@@ -2443,6 +2913,7 @@ async function handleApi(request, env, url, ctx) {
     const party = url.searchParams.get("party") || null;
     const who = await readSession(env, request);
     const team = !!who && (can(who, "issuePasses") || can(who, "manageTeam"));
+    const cfgList = await getSettings(env);
 
     // A hidden song stays in the database and out of the public list; the
     // team sees everything, because moderating a list you cannot see is not
@@ -2455,7 +2926,130 @@ async function handleApi(request, env, url, ctx) {
       ` FROM songs WHERE ${where}` + (team ? "" : " AND status != 'HIDDEN'") +
       " ORDER BY created_at DESC LIMIT 300"
     ).bind(...binds).all();
-    return json({ ok: true, songs: rows.results || [], team });
+
+    /*
+      WHAT THE PUBLIC IS ALLOWED TO SEE.
+
+      Applied here rather than in the page, because a field the browser is
+      sent is a field anyone can read whatever the page chooses to draw. If
+      names are switched off, the names do not leave this building.
+
+      The team is never filtered — moderating a list you cannot see is not
+      moderating.
+    */
+    let songs = rows.results || [];
+
+    /*
+      TALLIES, IN ONE QUERY.
+
+      Counting votes per song by looping over the songs would be one query per
+      row — thirty songs, thirty round trips to the database, on a page people
+      open at a door on a phone. One grouped query and a lookup instead.
+    */
+    const mode = pool === "HOUSE" ? cfgList.poolHouseMode : cfgList.poolEventMode;
+    if (mode === "VOTE" && songs.length) {
+      const ids = songs.map((r) => r.id);
+      const marks = ids.map(() => "?").join(",");
+      const tally = await env.DB.prepare(
+        `SELECT song_id, COUNT(*) AS n FROM song_votes WHERE song_id IN (${marks}) GROUP BY song_id`
+      ).bind(...ids).all();
+      const counts = new Map((tally.results || []).map((r) => [r.song_id, Number(r.n)]));
+
+      // Which of these the person asking has already voted for. The voter id
+      // is made by the browser and means nothing anywhere else — it is not a
+      // login, it exists only to stop one person voting twice.
+      const voter = String(url.searchParams.get("voter") || "").slice(0, 64);
+      let mine = new Set();
+      if (voter) {
+        const got = await env.DB.prepare(
+          `SELECT song_id FROM song_votes WHERE voter = ? AND song_id IN (${marks})`
+        ).bind(voter, ...ids).all();
+        mine = new Set((got.results || []).map((r) => r.song_id));
+      }
+
+      songs = songs.map((r) => ({
+        ...r,
+        votes: counts.get(r.id) || 0,
+        mine: mine.has(r.id),
+      }));
+      // A ballot is ranked; a suggestion box is chronological.
+      songs.sort((a, b) => b.votes - a.votes || String(a.created_at).localeCompare(b.created_at));
+    }
+
+    if (!team) {
+      if (!cfgList.poolShowList) songs = [];
+      else songs = songs.map((r) => ({
+        ...r,
+        by_name: cfgList.poolShowNames ? r.by_name : null,
+        status: cfgList.poolShowPlayed ? r.status : (r.status === "PLAYED" ? "NEW" : r.status),
+      }));
+    }
+    // The tallies are stripped when they are meant to be secret, rather than
+    // sent and hidden by the page — a number the browser receives is a number
+    // anyone can read.
+    if (!team && mode === "VOTE" && !cfgList.poolShowVotes) {
+      songs = songs.map(({ votes, ...rest }) => rest);
+    }
+    return json({
+      ok: true, songs, team, mode,
+      votesPerPerson: cfgList.poolVotesPerPerson,
+      showVotes: team || cfgList.poolShowVotes,
+      listHidden: !team && !cfgList.poolShowList,
+    });
+  }
+
+  /*
+    ── VOTING ────────────────────────────────────────────────────────────
+
+    One song, one voter, toggled. The unique index is what actually enforces
+    it; the count below is a courtesy that tells somebody they have used
+    their picks rather than letting them find out from an error.
+
+    THE VOTER ID IS NOT A LOGIN. The browser makes one up and keeps it. It
+    identifies nobody, survives nothing but that browser, and exists purely
+    so the same person cannot vote twice from the same phone. Anyone
+    determined to vote twice can clear it — which is true of every poll that
+    does not demand an account, and demanding an account for "which song
+    closes the night" would cost more votes than it saved.
+  */
+  if (path === "/songs/vote" && method === "POST") {
+    const cfgVote = await getSettings(env);
+    const id = Number(body.id);
+    const voter = String(body.voter || "").slice(0, 64);
+    if (!id || !voter) return fail("Which song?");
+
+    const song = await env.DB.prepare(
+      "SELECT id, pool, party_id FROM songs WHERE id = ? AND status != 'HIDDEN'"
+    ).bind(id).first();
+    if (!song) return fail("That song is no longer in the pool.");
+
+    const mode = song.pool === "HOUSE" ? cfgVote.poolHouseMode : cfgVote.poolEventMode;
+    if (mode !== "VOTE") return fail("This pool is not a vote.");
+
+    const had = await env.DB.prepare(
+      "SELECT rowid FROM song_votes WHERE song_id = ? AND voter = ?"
+    ).bind(id, voter).first();
+
+    if (had) {
+      await env.DB.prepare("DELETE FROM song_votes WHERE song_id = ? AND voter = ?")
+        .bind(id, voter).run();
+      return json({ ok: true, voted: false });
+    }
+
+    const limit = Number(cfgVote.poolVotesPerPerson) || 0;
+    if (limit > 0) {
+      const used = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM song_votes WHERE voter = ? AND pool = ? AND IFNULL(party_id,'') = ?"
+      ).bind(voter, song.pool, song.party_id || "").first();
+      if ((used?.n || 0) >= limit) {
+        return fail(`That is all ${limit} of your picks. Take one back to change your mind.`);
+      }
+    }
+
+    await env.DB.prepare(
+      "INSERT INTO song_votes (song_id, voter, pool, party_id, created_at) VALUES (?, ?, ?, ?, ?)"
+    ).bind(id, voter, song.pool, song.party_id || null, now()).run().catch(() => {});
+    return json({ ok: true, voted: true });
   }
 
   if (path === "/songs" && method === "POST") {
@@ -2464,9 +3058,51 @@ async function handleApi(request, env, url, ctx) {
     const raw = String(body.url || "").trim();
     const byName = String(body.name || "").trim().slice(0, 60);
 
+    /*
+      THE POOL'S RULES, ALL OF THEM SETTINGS.
+
+      Checked here and nowhere else. The page hides what is switched off, but
+      hiding a form is a courtesy, not a rule — anything that actually decides
+      whether a song is accepted has to be decided on this side, where the
+      visitor cannot reach it.
+    */
+    const cfg = await getSettings(env);
+    if (!cfg.poolOpen) return fail(cfg.poolClosedMessage || "The pool is closed.");
+    if (pool === "EVENT" && !cfg.poolEventOpen) return fail("This night isn't taking songs.");
+    if (pool === "HOUSE" && !cfg.poolHouseOpen) return fail("The house list is closed right now.");
+
+    /*
+      In a ballot, only the team puts options on it. Checked here and not
+      merely hidden on the page: a form that is not drawn can still be posted
+      to by anyone who looks.
+    */
+    const addMode = pool === "HOUSE" ? cfg.poolHouseMode : cfg.poolEventMode;
+    if (addMode === "VOTE") {
+      const whoAdds = await readSession(env, request);
+      if (!whoAdds || !(can(whoAdds, "issuePasses") || can(whoAdds, "manageTeam")))
+        return fail("This one is a vote — pick from the list rather than adding to it.");
+    }
+
     if (!raw) return fail("Paste a link to the song.");
     if (!/^https?:\/\//i.test(raw)) return fail("That doesn't look like a link. It should start with https://");
     if (pool === "EVENT" && !party) return fail("Pick which night this is for.");
+    if (cfg.poolRequireName && !byName) return fail("Add your name so we know who asked.");
+
+    /*
+      Pass holders only, when that is switched on. The team is exempt — door
+      staff adding a song from the booth are not going to look up their own
+      pass code first.
+    */
+    if (cfg.poolNeedPass) {
+      const whoTeam = await readSession(env, request);
+      if (!whoTeam) {
+        const held = String(body.pass || "").trim();
+        const valid = held && await env.DB.prepare(
+          "SELECT code FROM passes WHERE code = ? AND status != 'REVOKED'"
+        ).bind(held).first();
+        if (!valid) return fail("The pool is open to ticket holders. Open your pass first, then come back.");
+      }
+    }
 
     if (pool === "EVENT") {
       const ok = await env.DB.prepare(
@@ -2478,11 +3114,25 @@ async function handleApi(request, env, url, ctx) {
     /* Rate limit. One person with a playlist can fill a pool in a minute, and
        then it is their pool rather than everyone's. */
     const ip = request.headers.get("cf-connecting-ip") || "unknown";
-    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const recent = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM songs WHERE ip = ? AND created_at > ?"
-    ).bind(ip, since).first();
-    if ((recent?.n || 0) >= 8) return fail("That's plenty for one hour — come back later and add more.");
+
+    // 0 in either figure means that limit is off rather than set to zero,
+    // which would refuse everybody.
+    if (cfg.poolPerHour > 0) {
+      const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const recent = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM songs WHERE ip = ? AND created_at > ?"
+      ).bind(ip, since).first();
+      if ((recent?.n || 0) >= cfg.poolPerHour)
+        return fail("That's plenty for one hour — come back later and add more.");
+    }
+
+    if (cfg.poolMaxPerPerson > 0) {
+      const mine = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM songs WHERE ip = ? AND pool = ? AND IFNULL(party_id, '') = ?"
+      ).bind(ip, pool, party || "").first();
+      if ((mine?.n || 0) >= cfg.poolMaxPerPerson)
+        return fail(`That's your ${cfg.poolMaxPerPerson} for this one. Somebody else's turn.`);
+    }
 
     const found = await resolveSong(raw);
     const title = (found && found.title) || nameFromUrl(raw);
@@ -2496,7 +3146,21 @@ async function handleApi(request, env, url, ctx) {
              (found && found.artwork) || null, byName,
              String(body.contact || "").trim().slice(0, 120) || null, now(), ip).run();
     } catch (err) {
-      // the unique index doing its job
+      /*
+        The unique index doing its job — and it stays in place even when
+        duplicates are allowed, because an index cannot be switched off per
+        request. When they ARE allowed the row is retried with a marker that
+        makes it unique, so the same song can genuinely go in twice.
+      */
+      if (String(err && err.message).includes("UNIQUE") && cfg.poolAllowDuplicates) {
+        await env.DB.prepare(
+          "INSERT INTO songs (pool, party_id, url, provider, title, artist, artwork, by_name, by_contact, status, created_at, ip) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NEW', ?, ?)"
+        ).bind(pool, party, `${raw}#${Date.now()}`, (found && found.provider) || "LINK", title, artist,
+               (found && found.artwork) || null, byName,
+               String(body.contact || "").trim().slice(0, 120) || null, now(), ip).run();
+        return json({ ok: true, title, artist, provider: (found && found.provider) || "LINK" });
+      }
       if (String(err && err.message).includes("UNIQUE")) {
         return json({ ok: true, duplicate: true, title, artist,
                       message: "That one's already in — good taste." });
@@ -2570,7 +3234,38 @@ async function handleApi(request, env, url, ctx) {
       await env.DB.prepare(
         "UPDATE requests SET status = 'DECLINED', decided_at = ?, decided_by = ? WHERE id = ?"
       ).bind(now(), who.username, id).run();
-      return json({ ok: true, status: "DECLINED" });
+
+      /*
+        ── G05 · SAY SO ─────────────────────────────────────────────────────
+
+        An approved request already sends a pass, so those people find out.
+        A declined one sent nothing at all: the person heard silence and then
+        found out at the door, in front of everyone, which is the worst place
+        and the worst moment to learn it.
+
+        Being told no in advance is a small kindness that costs one email, and
+        it is also the difference between someone who might come next time and
+        someone who will not.
+
+        Sent in the background, and its failure never fails the decision — a
+        mail key that has expired must not stop the boss working through a
+        list.
+      */
+      const cfgReq = await getSettings(env);
+      if (req.email) {
+        ctx.waitUntil(sendNote(env, {
+          to: req.email,
+          subject: "About your guest list request",
+          text:
+            `${req.name ? req.name + "," : "Hello,"}\n\n` +
+            "Thank you for asking — we could not fit you in this time. " +
+            "It is not a judgement on you; the list is simply full.\n\n" +
+            "Tickets are usually still available, and asking again for another " +
+            "night is very welcome.\n\n" +
+            (cfgReq.emailSignoff || "Hidden State") + "\n",
+        }));
+      }
+      return json({ ok: true, status: "DECLINED", told: !!req.email });
     }
 
     if (req.status === "APPROVED" && req.pass_code) {
@@ -2668,6 +3363,191 @@ async function sendReminders(env) {
   return sent;
 }
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  G01 + G04 · WHAT THE PAGE SAYS BEFORE THE JAVASCRIPT RUNS
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Two problems with one cause.
+
+  THE SHARE PREVIEWS. Every page sets its own title, description and image —
+  in JavaScript, on mount. WhatsApp, Facebook, Instagram, iMessage, Slack and
+  Google do not run JavaScript. They fetch the HTML, read the tags that are in
+  it, and leave. So every link ever shared from this site has previewed with
+  the same generic square logo, no matter what the page itself set, and no
+  amount of work inside React could ever have fixed it.
+
+  THE BLANK FIRST PAINT. The same HTML has an empty <div id="root">, so a
+  visitor sees nothing at all until roughly 400KB of JavaScript has arrived,
+  parsed and run. On a laptop that is imperceptible. On a phone at a venue it
+  is several seconds of blank cream, and people leave.
+
+  Both are fixed in the same place: this Worker already sits in front of every
+  request, so it can put the right words INTO the HTML on the way past.
+
+  WHAT IS DELIBERATELY NOT DONE. This is not server-side rendering — it does
+  not run React, and it does not try to reproduce the page. It writes the
+  correct metadata and one honest opening: the heading and, where there is
+  one, the photograph. React then takes over and draws the real thing. Trying
+  to render the whole page twice, in two languages, is how that kind of thing
+  becomes a source of bugs nobody can reproduce.
+*/
+
+// Content changes rarely and this runs on every page view, so the lookup is
+// held for a minute per isolate. A stale minute on a share preview is
+// nothing; a database round trip on every page load is not.
+const LOOKUP_TTL = 60_000;
+let lookupCache = { at: 0, data: null };
+
+async function contentIndex(env) {
+  if (lookupCache.data && Date.now() - lookupCache.at < LOOKUP_TTL) return lookupCache.data;
+  const data = { events: [], posts: [], artists: [], mixes: [] };
+  try {
+    const [ev, po, ar, mx] = await Promise.all([
+      env.DB.prepare("SELECT id, name, subtitle, description, artwork FROM events WHERE published = 1").all().catch(() => ({ results: [] })),
+      env.DB.prepare("SELECT slug, headline, summary, photo, poster FROM posts WHERE published = 1").all().catch(() => ({ results: [] })),
+      env.DB.prepare("SELECT id, name, alias, bio, photo FROM artists WHERE published = 1").all().catch(() => ({ results: [] })),
+      env.DB.prepare("SELECT slug, name, intro, photo FROM mixes WHERE published = 1").all().catch(() => ({ results: [] })),
+    ]);
+    data.events = ev.results || [];
+    data.posts = po.results || [];
+    data.artists = ar.results || [];
+    data.mixes = mx.results || [];
+  } catch {
+    /* the site still works with generic tags; it is a preview, not a page */
+  }
+  lookupCache = { at: Date.now(), data };
+  return data;
+}
+
+const SECTIONS = {
+  "/": ["Hidden State", "Records, agency, booking, events and artists — from another state of mind.", "/club.webp"],
+  "/records": ["Records", "The label — releases, tracks and sleeves.", null],
+  "/agency": ["Agency", "Booking and representation.", null],
+  "/artists": ["The Roster", "The artists Hidden State represents.", null],
+  "/events": ["Events", "Nights and festivals.", null],
+  "/news": ["Dispatches", "News from Hidden State.", null],
+  "/mixes": ["Sessions", "Recorded sets from the roster.", null],
+  "/about": ["About", "What Hidden State is and what it does.", null],
+  "/contact": ["Contact", "Bookings, press and everything else.", null],
+  "/pool": ["The Pool", "Put a song in — paste a link and we will find the name.", null],
+};
+
+const esc = (v) => String(v == null ? "" : v)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+
+const clip = (v, n) => {
+  const t = String(v || "").replace(/\s+/g, " ").trim();
+  return t.length > n ? t.slice(0, n - 1).trimEnd() + "…" : t;
+};
+
+async function pageFacts(env, path) {
+  if (SECTIONS[path]) {
+    const [title, desc, image] = SECTIONS[path];
+    return { title, desc, image, kind: "website" };
+  }
+
+  const at = (re) => path.match(re)?.[1];
+  const data = await contentIndex(env);
+
+  const ev = at(/^\/events\/([^/]+)$/);
+  if (ev) {
+    const x = data.events.find((r) => String(r.id) === decodeURIComponent(ev));
+    if (x) return { title: x.subtitle ? `${x.name} — ${x.subtitle}` : x.name,
+                    desc: clip(x.description, 180), image: x.artwork, kind: "article" };
+  }
+  const po = at(/^\/news\/([^/]+)$/);
+  if (po) {
+    const x = data.posts.find((r) => r.slug === decodeURIComponent(po));
+    if (x) return { title: x.headline, desc: clip(x.summary, 180),
+                    image: x.photo || x.poster, kind: "article" };
+  }
+  const ar = at(/^\/artists\/([^/]+)$/);
+  if (ar) {
+    const x = data.artists.find((r) => String(r.id) === decodeURIComponent(ar));
+    if (x) return { title: x.alias ? `${x.name} — ${x.alias}` : x.name,
+                    desc: clip(x.bio, 180), image: x.photo, kind: "profile" };
+  }
+  const mx = at(/^\/mixes\/([^/]+)$/);
+  if (mx) {
+    const x = data.mixes.find((r) => r.slug === decodeURIComponent(mx));
+    if (x) return { title: `${x.name} — Sessions`, desc: clip(x.intro, 180),
+                    image: x.photo, kind: "profile" };
+  }
+  return null;
+}
+
+/*
+  Rewrites the tags that are already in index.html rather than appending new
+  ones. Two og:title tags is not "the second one wins" — different scrapers
+  pick different ones, and a preview that is right on WhatsApp and wrong on
+  Facebook is worse than one that is consistently generic.
+*/
+async function shapeHtml(request, env, url) {
+  const facts = await pageFacts(env, url.pathname);
+  if (!facts) return env.ASSETS.fetch(request);
+
+  const res = await env.ASSETS.fetch(request);
+  const type = res.headers.get("content-type") || "";
+  if (!type.includes("text/html")) return res;
+
+  const origin = url.origin;
+  const img = facts.image ? (facts.image.startsWith("http") ? facts.image : origin + facts.image)
+                          : origin + "/icons/icon-512.jpg";
+  const full = facts.title === "Hidden State" ? "Hidden State" : `${facts.title} — Hidden State`;
+
+  let html = await res.text();
+  html = html
+    .replace(/<title>[^<]*<\/title>/, `<title>${esc(full)}</title>`)
+    .replace(/<meta name="description" content="[^"]*"\s*\/?>/,
+             `<meta name="description" content="${esc(facts.desc)}" />`)
+    .replace(/<meta property="og:title" content="[^"]*"\s*\/?>/,
+             `<meta property="og:title" content="${esc(full)}" />`)
+    .replace(/<meta property="og:description" content="[^"]*"\s*\/?>/,
+             `<meta property="og:description" content="${esc(facts.desc)}" />`)
+    .replace(/<meta property="og:image" content="[^"]*"\s*\/?>/,
+             `<meta property="og:image" content="${esc(img)}" />`)
+    .replace(/<meta property="og:type" content="[^"]*"\s*\/?>/,
+             `<meta property="og:type" content="${esc(facts.kind)}" />`);
+
+  // The canonical address, and the one thing every scraper wants and none of
+  // them can work out for themselves.
+  html = html.replace("</head>",
+    `  <link rel="canonical" href="${esc(origin + url.pathname)}" />\n` +
+    `  <meta property="og:url" content="${esc(origin + url.pathname)}" />\n` +
+    `</head>`);
+
+  /*
+    THE OPENING, IN THE HTML ITSELF.
+
+    Painted immediately, outside #root so React never has to reconcile with
+    it, and removed by main.jsx on the first render with a short fade. If the
+    JavaScript never arrives at all, this stays — which is a better broken
+    site than a blank one.
+  */
+  const opening =
+    `<div id="hs-first" aria-hidden="true">` +
+    (facts.image ? `<div class="hs-first-img" style="background-image:url('${esc(img)}')"></div>` : "") +
+    `<h1>${esc(facts.title)}</h1>` +
+    (facts.desc ? `<p>${esc(facts.desc)}</p>` : "") +
+    `</div>`;
+
+  html = html.replace('<div id="root"></div>', `${opening}\n    <div id="root"></div>`);
+
+  return new Response(html, {
+    status: res.status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      // Short, because the content behind it is editable from the console.
+      // Long enough that a link posted to a group chat is not sixty database
+      // lookups as sixty people open it.
+      "cache-control": "public, max-age=0, s-maxage=60, stale-while-revalidate=600",
+    },
+  });
+}
+
+
 export default {
   // Cloudflare calls this on the schedule in wrangler.jsonc.
   /*
@@ -2676,6 +3556,10 @@ export default {
     — a mistake is usually noticed within a day but sometimes within a month.
   */
   async scheduled(event, env, ctx) {
+    if (event.cron === "17 * * * *") {
+      ctx.waitUntil(healthSweep(env));
+      return;
+    }
     if (event.cron === "0 4 * * 1") {
       ctx.waitUntil(
         backupDatabase(env).then((r) =>
@@ -2742,6 +3626,21 @@ export default {
     }
 
     // Everything else is the website itself.
+    /*
+      Everything else is a page. Only GET requests that actually want HTML are
+      shaped — a request for a stylesheet or a photograph must never pay for a
+      content lookup.
+    */
+    if (request.method === "GET" &&
+        (request.headers.get("accept") || "").includes("text/html")) {
+      try {
+        return await shapeHtml(request, env, url);
+      } catch (err) {
+        console.log("shapeHtml failed:", err && err.message);
+        // A preview is never worth a broken page.
+        return env.ASSETS.fetch(request);
+      }
+    }
     return env.ASSETS.fetch(request);
   },
 };

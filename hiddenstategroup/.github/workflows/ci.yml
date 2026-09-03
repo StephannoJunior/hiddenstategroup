@@ -1,0 +1,87 @@
+# ─────────────────────────────────────────────────────────────────────────
+# S01 · RUN THE TEST ON EVERY PUSH
+#
+# Until now nothing happened when you pushed. The smoke test existed and was
+# good, and it ran only when somebody remembered to run it — which is exactly
+# the moment you are least likely to.
+#
+# This opens all sixteen pages in a real browser on GitHub's machines and
+# fails the push if any of them errors. It costs nothing on a public repo and
+# about two minutes of waiting.
+#
+# It deliberately does NOT deploy. Deploying from a robot needs an API token
+# with write access to your Cloudflare account stored in GitHub, and that is a
+# decision worth making deliberately rather than inheriting from a file I
+# wrote. This tells you whether it is safe to deploy; you still press the
+# button.
+# ─────────────────────────────────────────────────────────────────────────
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:      # so you can run it by hand from the Actions tab
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly what the
+      # lockfile says, so a run cannot quietly pick up a different version of
+      # something and pass — or fail — for a reason that has nothing to do
+      # with the change being tested.
+      - name: Install
+        run: npm ci
+
+      # The consistency check is first because it is instant, and because a
+      # setting wired to nothing is the kind of fault a browser will never
+      # notice.
+      - name: Consistency
+        run: npm run check
+
+      - name: Door queue
+        run: npm run test:door
+
+      # The restore rehearsal. It needs no database and no backup file: it
+      # runs a dump full of awkward values — apostrophes, newlines, unicode,
+      # a column only some rows have — through the converter and checks what
+      # comes out reads back as what went in. A backup is only worth having
+      # if this passes.
+      - name: Restore drill
+        run: npm run test:restore
+
+      - name: Build
+        run: npm run build
+
+      # Only Chromium, and only the browser itself. The full install pulls
+      # three browsers and their system libraries, which is several minutes
+      # for no extra confidence: the site's problems have all been Safari's,
+      # and Safari cannot be run here anyway.
+      - name: Browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke test
+        run: npm run smoke
+
+      # When it fails, the reason is usually a page that rendered nothing, and
+      # a picture of nothing is not much help — but the log says which route
+      # and what the console said, and that is kept either way.
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-log
+          path: |
+            dist/
+          retention-days: 5
+          if-no-files-found: ignore

@@ -568,3 +568,119 @@ blockquote, .hs-pullquote {
 #main {
   scroll-margin-top: 120px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   PAINTING LESS
+   The cheapest frame is the one the browser never draws.
+   ═══════════════════════════════════════════════════════════════ */
+
+/*
+  SECTIONS BELOW THE FOLD ARE NOT LAID OUT UNTIL THEY ARE NEEDED.
+
+  content-visibility lets the browser skip layout, paint and style for a
+  subtree it can prove is off screen. On the long pages here — an article,
+  the roster, a gallery of fourteen photographs — that is most of the
+  document on first load, and it is the difference between a page that
+  appears and a page that assembles.
+
+  contain-intrinsic-size is not optional with it. Without a size to assume,
+  a skipped section counts as zero tall, the scrollbar lurches as each one
+  is reached, and anchored scrolling breaks. The value is a guess at a
+  typical section; being wrong costs a small correction, being absent costs
+  a jumping page.
+
+  Deliberately NOT applied to the first two sections of a page: those are on
+  screen immediately, and deferring them would delay exactly the content
+  someone is waiting for.
+*/
+@supports (content-visibility: auto) {
+  [data-page] > section:nth-of-type(n + 3),
+  [data-page] > div > section:nth-of-type(n + 3) {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 520px;
+  }
+}
+
+/*
+  Photographs get their own layer only while they are actually arriving.
+  A permanent will-change on every image would hand the compositor dozens of
+  layers to hold in memory for the life of the page, which is slower than
+  the thing it was meant to speed up.
+*/
+[data-develop="wet"] {
+  will-change: opacity, filter;
+}
+[data-develop="dry"] {
+  will-change: auto;
+}
+
+/*
+  The floating bar is the one element that genuinely animates often enough to
+  deserve a permanent layer. Promoting it also stops it being repainted every
+  time the page behind it scrolls under its backdrop filter.
+*/
+[data-glassbar] {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/*
+  Long lists of records, artists and events change size only when the data
+  does. Telling the browser their layout cannot affect anything outside them
+  means a change inside one row re-lays-out that row and nothing else.
+*/
+[data-page] figure,
+[data-page] article {
+  contain: layout style;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THE FIRST PAINT
+   Written into the HTML by the Worker and removed by main.jsx
+   once React has drawn. Everything here has to work with no
+   JavaScript at all, because for the first moment there is none.
+   ═══════════════════════════════════════════════════════════════ */
+#hs-first {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 18px 16vh;
+  background: var(--hs-paper, #EDE4D0);
+  pointer-events: none;
+  /* Removed by script; this is the fade it leaves on. */
+  transition: opacity 320ms cubic-bezier(.22, 1, .36, 1);
+}
+#hs-first .hs-first-img {
+  position: absolute;
+  inset: 0 0 34%;
+  background-size: cover;
+  background-position: center 42%;
+  filter: grayscale(0.25) contrast(1.05) brightness(0.72);
+}
+#hs-first h1 {
+  position: relative;
+  font-family: "Bodoni Moda", Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(34px, 9vw, 86px);
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  color: var(--hs-ink, #14120E);
+  text-wrap: balance;
+}
+#hs-first p {
+  position: relative;
+  margin-top: 12px;
+  font-family: "EB Garamond", Georgia, serif;
+  font-size: 17px;
+  line-height: 1.5;
+  max-width: 46ch;
+  color: var(--hs-ink2, #4A443A);
+}
+/* Over a photograph the type reverses out, the way a Sleeve does. */
+#hs-first:has(.hs-first-img) h1 { color: #EDE4D0; }
+#hs-first:has(.hs-first-img) p { color: rgba(237, 228, 208, 0.78); }
+#hs-first[data-gone] { opacity: 0; }

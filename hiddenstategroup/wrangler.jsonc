@@ -42,7 +42,10 @@
       "0 9 * * *",
       // The weekly backup. 04:00 Monday UTC — nothing is happening, and if it
       // fails there is a whole week to notice before the next one.
-      "0 4 * * 1"
+      "0 4 * * 1",
+      // The health check. Seventeen minutes past, rather than on the hour,
+      // so it is not queued behind everyone else's hourly jobs.
+      "17 * * * *"
     ]
   },
 

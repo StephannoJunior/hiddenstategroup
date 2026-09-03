@@ -41,6 +41,8 @@ const TABS = [
   { id: "artists",  label: "ARTISTS",   need: "issuePasses", group: "content" },
   { id: "records",  label: "RECORDS",   need: "issuePasses", group: "content" },
   { id: "mixes",    label: "MIXES",     need: "issuePasses", group: "content" },
+  { id: "activity", label: "ACTIVITY",  need: "manageTeam",  group: "system" },
+  { id: "faults",   label: "FAULTS",    need: "manageTeam",  group: "system" },
   { id: "reading",  label: "READERSHIP",need: "manageTeam",  group: "system" },
   { id: "backups",  label: "BACKUPS",   need: "manageTeam",  group: "system" },
   { id: "team",     label: "TEAM",      need: "manageTeam",  group: "system" },
@@ -100,6 +102,268 @@ const READABLE = {
   "/mixes/:slug": "A sessions page", "/about": "About", "/contact": "Contact",
   "/pool": "The pool", "/pass/:code": "A pass",
 };
+
+/*
+  ── D04 · THE RECORD YOU WERE ALREADY KEEPING ──────────────────────────────
+
+  Every admission has stored who scanned it since the day the door was built.
+  Every setting stores who changed it. Every account stores who made it. None
+  of it was ever shown anywhere, so "who let them in" was answered from
+  memory, and "who turned that off" was answered with a shrug.
+
+  This is one list, newest first, from all three. It is READ ONLY on purpose:
+  a record you can edit is not a record.
+*/
+function Activity() {
+  const [feed, setFeed] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [only, setOnly] = useState("ALL");
+
+  useEffect(() => {
+    api.activity(200).then((res) => {
+      setLoading(false);
+      if (res.ok) setFeed(res.feed || []);
+    });
+  }, []);
+
+  const shown = only === "ALL" ? feed : feed.filter((r) => r.kind === only);
+  const when = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    const today = new Date().toDateString() === d.toDateString();
+    return today
+      ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleDateString([], { day: "2-digit", month: "short" }) + " " +
+        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  return (
+    <div>
+      <IndexBand items={[
+        { label: "ENTRIES", value: loading ? "—" : String(shown.length).padStart(3, "0") },
+        { label: "SHOWING", value: only === "ALL" ? "EVERYTHING" : only },
+        { label: "NEWEST", value: feed[0] ? when(feed[0].at) : "—" },
+      ]} />
+
+      <div className="flex flex-wrap gap-1.5 mt-6 mb-6">
+        {["ALL", "DOOR", "SETTING", "TEAM"].map((k) => {
+          const on = only === k;
+          return (
+            <button key={k} onClick={() => setOnly(k)}
+                    style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
+                             cursor: "pointer", padding: "9px 13px",
+                             color: on ? theme.bg : theme.ink,
+                             background: on ? theme.ink : "transparent",
+                             border: `1px solid ${on ? theme.ink : theme.rule}` }}>
+              {k}
+            </button>
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <p className="m-0" style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em", color: theme.ink2 }}>
+          READING…
+        </p>
+      ) : shown.length === 0 ? (
+        <p className="m-0" style={{ ...fontText, fontSize: "17px", lineHeight: 1.55, color: theme.ink2 }}>
+          Nothing recorded yet. This fills up as passes are scanned and
+          settings are changed.
+        </p>
+      ) : (
+        <div style={{ borderTop: `1px solid ${theme.ink}` }}>
+          {shown.map((r, i) => (
+            <div key={i} className="flex items-baseline gap-3 py-3"
+                 style={{ borderBottom: `1px solid ${theme.rule}` }}>
+              <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.1em",
+                             color: theme.ink2, width: "78px", flex: "none",
+                             fontVariantNumeric: "tabular-nums" }}>
+                {when(r.at)}
+              </span>
+              <span style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.14em",
+                             width: "58px", flex: "none",
+                             color: r.tone === "bad" ? theme.bad
+                                  : r.tone === "good" ? theme.good : theme.brass }}>
+                {r.kind}
+              </span>
+              <span className="flex-1 min-w-0" style={{ ...fontText, fontSize: "16.5px",
+                    lineHeight: 1.45, color: theme.ink }}>
+                <strong style={{ fontWeight: 400, color: theme.ink2 }}>{r.who || "—"}</strong>{" "}
+                {r.what}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="m-0 mt-6" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+        Read only, deliberately — a record you can edit is not a record. It is
+        built from the door log, the settings table and the team list, all of
+        which were already storing this and none of which ever showed it.
+      </p>
+    </div>
+  );
+}
+
+/*
+  FAULTS — what broke in somebody else's browser.
+
+  Nobody reports a bug. They close the tab, and the fault stays invisible
+  until it happens to us too, on our own phone, months later. So the browser
+  reports it instead: anything thrown that reached the top, any promise that
+  failed with nobody catching it, and any component that threw while
+  rendering.
+
+  Identical faults are counted rather than repeated — one line saying it
+  happened forty times is the useful shape, and a render loop firing the same
+  error every frame would otherwise bury everything else.
+
+  What is stored is the message, where in the code, a trimmed stack, the page,
+  and a coarse browser family. Not an address, not an identifier, not a
+  session. Knowing something is broken does not require knowing who hit it.
+*/
+function Faults() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(null);
+  const [note, setNote] = useState("");
+  const [clearing, setClearing] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.listOops().then((res) => {
+      setLoading(false);
+      if (res.ok) setRows(res.errors || []);
+      else setNote(res.error || "Could not read the fault list.");
+    });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const clear = async () => {
+    /*
+      No confirm() dialog: on iOS a native dialog blocks everything behind it
+      and the site has been bitten by that before. Two taps instead — the
+      button changes to say what the second tap does.
+    */
+    if (!clearing) { setClearing(true); setTimeout(() => setClearing(false), 4000); return; }
+    setClearing(false);
+    setNote("");
+    const res = await api.clearOops();
+    if (res.ok) { setRows([]); setOpen(null); }
+    else setNote(res.error || "Could not clear the list.");
+  };
+
+  const when = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    const today = new Date().toDateString() === d.toDateString();
+    return today
+      ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleDateString([], { day: "2-digit", month: "short" });
+  };
+
+  const total = rows.reduce((n, r) => n + (r.n || 1), 0);
+  const worst = rows.slice().sort((a, b) => (b.n || 1) - (a.n || 1))[0];
+
+  return (
+    <div>
+      <IndexBand items={[
+        { label: "DISTINCT", value: loading ? "—" : String(rows.length).padStart(3, "0") },
+        { label: "TIMES", value: loading ? "—" : String(total).padStart(3, "0") },
+        { label: "MOST COMMON", value: worst ? String(worst.n || 1) + "×" : "NONE" },
+      ]} />
+
+      {note && <Notice message={note} />}
+
+      <div className="flex flex-wrap gap-2 mt-6 mb-6">
+        <button onClick={load}
+                style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
+                         cursor: "pointer", padding: "9px 15px", color: theme.ink,
+                         background: "transparent", border: `1px solid ${theme.rule}` }}>
+          REFRESH
+        </button>
+        {rows.length > 0 && (
+          <button onClick={clear}
+                  style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
+                           cursor: "pointer", padding: "9px 15px",
+                           color: clearing ? theme.onInk : theme.bad,
+                           background: clearing ? theme.bad : "transparent",
+                           border: `1px solid ${theme.bad}` }}>
+            {clearing ? "TAP AGAIN TO CLEAR" : "CLEAR THE LIST"}
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <p className="m-0" style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.16em", color: theme.ink2 }}>
+          READING…
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="m-0" style={{ ...fontText, fontSize: "17px", lineHeight: 1.55, color: theme.ink2 }}>
+          Nothing has broken. This stays empty until a visitor's browser hits
+          an error, at which point it says what, where and how often — without
+          saying who.
+        </p>
+      ) : (
+        <div style={{ borderTop: `1px solid ${theme.ink}` }}>
+          {rows.map((r, i) => {
+            const shown = open === i;
+            return (
+              <div key={i} style={{ borderBottom: `1px solid ${theme.rule}` }}>
+                <button onClick={() => setOpen(shown ? null : i)}
+                        className="w-full text-left flex items-baseline gap-3 py-3"
+                        style={{ background: "transparent", border: 0, cursor: "pointer",
+                                 padding: "12px 0" }}>
+                  <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.1em",
+                                 color: theme.ink2, width: "56px", flex: "none",
+                                 fontVariantNumeric: "tabular-nums" }}>
+                    {when(r.at)}
+                  </span>
+                  <span style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.1em",
+                                 width: "38px", flex: "none", textAlign: "right",
+                                 fontVariantNumeric: "tabular-nums",
+                                 color: (r.n || 1) > 9 ? theme.bad : theme.brass }}>
+                    {(r.n || 1)}×
+                  </span>
+                  <span className="flex-1 min-w-0" style={{ ...fontText, fontSize: "16.5px",
+                        lineHeight: 1.45, color: theme.ink }}>
+                    {r.message}
+                    <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.12em",
+                                   color: theme.ink2, marginLeft: "10px" }}>
+                      {(r.path || "/") + " · " + (r.agent || "?")}
+                    </span>
+                  </span>
+                </button>
+
+                {shown && (
+                  <div className="pb-4" style={{ paddingLeft: "94px" }}>
+                    <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9px",
+                       letterSpacing: "0.14em", color: theme.brass }}>
+                      {r.where_at || "NO LOCATION"}
+                    </p>
+                    <pre className="m-0" style={{ ...fontUtility, fontSize: "11px",
+                         lineHeight: 1.65, color: theme.ink2, whiteSpace: "pre-wrap",
+                         wordBreak: "break-word", background: theme.sunk,
+                         padding: "12px 14px", border: `1px solid ${theme.rule}` }}>
+                      {r.stack || "No stack was attached. Usually means the fault came from a resource that failed to load rather than from code."}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="m-0 mt-6" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+        Reported by the visitor's own browser to this site's server and nowhere
+        else. A browser sends at most six a visit and never the same one twice,
+        so a page failing over and over cannot flood this.
+      </p>
+    </div>
+  );
+}
 
 function Readership() {
   const [days, setDays] = useState(30);
@@ -303,6 +567,11 @@ function Notice({ message, tone = "bad" }) {
   );
 }
 
+// A stable id from the title, so the index above can jump to a section
+// without every call site having to invent one.
+const sectionId = (title) =>
+  "s-" + String(title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
 function Section({ title, children, onSave, saving, saved }) {
   /*
     A save button at the FOOT OF EVERY SECTION, not only at the bottom of the
@@ -314,7 +583,7 @@ function Section({ title, children, onSave, saving, saved }) {
     one is pressed — what matters is that one is always within reach.
   */
   return (
-    <div className="mt-7">
+    <div className="mt-7" id={sectionId(title)} style={{ scrollMarginTop: "132px" }}>
       <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
         {title}
       </p>
@@ -1903,6 +2172,28 @@ function ContentEditor({ kind }) {
 
 // ── SETTINGS ────────────────────────────────────────────────────────────────
 
+/*
+  The sections of the settings panel, in the order they appear. Written out
+  rather than discovered, because the index has to be drawn BEFORE the
+  sections themselves exist in the tree — and a list that can silently fall
+  out of step is worth one line of maintenance to keep honest.
+
+  If you add a Section below, add it here. The check in scripts/smoke.mjs
+  does not catch this; your eyes are the check.
+*/
+const SETTING_SECTIONS = [
+  "THE LOOK",
+  "THE HOME PAGE",
+  "THE DOOR",
+  "THE STAFF DOOR",
+  "MOVEMENT",
+  "THE SONG POOL",
+  "THE FLOATING BAR",
+  "THE SITE",
+  "THE GUEST LIST",
+  "EMAIL",
+];
+
 function Settings({ parties }) {
   const [values, setValues] = useState(null);
   const [defaults, setDefaults] = useState({});
@@ -1911,12 +2202,27 @@ function Settings({ parties }) {
 
   useEffect(() => {
     api.fetchSettings().then((res) => {
-      if (res.ok) { setValues(res.settings); setDefaults(res.defaults || {}); }
+      if (res.ok) { setValues(res.settings); setSaved0(res.settings); setDefaults(res.defaults || {}); }
       else setMsg(res.error || "Couldn't load the settings.");
     });
   }, []);
 
   const [savedAt, setSavedAt] = useState(null);   // which section last confirmed
+
+  /*
+    WHAT HAS BEEN CHANGED BUT NOT SAVED.
+
+    Every save button writes the whole settings object, so pressing any of
+    them saves everything — which is convenient and also the reason this is
+    needed. With seventy-odd controls across ten sections it was possible to
+    change three things in three places, save one of them, and have no way to
+    tell whether the other two had gone with it. Now the count is on screen
+    and the answer is always yes.
+  */
+  const [saved0, setSaved0] = useState(null);      // what the server last gave us
+  const dirty = values && saved0
+    ? Object.keys(values).filter((k) => String(values[k]) !== String(saved0[k]))
+    : [];
 
   const save = async (which) => {
     setBusy(true);
@@ -1924,6 +2230,7 @@ function Settings({ parties }) {
     setBusy(false);
     setMsg(res.ok ? "Saved. Changes apply straight away." : (res.error || "Couldn't save."));
     if (res.ok) {
+      setSaved0(values);
       setSavedAt(which);
       setTimeout(() => setSavedAt((w) => (w === which ? null : w)), 2600);
     }
@@ -2034,6 +2341,64 @@ function Settings({ parties }) {
     <>
       <Notice message={msg} tone={msg.startsWith("Saved") ? "good" : "bad"} />
 
+      {/*
+        THE INDEX.
+
+        Ten sections and seventy-odd controls is past the point where scrolling
+        to find one is reasonable. These are the section names, in order, and
+        they jump. It is the same INDEX register the public site uses for its
+        metadata bands — a list of what exists and where it is.
+      */}
+      <nav aria-label="Settings sections" className="mt-6">
+        <div className="flex items-baseline gap-3 mb-2">
+          <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.22em", color: theme.brass }}>
+            SETTINGS
+          </span>
+          <span className="flex-1" style={{ borderTop: `1px solid ${theme.rule}`, transform: "translateY(-3px)" }} />
+          <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                         color: theme.ink2, fontVariantNumeric: "tabular-nums" }}>
+            {String(SETTING_SECTIONS.length).padStart(2, "0")}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {SETTING_SECTIONS.map((title, i) => (
+            <a key={title} href={`#${sectionId(title)}`}
+               style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                        color: theme.ink, textDecoration: "none",
+                        border: `1px solid ${theme.rule}`, borderLeft: `3px solid ${theme.rule}`,
+                        padding: "7px 9px", display: "inline-flex", gap: "7px" }}>
+               <span style={{ color: theme.brass, fontVariantNumeric: "tabular-nums" }}>
+                 {String(i + 1).padStart(2, "0")}
+               </span>
+               {title}
+            </a>
+          ))}
+        </div>
+      </nav>
+
+      {/*
+        A change that has not been saved is invisible otherwise, and every save
+        button writes ALL of them — so this both warns and reassures: whatever
+        you touched, in whatever section, one press takes the lot.
+      */}
+      {dirty.length > 0 && (
+        <div className="flex flex-wrap items-center gap-4 mt-5 px-4 py-3"
+             style={{ border: `1px solid ${theme.ink}`, borderLeft: `3px solid ${theme.brass}` }}>
+          <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            {dirty.length} change{dirty.length === 1 ? "" : "s"} not saved yet.
+            <span style={{ color: theme.ink2 }}> Any save button below saves all of them.</span>
+          </span>
+          <button onClick={() => save("EVERYTHING")} disabled={busy}
+                  style={{ ...btn, opacity: busy ? 0.6 : 1 }}>
+            {busy ? "SAVING…" : "SAVE EVERYTHING"}
+          </button>
+          <button onClick={() => setValues(saved0)} disabled={busy}
+                  style={{ ...ghost, opacity: busy ? 0.6 : 1 }}>
+            UNDO
+          </button>
+        </div>
+      )}
+
       <Section title="THE LOOK" {...saver("THE LOOK")}>
         <p className="m-0 mb-4" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
           These change the site itself. Everything here saves and applies at
@@ -2043,17 +2408,20 @@ function Settings({ parties }) {
         <Choice k="paperTone" label="Paper"
                 help="The stock everything is printed on. Board is the darkest and the most physical; bone is the coolest."
                 options={[
-                  { value: "BOARD", label: "BOARD", swatch: theme.bg },
-                  { value: "IVORY", label: "IVORY", swatch: theme.bg },
+                  /* Literals, deliberately. A swatch has to show the colour
+                     it names — reading these from the theme made all three
+                     preview whatever the site is currently set to. */
+                  { value: "BOARD", label: "BOARD", swatch: "#EDE4D0" },
+                  { value: "IVORY", label: "IVORY", swatch: "#F3EBD9" },
                   { value: "BONE",  label: "BONE",  swatch: "#E6DFD2" },
                 ]} />
 
         <Choice k="accentTone" label="Accent"
                 help="The one colour that is not ink or paper — drop caps, numbers, kickers, the italic in a headline."
                 options={[
-                  { value: "OXBLOOD", label: "OXBLOOD", swatch: theme.brass },
-                  { value: "BRASS",   label: "BRASS",   swatch: theme.brass },
-                  { value: "INK",     label: "NONE",    swatch: theme.ink },
+                  { value: "OXBLOOD", label: "OXBLOOD", swatch: "#6E2118" },
+                  { value: "BRASS",   label: "BRASS",   swatch: "#8A6A28" },
+                  { value: "INK",     label: "NONE",    swatch: "#14120E" },
                 ]} />
 
         <Choice k="grainStrength" label="Paper grain"
@@ -2103,6 +2471,13 @@ function Settings({ parties }) {
       </Section>
 
       <Section title="THE DOOR" {...saver("THE DOOR")}>
+        <Choice k="capacityFullAction" label="When the room is full"
+                help="Capacity was watched and warned about, and nothing decided what to do at a hundred percent — which meant it was decided at the door, by whoever was holding the phone, differently each time."
+                options={[
+                  { value: "WARN",   label: "ADMIT AND SAY SO" },
+                  { value: "REFUSE", label: "REFUSE" },
+                  { value: "IGNORE", label: "JUST COUNT" },
+                ]} />
         {rows.map((r) => (
           <div key={r.key} className="py-3.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
             <div className="flex items-center gap-3">
@@ -2127,7 +2502,206 @@ function Settings({ parties }) {
         ))}
       </Section>
 
+      <Section title="THE STAFF DOOR" {...saver("THE STAFF DOOR")}>
+        <p className="m-0 mb-4" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+          Press and hold the logo in the masthead and this login opens. Nothing
+          on the public site says so — it replaced a visible link that guests
+          could find and that vanished whenever you happened to be holding a
+          ticket yourself.
+        </p>
+        <p className="m-0 mb-4 px-3 py-2.5" style={{ ...fontText, fontSize: "15px",
+           lineHeight: 1.5, color: theme.ink, border: `1px solid ${theme.rule}`, background: theme.sunk }}>
+          None of this can lock you out. <strong>/admins-staff-boss</strong> is
+          a real address and always works, typed straight into a browser,
+          whatever is set here. Worth a bookmark.
+        </p>
+
+        <Switch k="staffDoorHold" label="Press and hold the logo to sign in"
+                help="Off, the shortcut goes away and only the address above works." />
+
+        <div className="py-3.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+          <div className="flex items-center gap-3">
+            <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              How long to hold
+            </span>
+            <input type="number" min="300" max="3000" step="50"
+                   value={values.staffDoorHoldMs}
+                   onChange={(e) => set("staffDoorHoldMs", Number(e.target.value))}
+                   style={{ ...inputStyle, width: "90px", textAlign: "right" }} />
+            <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                           color: theme.ink2, width: "40px" }}>ms</span>
+          </div>
+          <p className="m-0 mt-1.5" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+            Below about 500 an ordinary slow tap starts opening it by accident;
+            above about 1500 it feels broken while you wait. Default: 900.
+          </p>
+        </div>
+
+        <Switch k="staffDoorBuzz" label="Buzz when it opens"
+                help="A short vibration. On a control with nothing to look at it is the only confirmation there is — though not every phone obliges." />
+      </Section>
+
+      <Section title="MOVEMENT" {...saver("MOVEMENT")}>
+        <p className="m-0 mb-4" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+          How much the site moves. Separate switches rather than one blunt
+          control, because these are different kinds of movement and you may
+          want one without the others.
+        </p>
+        <p className="m-0 mb-4" style={{ ...fontText, fontSize: "14.5px", lineHeight: 1.5, color: theme.ink2 }}>
+          Anyone whose phone or laptop asks for reduced motion gets none of it
+          regardless of what is set here. That setting is theirs, not yours,
+          and it wins.
+        </p>
+
+        <Switch k="motionReveals" label="Sections arrive as you reach them"
+                help="Each part of a page rises into place as it comes into view, instead of the whole page being there at once." />
+        <Switch k="motionDevelop" label="Photographs develop"
+                help="A picture comes up flat and overexposed and resolves into full tone, the way a print does in a tray. Off, photographs simply appear." />
+        <Switch k="motionRoll" label="The countdown's digits roll"
+                help="The numbers turn over like a clock rather than snapping from one to the next." />
+        <Switch k="motionLogoInk" label="The mark inks itself on"
+                help="On the home page, the first time somebody arrives in a session, the logo is pressed onto the photograph. Once per visit, never again." />
+        <Switch k="showFolio" label="Running head in the margin"
+                help="Section name and how far down the page you are, set vertically in the left margin on wide screens. Hidden on phones, where there is no margin to put it in." />
+      </Section>
+
+      <Section title="THE SONG POOL" {...saver("THE SONG POOL")}>
+        <p className="m-0 mb-4" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+          Every rule the pool runs on. All of it is enforced on the server, so
+          switching something off here actually stops it — it does not merely
+          hide the form from people who would use it anyway.
+        </p>
+
+        <Switch k="poolOpen" label="The pool is open"
+                help="The master switch. Off, the page stays up and explains itself rather than 404-ing — a link that has already gone out should never land on nothing. Everything already in the pool is kept." />
+
+        <Choice k="poolEventMode" label="The night's pool is"
+                help="ADD is a suggestion box — anybody puts songs in, and the list is whatever the room brought. VOTE is a ballot — only the team puts options on it and everybody else picks between them. Use VOTE for “which of these five closes the night”."
+                options={[
+                  { value: "ADD",  label: "OPEN — ANYONE ADDS" },
+                  { value: "VOTE", label: "A VOTE" },
+                ]} />
+
+        <Choice k="poolHouseMode" label="The house list is"
+                help="Usually left open: the house list is a standing record of what the room likes, which only works if the room can write to it."
+                options={[
+                  { value: "ADD",  label: "OPEN — ANYONE ADDS" },
+                  { value: "VOTE", label: "A VOTE" },
+                ]} />
+
+        <div className="py-3.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+          <div className="flex items-center gap-3">
+            <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Picks each person gets
+            </span>
+            <input type="number" min="0" value={values.poolVotesPerPerson}
+                   onChange={(e) => set("poolVotesPerPerson", Number(e.target.value))}
+                   style={{ ...inputStyle, width: "90px", textAlign: "right" }} />
+            <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                           color: theme.ink2, width: "40px" }}>picks</span>
+          </div>
+          <p className="m-0 mt-1.5" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+            1 makes it a straight choice. More makes it an approval vote, which
+            is friendlier and gives a more useful ranking — people are rarely
+            certain about exactly one. 0 means unlimited. Only applies to a pool
+            set to VOTE. Default: 3.
+          </p>
+        </div>
+
+        <Switch k="poolShowVotes" label="Show the tallies while voting is open"
+                help="Off, people see that they have picked but not how anyone else is doing — which is how you stop an early lead snowballing. You always see the counts." />
+
+        <Switch k="poolEventOpen" label="Songs for a specific night"
+                help="The pool tied to an event. This is the one to close when a set starts." />
+
+        <Switch k="poolHouseOpen" label="The house list"
+                help="The standing list, not tied to any date. Usually left open — it is the real record of what the room likes." />
+
+        <div className="mt-7 mb-1 flex items-baseline gap-3">
+          <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.2em", color: theme.brass }}>
+            WHO MAY ADD
+          </span>
+          <span className="flex-1" style={{ borderTop: `1px solid ${theme.rule}`, transform: "translateY(-3px)" }} />
+        </div>
+
+        <Switch k="poolNeedPass" label="Ticket holders only"
+                help="Somebody must have opened their pass on that phone before they can add anything. The team is exempt — nobody in the booth is going to look up their own code first." />
+
+        <Switch k="poolRequireName" label="A name is required"
+                help="Off, the name is optional. Bear in mind that every field you insist on is a person who does not bother — the link alone is what makes this work at two in the morning." />
+
+        {[
+          { key: "poolPerHour", label: "Songs per person, per hour", unit: "songs",
+            help: "The burst limit. One person with a playlist can fill a pool in a minute, and then it is their pool. 0 turns it off entirely." },
+          { key: "poolMaxPerPerson", label: "Songs per person, in total", unit: "songs",
+            help: "Counted per pool, so somebody gets this many for the night AND this many on the house list. 0 means no total cap." },
+        ].map((r) => (
+          <div key={r.key} className="py-3.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+            <div className="flex items-center gap-3">
+              <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+                {r.label}
+              </span>
+              <input type="number" min="0" value={values[r.key]}
+                     onChange={(e) => set(r.key, Number(e.target.value))}
+                     style={{ ...inputStyle, width: "90px", textAlign: "right" }} />
+              <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                             color: theme.ink2, width: "40px" }}>
+                {r.unit}
+              </span>
+            </div>
+            <p className="m-0 mt-1.5" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              {r.help}
+              {defaults[r.key] !== undefined && ` Default: ${defaults[r.key]}.`}
+            </p>
+          </div>
+        ))}
+
+        <Switch k="poolAllowDuplicates" label="The same song may go in twice"
+                help="Off, a repeat is answered with “that one's already in — good taste” and nothing is added. On, it goes in again, which turns the list into a rough vote." />
+
+        <div className="mt-7 mb-1 flex items-baseline gap-3">
+          <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.2em", color: theme.brass }}>
+            WHAT THE PUBLIC SEES
+          </span>
+          <span className="flex-1" style={{ borderTop: `1px solid ${theme.rule}`, transform: "translateY(-3px)" }} />
+        </div>
+
+        <Switch k="poolShowList" label="Show the list"
+                help="Off, people can still add a song but cannot read what anyone else put in — a suggestion box rather than a noticeboard. You always see all of it." />
+
+        <Switch k="poolShowNames" label="Show who asked"
+                help="Off, the songs are there and the names are not. The names are removed before they leave the server, not merely hidden by the page." />
+
+        <Switch k="poolShowPlayed" label="Show what has been played"
+                help="Off, nobody outside the team can tell which requests made it into a set. Worth switching off if you would rather not answer for the ones that did not." />
+
+        <div className="mt-7 mb-1 flex items-baseline gap-3">
+          <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.2em", color: theme.brass }}>
+            THE WORDS
+          </span>
+          <span className="flex-1" style={{ borderTop: `1px solid ${theme.rule}`, transform: "translateY(-3px)" }} />
+        </div>
+
+        <Line k="poolHeadline" label="Headline" placeholder="The Pool"
+              help="Leave empty for “The Pool”." />
+        <Line k="poolSub" label="Under the headline" placeholder="PASTE A LINK — WE'LL FIND THE NAME"
+              help="Set in small tracked capitals, so keep it short." />
+        <Line k="poolNote" label="A line under the form" placeholder="e.g. No hard techno before midnight."
+              help="Where to say what you will and will not play. Empty means nothing is shown." />
+        <Line k="poolClosedMessage" label="When the pool is closed"
+              placeholder="The pool is closed right now."
+              help="Shown in place of the form when the master switch above is off." />
+      </Section>
+
       <Section title="THE FLOATING BAR" {...saver("THE FLOATING BAR")}>
+        <Choice k="barFinish" label="Glass finish"
+                help="LENS carries almost no colour of its own — it works by squeezing whatever is behind it toward a middle tone, so it holds up over paper and over a photograph alike. CLEAR is the most transparent and the least forgiving over busy content. INK leans dark and belongs over photography."
+                options={[
+                  { value: "LENS",  label: "LENS",  swatch: "#DCD3C0" },
+                  { value: "CLEAR", label: "CLEAR", swatch: "#F4F1E9" },
+                  { value: "INK",   label: "INK",   swatch: "#2A2620" },
+                ]} />
+
         <p className="m-0 mb-3" style={{ ...fontText, fontSize: "14.5px", lineHeight: 1.55, color: theme.ink2 }}>
           The bar measures itself rather than counting tabs: it shares the
           width while they fit and scrolls once they genuinely do not, on any
@@ -2604,42 +3178,106 @@ function ConsoleScreen({ role }) {
 
             return (
               <div key={g.id} className="mb-5">
-                <div className="flex items-center gap-3 mb-2">
+                {/*
+                  The heading now carries the count as well as the name, set
+                  as a figure on the far side of the rule. It is the INDEX
+                  register the rest of the site uses, and it tells door staff
+                  at a glance that THE DOOR is all five of the things they
+                  have rather than the beginning of a longer list.
+                */}
+                <div className="flex items-baseline gap-3 mb-2.5">
                   <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.22em", color: theme.brass }}>
                     {g.label}
                   </span>
-                  <span className="flex-1" style={{ borderTop: `1px solid ${theme.rule}` }} />
+                  <span className="flex-1" style={{ borderTop: `1px solid ${theme.rule}`, transform: "translateY(-3px)" }} />
+                  <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em",
+                                 color: theme.ink2, fontVariantNumeric: "tabular-nums" }}>
+                    {String(items.length).padStart(2, "0")}
+                  </span>
                 </div>
 
-                <div className="grid" style={{ gap: "6px", gridTemplateColumns: "repeat(auto-fill, minmax(112px, 1fr))" }}>
-                  {items.map((t) => {
+                {/*
+                  THE TILES. Same grid, same grouping, restyled.
+
+                  What changed and why:
+
+                  • Each tile is numbered down its left edge. Twelve
+                    unnumbered boxes of tracked-out capitals are hard to tell
+                    apart at a glance; a figure gives every one a fixed
+                    position you learn without reading it, which is how you
+                    reach SETTINGS without looking by the second week.
+
+                  • The lit tile keeps its ink fill but gains a rule down the
+                    left in the accent, so the current tab is still obvious in
+                    a photograph, in bright sun at a door, and to anyone who
+                    cannot separate the fill from the paper by colour alone.
+
+                  • The label sits left rather than centred. Centred text in a
+                    wrapping grid means every label starts in a different
+                    place, and the eye has to find each one; a common left
+                    edge is a column you can run down.
+
+                  • A tile that LEAVES the console (the scanner, the door
+                    list) is marked with an arrow in the accent instead of
+                    being appended to the label, so its width no longer
+                    depends on its own name.
+                */}
+                <div className="grid" style={{ gap: "5px", gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))" }}>
+                  {items.map((t, i) => {
                     // A link leaves the console entirely, so it is never the
                     // lit one — nothing here is "open" while you are at it.
                     const active = !t.to && tab === t.id;
                     const style = {
                       ...fontUtility,
-                      fontSize: "9.5px",
-                      letterSpacing: "0.14em",
+                      fontSize: "9px",
+                      letterSpacing: "0.16em",
                       color: active ? theme.bg : theme.ink,
                       background: active ? theme.ink : "transparent",
                       border: `1px solid ${active ? theme.ink : theme.rule}`,
+                      borderLeft: active
+                        ? `3px solid ${theme.brass}`
+                        : `3px solid ${theme.rule}`,
                       // 44px is the smallest a target can be and still be hit
                       // reliably with a thumb, which is how this is used.
-                      minHeight: "44px",
-                      padding: "10px 6px",
+                      minHeight: "46px",
+                      padding: "10px 10px 10px 8px",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      textAlign: "center",
-                      lineHeight: 1.2,
+                      gap: "8px",
+                      textAlign: "left",
+                      lineHeight: 1.15,
                       cursor: "pointer",
-                      transition: "background 200ms ease, color 200ms ease, border-color 200ms ease",
+                      transition: "background 180ms ease, color 180ms ease, border-color 180ms ease",
                     };
 
+                    const inside = (
+                      <>
+                        <span style={{ fontSize: "8px", letterSpacing: "0.08em",
+                                       color: active ? theme.bg : theme.brass,
+                                       opacity: active ? 0.65 : 1,
+                                       fontVariantNumeric: "tabular-nums" }}>
+                          {String(i + 1).padStart(2, "0")}
+                        </span>
+                        <span className="flex-1">{t.label}</span>
+                        {t.to && (
+                          <span aria-hidden="true"
+                                style={{ color: active ? theme.bg : theme.brass, fontSize: "10px" }}>
+                            ↗
+                          </span>
+                        )}
+                      </>
+                    );
+
                     return t.to ? (
-                      <Link key={t.id} to={t.to} style={style}>{t.label} →</Link>
+                      <Link key={t.id} to={t.to} style={style}
+                            title={`${t.label} — opens its own page`}>
+                        {inside}
+                      </Link>
                     ) : (
-                      <button key={t.id} onClick={() => setTab(t.id)} style={style}>{t.label}</button>
+                      <button key={t.id} onClick={() => setTab(t.id)} style={style}
+                              aria-pressed={active}>
+                        {inside}
+                      </button>
                     );
                   })}
                 </div>
@@ -2657,6 +3295,8 @@ function ConsoleScreen({ role }) {
           <Passes role={role} parties={parties} party={party} setParty={setParty} />
         )}
         {tab === "events" && role.can.issuePasses && <Events parties={parties} reload={loadParties} />}
+        {tab === "activity" && role.can.manageTeam && <Activity />}
+        {tab === "faults" && role.can.manageTeam && <Faults />}
         {tab === "reading" && role.can.manageTeam && <Readership />}
         {tab === "backups" && role.can.manageTeam && <Backups />}
         {tab === "team" && role.can.manageTeam && <Team />}

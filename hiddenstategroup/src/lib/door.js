@@ -20,6 +20,7 @@
 
 const ROSTER_KEY = "hs-door-roster";
 const QUEUE_KEY = "hs-door-queue";
+const ARMED_KEY = "hs-door-armed";
 
 const read = (key, fallback) => {
   try {
@@ -42,7 +43,41 @@ const write = (key, value) => {
 };
 
 export const getRoster = () => read(ROSTER_KEY, null);
-export const saveRoster = (roster) => write(ROSTER_KEY, roster);
+
+/*
+  ARMING THE DOOR.
+
+  The guest list is stored with the MOMENT it was stored and the night it was
+  stored for. Both matter, and neither was kept before:
+
+    · a list downloaded three days ago is not a list, it is a memory — passes
+      have been issued since, and a guest holding a real one would be refused
+    · a list for last week's party is worse than nothing, because it answers
+      confidently and wrongly
+
+  With those two facts on the phone, the scanner can say ARMED or NOT ARMED
+  instead of looking identical either way. That was the whole problem: a door
+  phone with no list looks exactly like a door phone with one, right up until
+  the queue arrives.
+*/
+export function saveRoster(roster) {
+  write(ROSTER_KEY, roster);
+  write(ARMED_KEY, { at: new Date().toISOString(), party: roster?.party?.id || null });
+  return roster;
+}
+
+export function armedState(partyId, staleHours = 12) {
+  const mark = read(ARMED_KEY, null);
+  const roster = getRoster();
+  if (!roster || !mark) return { armed: false, why: "NO LIST" };
+  if (partyId && mark.party && mark.party !== partyId)
+    return { armed: false, why: "WRONG NIGHT", at: mark.at };
+
+  const age = (Date.now() - Date.parse(mark.at)) / 3600000;
+  if (!Number.isFinite(age)) return { armed: false, why: "NO LIST" };
+  if (age > staleHours) return { armed: false, why: "OUT OF DATE", at: mark.at, age };
+  return { armed: true, at: mark.at, age, count: (roster.passes || []).length };
+}
 
 export const getQueue = () => read(QUEUE_KEY, []);
 export const clearQueue = () => write(QUEUE_KEY, []);
