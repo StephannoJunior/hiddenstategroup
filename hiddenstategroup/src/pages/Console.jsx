@@ -8,6 +8,13 @@ import {
 import DoorGate from "../components/DoorGate";
 import * as api from "../lib/api";
 import ImagePicker from "../components/ImagePicker";
+import { useArtists } from "../lib/data";
+/*
+  The second eighteen's panels live in their own file. Console.jsx was three
+  thousand lines before any of them, and a file nobody can hold in their head
+  is a file where a change in one panel breaks another.
+*/
+import { Demos, Bookings, Waitlist, SetTimes, Kits, After } from "./ConsoleExtra";
 
 /*
   The console.
@@ -35,13 +42,19 @@ const TABS = [
   { id: "door",     label: "DOOR",      need: "seeList",     to: "/doorlist", group: "door" },
   { id: "passes",   label: "PASSES",    need: "seeList",     group: "door" },
   { id: "requests", label: "REQUESTS",  need: "seeList",     group: "door" },
+  { id: "waiting",  label: "WAITING",   need: "seeList",     group: "door" },
+  { id: "sets",     label: "SET TIMES", need: "issuePasses", group: "door" },
   { id: "stats",    label: "THE NIGHT", need: "seeList",     group: "door" },
   { id: "events",   label: "EVENTS",    need: "issuePasses", group: "content" },
   { id: "posts",    label: "POSTS",     need: "issuePasses", group: "content" },
   { id: "artists",  label: "ARTISTS",   need: "issuePasses", group: "content" },
   { id: "records",  label: "RECORDS",   need: "issuePasses", group: "content" },
   { id: "mixes",    label: "MIXES",     need: "issuePasses", group: "content" },
+  { id: "kits",     label: "PRESS KITS",need: "issuePasses", group: "content" },
+  { id: "demos",    label: "DEMOS",     need: "issuePasses", group: "content" },
+  { id: "bookings", label: "BOOKINGS",  need: "issuePasses", group: "content" },
   { id: "activity", label: "ACTIVITY",  need: "manageTeam",  group: "system" },
+  { id: "after",    label: "AFTER",     need: "manageTeam",  group: "system" },
   { id: "faults",   label: "FAULTS",    need: "manageTeam",  group: "system" },
   { id: "reading",  label: "READERSHIP",need: "manageTeam",  group: "system" },
   { id: "backups",  label: "BACKUPS",   need: "manageTeam",  group: "system" },
@@ -659,6 +672,25 @@ function Passes({ role, parties, party, setParty }) {
   const [editForm, setEditForm] = useState({});
   const [resend, setResend] = useState(false);
 
+  /*
+    The door note is held apart from editForm on purpose — it saves on its own
+    button, so it must not be tangled up with the form that saves everything
+    else. Keyed by code rather than reset on open, so switching between two
+    people does not silently discard a note half-typed for the first.
+  */
+  const [noteDraft, setNoteDraft] = useState({});
+  const [noteTone, setNoteTone] = useState({});
+
+  const saveNote = async (r) => {
+    const text = noteDraft[r.code] ?? r.door_note ?? "";
+    const tone = noteTone[r.code] ?? r.door_tone ?? "INFO";
+    const res = await api.setDoorNote(r.code, text, tone);
+    setMsg(res.ok
+      ? (text.trim() ? `The door will see that when ${r.name}'s code scans.` : "Note removed.")
+      : (res.error || "Could not save that note."));
+    if (res.ok) load();
+  };
+
   const startEdit = (r) => {
     setEditing(r.code);
     setResend(false);
@@ -971,6 +1003,56 @@ function Passes({ role, parties, party, setParty }) {
                 <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em", color: theme.brass }}>
                   EDITING {r.code} — THE CODE ITSELF CANNOT CHANGE
                 </p>
+
+                {/*
+                  ── N04 · A NOTE FOR THE DOOR ────────────────────────────
+
+                  Saved on its own, separately from everything else in this
+                  form, and deliberately so: a note is written at four in the
+                  afternoon when somebody remembers something, and making it
+                  wait behind a form that also changes the person's email is
+                  how it does not get written at all.
+
+                  The tone is not decoration. In the dark, colour is read
+                  before words are, and the difference between "give them a
+                  drink" and "do not let them in" must not depend on anyone
+                  reading a sentence at 2am.
+                */}
+                <div className="mb-4 pb-4" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+                  <Field label="A note the door sees when this code scans">
+                    <input style={inputStyle} maxLength={200}
+                           placeholder="Promoter's guest · artist +1 · do not admit"
+                           value={noteDraft[r.code] ?? r.door_note ?? ""}
+                           onChange={(e) => setNoteDraft((d) => ({ ...d, [r.code]: e.target.value }))} />
+                  </Field>
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {[["INFO", "JUST SO THEY KNOW"], ["GOOD", "LOOK AFTER THEM"],
+                      ["WARN", "CAREFUL"], ["STOP", "DO NOT ADMIT"]].map(([t, say]) => {
+                      const on = (noteTone[r.code] ?? r.door_tone ?? "INFO") === t;
+                      return (
+                        <button key={t} onClick={() => setNoteTone((d) => ({ ...d, [r.code]: t }))}
+                                style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.14em",
+                                         padding: "7px 10px", cursor: "pointer",
+                                         color: on ? theme.onInk : theme.ink2,
+                                         background: on ? (t === "STOP" ? theme.bad : t === "WARN" ? theme.warn
+                                                          : t === "GOOD" ? theme.good : theme.ink) : "transparent",
+                                         border: `1px solid ${on ? "transparent" : theme.rule}` }}>
+                          {say}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button onClick={() => saveNote(r)}
+                          className="mt-3"
+                          style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", cursor: "pointer",
+                                   padding: "9px 16px", background: theme.ink, color: theme.bg, border: 0 }}>
+                    SAVE THE NOTE
+                  </button>
+                  <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+                    Empty removes it. It travels with the offline list too, so
+                    it is still there when the basement kills the signal.
+                  </p>
+                </div>
 
                 <div className="space-y-3">
                   <Field label="Full name">
@@ -1536,6 +1618,83 @@ function Requests({ role, party }) {
 
 // ── THE NIGHT ───────────────────────────────────────────────────────────────
 
+/*
+  ── N01 · THE LINK FOR THE SCREEN ON THE WALL ─────────────────────────────
+
+  Lives with THE NIGHT because that is what it shows: the count, live, on a
+  spare phone propped in a corner. Not with settings, and not with the door
+  list — it is a thing you make on the afternoon of a night and forget.
+
+  IT EXPIRES BY ITSELF, thirty-six hours out. A headcount link pasted into a
+  group chat and still readable next March is a small leak nobody will ever
+  remember to close, and nobody is going to come back here to revoke it.
+*/
+function WallLink({ party }) {
+  const [link, setLink] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const make = async () => {
+    setBusy(true);
+    setMsg("");
+    const res = await api.makeShareLink("DOOR", party, "Wall display");
+    setBusy(false);
+    if (res.ok) setLink(`${window.location.origin}/wall/${res.token}`);
+    else setMsg(res.error || "Could not make a link.");
+  };
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setMsg("Copied."); }
+    catch { setMsg("Select it and copy it by hand."); }
+  };
+
+  if (!party) return null;
+
+  return (
+    <Section title="THE NUMBER ON THE WALL">
+      <p className="m-0 mb-4" style={{ ...fontText, fontSize: "16px", lineHeight: 1.55, color: theme.ink2 }}>
+        Open this on a spare phone or a laptop and prop it up somewhere. It
+        shows how many are in and nothing else — no names, no codes, because a
+        screen in a public room is a screen anyone can photograph. It needs no
+        sign-in and it stops working a day and a half from now.
+      </p>
+
+      {link ? (
+        <>
+          <p className="m-0 mb-3 px-3 py-3" style={{
+            ...fontUtility, fontSize: "12px", wordBreak: "break-all", color: theme.ink,
+            background: theme.sunk, border: `1px solid ${theme.ink}`,
+          }}>{link}</p>
+          <div className="flex gap-2">
+            <button onClick={copy}
+                    style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", cursor: "pointer",
+                             padding: "10px 16px", background: theme.ink, color: theme.bg, border: 0 }}>
+              COPY IT
+            </button>
+            <a href={link} target="_blank" rel="noreferrer"
+               style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
+                        padding: "10px 16px", color: theme.ink, textDecoration: "none",
+                        border: `1px solid ${theme.rule}` }}>
+              OPEN IT ↗
+            </a>
+          </div>
+        </>
+      ) : (
+        <button onClick={make} disabled={busy}
+                style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em", cursor: "pointer",
+                         padding: "11px 20px", background: theme.ink, color: theme.bg, border: 0 }}>
+          {busy ? "MAKING…" : "MAKE THE LINK"}
+        </button>
+      )}
+      {msg && (
+        <p className="m-0 mt-3" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.14em", color: theme.ink2 }}>
+          {msg.toUpperCase()}
+        </p>
+      )}
+    </Section>
+  );
+}
+
 function Stats({ party }) {
   const [data, setData] = useState(null);
   const [msg, setMsg] = useState("");
@@ -1548,7 +1707,7 @@ function Stats({ party }) {
     });
   }, [party]);
 
-  if (!data) return <><Notice message={msg} /><Section title="THE NIGHT"><p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>Loading…</p></Section></>;
+  if (!data) return <><Notice message={msg} /><Section title="THE NIGHT"><p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>Loading…</p></Section><WallLink party={party} /></>;
 
   const t = data.totals || {};
   const peak = (data.byHour || []).reduce((best, h) => (h.n > (best?.n || 0) ? h : best), null);
@@ -1556,6 +1715,7 @@ function Stats({ party }) {
 
   return (
     <>
+      <WallLink party={party} />
       <Section title="THE NIGHT">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -3159,6 +3319,9 @@ function ConsoleScreen({ role }) {
     if (wanted) setTab(wanted);
   }, [location.search]);
   const [parties, setParties] = useState([]);
+  // The same roster the public pages draw from, so a press kit can only be
+  // written for somebody who is actually on it.
+  const roster = useArtists() || [];
   const [party, setParty] = useState("");
   const [msg, setMsg] = useState("");
   const [codesLeft, setCodesLeft] = useState(null);
@@ -3355,6 +3518,12 @@ function ConsoleScreen({ role }) {
         {tab === "backups" && role.can.manageTeam && <Backups />}
         {tab === "team" && role.can.manageTeam && <Team />}
         {tab === "requests" && <Requests role={role} party={party} />}
+        {tab === "waiting" && <Waitlist party={party} />}
+        {tab === "sets" && role.can.issuePasses && <SetTimes party={party} />}
+        {tab === "kits" && role.can.issuePasses && <Kits artists={roster} />}
+        {tab === "demos" && role.can.issuePasses && <Demos />}
+        {tab === "bookings" && role.can.issuePasses && <Bookings />}
+        {tab === "after" && role.can.manageTeam && <After parties={parties} />}
         {tab === "stats" && <Stats party={party} />}
         {tab === "posts" && role.can.issuePasses && <Posts />}
         {["artists","records","mixes"].includes(tab) && role.can.issuePasses && (

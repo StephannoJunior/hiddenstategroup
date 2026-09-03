@@ -25,8 +25,12 @@ import * as api from "../lib/api";
 
 const STATE = {
   ADMITTED: { fg: theme.good, label: "VALID" },
+  // Some of a group through and some still outside. Its own state, because
+  // calling it either "in" or "awaiting" is untrue in a way the door notices.
+  PARTLY:   { fg: theme.brass, label: "SOME IN" },
   REFUSED:  { fg: theme.bad, label: "REJECTED" },
   AWAITING: { fg: theme.ink2, label: "AWAITING" },
+  REVOKED:  { fg: theme.bad, label: "CANCELLED" },
 };
 
 const REASON = {
@@ -74,12 +78,24 @@ function PassListScreen({ role }) {
     return () => clearInterval(id);
   }, [load]);
 
-  // The server returns raw facts; the three states are worked out here.
-  const stateOf = (r) =>
-    r.status === "REVOKED" ? "REVOKED"
-      : r.admitted_at ? "ADMITTED"
-        : r.refusals > 0 ? "REFUSED"
-          : "AWAITING";
+  /*
+    The server returns raw facts; the states are worked out here.
+
+    "Admitted" now means EVERY place on the pass is taken. A pass for four
+    with two people through is neither admitted nor awaiting — it is PARTLY,
+    and calling it either of the others would tell the door something untrue
+    at the one moment it matters.
+  */
+  const placesIn = (r) => Math.max(0, Number(r.ins || 0) - Number(r.outs || 0));
+  const stateOf = (r) => {
+    if (r.status === "REVOKED") return "REVOKED";
+    const allowed = Math.max(1, Number(r.admits) || 1);
+    const inside = placesIn(r);
+    if (inside >= allowed) return "ADMITTED";
+    if (inside > 0) return "PARTLY";
+    if (r.refusals > 0) return "REFUSED";
+    return "AWAITING";
+  };
 
 
   /*
@@ -107,9 +123,48 @@ function PassListScreen({ role }) {
     load();
   };
 
-  const admitted = rows.filter((r) => stateOf(r) === "ADMITTED").length;
+  /*
+    IN PLACES, NOT PASSES. This counted rows, so a pass for four read as one
+    person — and on a night sold mostly as pairs the door list disagreed with
+    both the scanner and the room by a factor of two.
+  */
+  const admitted = rows.reduce((n, r) => n + (r.status === "REVOKED" ? 0 : placesIn(r)), 0);
   const refused = rows.filter((r) => stateOf(r) === "REFUSED").length;
-  const waiting = rows.filter((r) => stateOf(r) === "AWAITING").length;
+  const waiting = rows.reduce((n, r) => {
+    if (r.status === "REVOKED") return n;
+    return n + Math.max(0, (Math.max(1, Number(r.admits) || 1)) - placesIn(r));
+  }, 0);
+
+  /*
+    ── N06 · THE PAPER FALLBACK ────────────────────────────────────────────
+
+    Every phone at a door can die. The offline queue survives no signal; it
+    does not survive no battery, and it does not survive a phone dropped down
+    a stairwell at eleven.
+
+    So: one button, one sheet, laid out to be read in bad light and ticked
+    with a pen — names first because names are what people say, the code
+    second, and a box to tick. It opens the browser's own print dialogue,
+    which is also how it becomes a PDF on a phone.
+
+    Printed from a hidden block on this page rather than a new window: a popup
+    is blocked on iOS about half the time, and a door is the worst place to
+    discover that.
+  */
+  const [printing, setPrinting] = useState(false);
+  const printSheet = () => {
+    setPrinting(true);
+    // Two frames, so the sheet is in the document before the dialogue opens —
+    // printing in the same tick prints the page without it.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.print();
+      setTimeout(() => setPrinting(false), 500);
+    }));
+  };
+
+  const sheet = [...rows]
+    .filter((r) => r.status !== "REVOKED")
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
@@ -128,9 +183,10 @@ function PassListScreen({ role }) {
         {/* the three numbers that matter, big enough to read at a glance */}
         <div className="grid grid-cols-3 gap-3 mt-5">
           {[
-            { n: admitted, label: "VALID", fg: STATE.ADMITTED.fg },
+            // PEOPLE, not passes — see placesIn.
+            { n: admitted, label: "INSIDE", fg: STATE.ADMITTED.fg },
             { n: refused, label: "REJECTED", fg: STATE.REFUSED.fg },
-            { n: waiting, label: "AWAITING", fg: theme.ink2 },
+            { n: waiting, label: "STILL TO COME", fg: theme.ink2 },
           ].map((b) => (
             <div key={b.label} className="text-center py-4" style={{ border: "1px solid " + theme.rule }}>
               <p className="m-0" style={{ ...fontDisplay, fontWeight: 300, fontSize: "34px", color: b.fg,
@@ -171,9 +227,21 @@ function PassListScreen({ role }) {
                   </span>
                   <span className="block" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink2 }}>
                     {r.ticket ? r.ticket.ref : r.type}
+                    {Number(r.admits) > 1 ? ` · ${placesIn(r)} OF ${r.admits} IN` : ""}
                     {role.can.seeReasons && st === "REFUSED" && r.last_reason ? ` · ${REASON[r.last_reason] || r.last_reason}` : ""}
                     {r.refusals > 1 ? ` · ${r.refusals} attempts` : ""}
                   </span>
+                  {r.door_note && (
+                    /* N04 — the note, wherever the name is shown. */
+                    <span className="block mt-1" style={{
+                      ...fontUtility, fontSize: "8.5px", letterSpacing: "0.12em", lineHeight: 1.5,
+                      color: r.door_tone === "STOP" ? theme.bad
+                           : r.door_tone === "WARN" ? theme.warn
+                           : r.door_tone === "GOOD" ? theme.good : theme.brass,
+                    }}>
+                      {r.door_note}
+                    </span>
+                  )}
                 </span>
 
                 <span className="text-right shrink-0">
@@ -197,6 +265,13 @@ function PassListScreen({ role }) {
         </p>
 
         <div className="flex flex-wrap gap-5 mt-6">
+          <button onClick={printSheet}
+                  style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
+                           color: theme.ink, background: "transparent",
+                           border: 0, borderBottom: `1px solid ${theme.brass}`,
+                           cursor: "pointer", padding: 0 }}>
+            PRINT THE SHEET
+          </button>
           <Link to="/scan" className="pb-0.5"
                 style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
                          color: theme.ink, borderBottom: "1px solid " + theme.brass }}>
@@ -213,6 +288,83 @@ function PassListScreen({ role }) {
           )}
         </div>
       </section>
+
+      {/*
+        ── N06 · THE SHEET ────────────────────────────────────────────────────
+
+        Hidden on screen, and the only thing on the page when printed. Kept in
+        the document rather than opened in a new window because iOS blocks
+        popups often enough that a door is the worst place to find out.
+
+        LAID OUT FOR A CLIPBOARD IN BAD LIGHT. Names alphabetically, because a
+        name is what a person says at a door and a code is what they have lost.
+        Large type, generous rows, a box to tick and a line to write the time
+        on. Nothing here is decorative — every millimetre of the row is space
+        to write in with a cold hand.
+      */}
+      <div className={printing ? "print-sheet" : "print-sheet hide"} aria-hidden={!printing}>
+        <style>{`
+          .print-sheet { display: none; }
+          @media print {
+            body * { visibility: hidden !important; }
+            .print-sheet, .print-sheet * { visibility: visible !important; }
+            .print-sheet {
+              display: block !important;
+              position: absolute; left: 0; top: 0; width: 100%;
+              background: #fff; color: #000;
+              padding: 10mm 8mm;
+              font-family: Georgia, 'Times New Roman', serif;
+            }
+            .ps-head { border-bottom: 2px solid #000; padding-bottom: 4mm; margin-bottom: 4mm; }
+            .ps-title { font-size: 20pt; margin: 0; font-weight: 400; }
+            .ps-sub { font-size: 8pt; letter-spacing: 0.18em; margin: 2mm 0 0;
+                      font-family: ui-monospace, 'SF Mono', monospace; text-transform: uppercase; }
+            .ps-row { display: flex; align-items: center; gap: 4mm;
+                      border-bottom: 1px solid #999; padding: 3.2mm 0;
+                      break-inside: avoid; page-break-inside: avoid; }
+            .ps-box { width: 7mm; height: 7mm; border: 1.2pt solid #000; flex: none; }
+            .ps-name { font-size: 12pt; flex: 1; }
+            .ps-note { font-size: 8pt; font-style: italic; display: block; }
+            .ps-code { font-size: 9pt; font-family: ui-monospace, monospace;
+                       letter-spacing: 0.08em; width: 26mm; text-align: right; flex: none; }
+            .ps-plus { font-size: 9pt; width: 12mm; text-align: right; flex: none; font-weight: bold; }
+            .ps-time { width: 22mm; border-bottom: 1px solid #999; flex: none; height: 5mm; }
+            .ps-foot { margin-top: 6mm; font-size: 8pt;
+                       font-family: ui-monospace, monospace; letter-spacing: 0.12em; }
+          }
+        `}</style>
+
+        <div className="ps-head">
+          <p className="ps-title">{party ? party.name : "Door list"}</p>
+          <p className="ps-sub">
+            {party ? party.date_label : ""} · {sheet.length} PASSES ·
+            {" "}{sheet.reduce((n, r) => n + Math.max(1, Number(r.admits) || 1), 0)} PEOPLE ·
+            {" "}PRINTED {new Date().toLocaleString()}
+          </p>
+        </div>
+
+        {sheet.map((r) => (
+          <div key={r.code} className="ps-row">
+            <span className="ps-box" />
+            <span className="ps-name">
+              {r.name}
+              {r.door_note && (
+                <span className="ps-note">
+                  {r.door_tone === "STOP" ? "DO NOT ADMIT — " : ""}{r.door_note}
+                </span>
+              )}
+            </span>
+            <span className="ps-plus">{Number(r.admits) > 1 ? `×${r.admits}` : ""}</span>
+            <span className="ps-code">{r.code}</span>
+            <span className="ps-time" />
+          </div>
+        ))}
+
+        <p className="ps-foot">
+          TICK THE BOX AND WRITE THE TIME · ×N MEANS THE PASS ADMITS THAT MANY ·
+          TYPE ANY ADMISSIONS BACK IN WHEN THE PHONES ARE WORKING
+        </p>
+      </div>
 
       <Footer />
     </div>

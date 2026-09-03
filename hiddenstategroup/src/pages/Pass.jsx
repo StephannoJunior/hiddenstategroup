@@ -330,6 +330,26 @@ export default function Pass() {
         </div>
       )}
 
+      {/*
+        ── G09 · BRING SOMEONE ─────────────────────────────────────────────
+
+        This already happens — a guest screenshots their invite and sends it
+        to a friend, who then asks for a place and nobody knows who brought
+        whom. Making it a real link does not create the behaviour; it makes it
+        visible, and it gives the person who brings people a reason to keep
+        doing it.
+
+        The pass code rides in the address and is never shown to whoever
+        follows the link. It is checked against a live pass on the way in, so
+        the column holds a real code or nothing.
+
+        Web Share where the phone has it, because that is the sheet with
+        WhatsApp in it and WhatsApp is how this is actually sent. Copy to the
+        clipboard everywhere else. Both fail silently into "select this and
+        send it", which is what someone will do anyway.
+      */}
+      <ForwardInvite code={pass.code} party={party} />
+
       <p className="text-center mt-6 m-0" style={{ ...fontText, fontSize: "16px", lineHeight: 1.55, color: theme.ink2 }}>
         {party.rotating
           ? "Show this at the door. The number changes every thirty seconds, so a screenshot will not work — keep this page open when you arrive."
@@ -348,5 +368,49 @@ export default function Pass() {
         {party.minimumAge}+ · ID MAY BE REQUESTED
       </p>
     </>
+  );
+}
+
+function ForwardInvite({ code, party }) {
+  const [said, setSaid] = useState("");
+  const link = `${window.location.origin}/guestlist?from=${encodeURIComponent(code)}`;
+
+  const share = async () => {
+    const text = `Come to ${party.name}${party.date ? " — " + party.date : ""}. Ask for a place here:`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Hidden State", text, url: link });
+        return;
+      }
+      await navigator.clipboard.writeText(link);
+      setSaid("Link copied — send it to them.");
+    } catch {
+      // A cancelled share sheet lands here too, which is why this says
+      // nothing about failure.
+      setSaid("");
+    }
+    setTimeout(() => setSaid(""), 3000);
+  };
+
+  return (
+    <div className="mt-7 pt-5" style={{ borderTop: `1px solid ${theme.rule}` }}>
+      <p className="m-0 text-center"
+         style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.brass }}>
+        BRING SOMEONE
+      </p>
+      <p className="m-0 mt-2 text-center"
+         style={{ ...fontText, fontSize: "15.5px", lineHeight: 1.55, color: theme.ink2 }}>
+        Send this to one person. They ask for their own place and we know it
+        came from you — which is the only reason a list like this grows.
+      </p>
+      <p className="text-center mt-3 m-0">
+        <button onClick={share}
+                style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
+                         padding: "11px 22px", cursor: "pointer",
+                         background: theme.ink, color: theme.bg, border: 0 }}>
+          {said ? said.toUpperCase() : "SEND AN INVITE"}
+        </button>
+      </p>
+    </div>
   );
 }

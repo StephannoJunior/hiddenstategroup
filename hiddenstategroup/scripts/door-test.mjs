@@ -47,7 +47,63 @@ door.queueAdmission("A2", "party-1");
 check("two admissions queue", door.getQueue().map((e) => e.code), ["A1", "A2"]);
 
 door.queueAdmission("A1", "party-1");
-check("a double tap does not queue twice", door.getQueue().map((e) => e.code), ["A1", "A2"]);
+check("a single pass never queues twice", door.getQueue().map((e) => e.code), ["A1", "A2"]);
+
+/*
+  ── N02 · A PASS FOR MORE THAN ONE ───────────────────────────────────────
+
+  The rule that used to be "never queue the same code twice" was right while a
+  pass meant one person. It silently threw away the second, third and fourth
+  of a group at an offline door: they walked in, and the record said they did
+  not. These are the cases that must hold.
+*/
+store.clear();
+door.queueAdmission("P4", "party-1", 4);
+door.queueAdmission("P4", "party-1", 4);
+door.queueAdmission("P4", "party-1", 4);
+check("a pass for four queues three of them", door.getQueue().length, 3);
+door.queueAdmission("P4", "party-1", 4);
+check("and the fourth", door.getQueue().length, 4);
+door.queueAdmission("P4", "party-1", 4);
+check("but never a fifth", door.getQueue().length, 4);
+
+store.clear();
+door.queueAdmission("P1", "party-1", 1);
+door.queueAdmission("P1", "party-1", 1);
+check("a pass for one still queues once", door.getQueue().length, 1);
+door.queueAdmission("P0", "party-1", 0);
+door.queueAdmission("P0", "party-1", 0);
+check("a nonsense allowance is treated as one", door.getQueue().filter((e) => e.code === "P0").length, 1);
+
+// ── the offline check counts places, net of exits ────────────────────────
+store.clear();
+door.saveRoster({
+  party: { id: "party-9", doors_close_at: new Date(Date.now() + 36e5).toISOString(), capacity: 100 },
+  passes: [
+    { code: "SOLO", name: "One Person", status: "ACTIVE", admits: 1, ins: 0, outs: 0 },
+    { code: "FOUR", name: "A Group", status: "ACTIVE", admits: 4, ins: 2, outs: 0 },
+    { code: "BACK", name: "Stepped Out", status: "ACTIVE", admits: 1, ins: 1, outs: 1 },
+    { code: "DONE", name: "All In", status: "ACTIVE", admits: 2, ins: 2, outs: 0 },
+    { code: "GONE", name: "Cancelled", status: "REVOKED", admits: 1, ins: 0, outs: 0 },
+  ],
+});
+check("an unused pass is admitted", door.checkOffline("SOLO").ok, true);
+check("a group with two already in still has room", door.checkOffline("FOUR").ok, true);
+check("and it says which of them this is", door.checkOffline("FOUR").inHere, 3);
+check("somebody who stepped out can come back", door.checkOffline("BACK").ok, true);
+check("a pass with every place taken is refused", door.checkOffline("DONE").ok, false);
+check("and says so as USED", door.checkOffline("DONE").reason, "USED");
+check("a revoked pass is still refused", door.checkOffline("GONE").reason, "REVOKED");
+check("an unknown code is still refused", door.checkOffline("NOPE").reason, "UNKNOWN");
+
+// The headcount is in PLACES and net of exits: 0 + 2 + 0 + 2 = 4.
+check("the local headcount counts places, not passes", door.localAdmittedCount(), 4);
+door.queueAdmission("FOUR", "party-9", 4);
+check("and adds what this phone has queued since", door.localAdmittedCount(), 5);
+
+store.clear();
+door.queueAdmission("A1", "party-1");
+door.queueAdmission("A2", "party-1");
 
 // ── removing only what the server confirmed ──────────────────────────────
 door.queueAdmission("A3", "party-1");

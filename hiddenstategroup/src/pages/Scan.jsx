@@ -30,6 +30,29 @@ const TONE = {
   NO_PARTY:  { bg: theme.ink2, fg: theme.bg, label: "PASS NOT LINKED TO A NIGHT" },
   WRONG_CODE:{ bg: theme.bad, fg: theme.bg, label: "WRONG CODE" },
   NOT_VALID: { bg: theme.bad, fg: theme.bg, label: "NOT A VALID CODE" },
+  /*
+    ── N03 · GOING OUT ────────────────────────────────────────────────────
+    Deliberately not green. Green means "let them through", and someone
+    walking out is not that — a door reading colour before words at 2am must
+    never confuse the two.
+  */
+  OUT:       { bg: theme.ink, fg: theme.bg, label: "OUT — COME BACK ANYTIME" },
+  NOT_INSIDE:{ bg: theme.warn, fg: theme.bg, label: "NOT INSIDE" },
+  FULL:      { bg: theme.bad, fg: theme.bg, label: "ROOM FULL" },
+  DOORS_CLOSED:{ bg: theme.ink2, fg: theme.bg, label: "DOORS CLOSED" },
+};
+
+/*
+  ── N04 · THE COLOUR OF A NOTE ───────────────────────────────────────────
+  Colour arrives before words do. The difference between "give this person a
+  drinks ticket" and "do not let this person in" must not depend on anybody
+  reading a sentence in the dark.
+*/
+const NOTE_TONE = {
+  INFO: { bg: theme.sunk, fg: theme.ink, label: "NOTE" },
+  GOOD: { bg: theme.good, fg: theme.bg, label: "LOOK AFTER THEM" },
+  WARN: { bg: theme.warn, fg: theme.bg, label: "CAREFUL" },
+  STOP: { bg: theme.bad, fg: theme.bg, label: "DO NOT ADMIT" },
 };
 
 function ScanScreen({ role }) {
@@ -43,6 +66,19 @@ function ScanScreen({ role }) {
   const [result, setResult] = useState(null);
   const [manual, setManual] = useState("");
   const [admitted, setAdmitted] = useState(0);
+  /*
+    ── N03 · WHICH WAY ────────────────────────────────────────────────────
+
+    A mode, held between scans, not a question asked after each one. At a door
+    the person holding the phone is doing one job at a time — letting a queue
+    in, or standing at the smoking exit — and being asked "in or out?" for
+    every single scan would make both jobs slower than a pen and paper.
+
+    It resets to IN whenever the scanner is restarted, because the dangerous
+    mistake is the one where a phone left in OUT overnight quietly marks
+    arriving guests as leaving.
+  */
+  const [direction, setDirection] = useState("IN");
   const [offline, setOffline] = useState(false);
   const [roster, setRoster] = useState(null);
   const [queued, setQueued] = useState(0);
@@ -273,7 +309,7 @@ function ScanScreen({ role }) {
     if (lastScan.current.code === code && since < COOLDOWN_MS) return;
     lastScan.current = { code, at: Date.now() };
 
-    let res = await api.scan(payload);
+    let res = await api.scan(payload, direction);
 
     /*
       No connection: check against the downloaded copy instead of refusing.
@@ -282,11 +318,26 @@ function ScanScreen({ role }) {
     */
     if (res.error && /connection/i.test(res.error)) {
       setOffline(true);
+
+      /*
+        OFFLINE, EXITS ARE NOT RECORDED — and the screen says so rather than
+        pretending. The offline queue only knows how to add admissions; an
+        exit it could not send would come back as an admission on the next
+        sync and put somebody back in the room who had left. Losing the exit
+        costs an inaccurate headcount for an hour. Guessing at it costs a
+        wrong one, silently, for the rest of the night.
+      */
+      if (direction === "OUT") {
+        setResult({ tone: TONE.NOT_INSIDE, name: null,
+                    note: "No signal — let them out, it just isn't counted" });
+        return;
+      }
+
       const local = door.checkOffline(payload);
       if (local.ok) {
         const partyId = roster?.party?.id;
         // One reading of the code, shared with the online path — see codeOf.
-        door.queueAdmission(door.codeOf(payload), partyId);
+        door.queueAdmission(door.codeOf(payload), partyId, local.admits);
         setQueued(door.getQueue().length);
         setAdmitted((n) => n + 1);
         setResult({ tone: TONE.VALID, name: local.name,
@@ -310,8 +361,27 @@ function ScanScreen({ role }) {
       setResult({
         tone: TONE[res.reason] || TONE.NOT_A_PASS,
         name: res.name || null,
-        note: res.at ? `Admitted ${new Date(res.at).toLocaleTimeString()}` : res.note || null,
+        // On a pass for more than one, "already used" is not enough: a door
+        // told only that cannot tell a fifth person on a four-pass from a
+        // stranger holding a screenshot.
+        note: res.reason === "USED" && res.admits > 1
+          ? `All ${res.admits} places used`
+          : res.at ? `Admitted ${new Date(res.at).toLocaleTimeString()}` : res.note || null,
+        doorNote: res.doorNote || null,
       });
+      return;
+    }
+
+    // Somebody leaving. The count comes down; it is not an admission.
+    if (res.out) {
+      setAdmitted((n) => Math.max(0, n - 1));
+      setResult({
+        tone: TONE.OUT,
+        name: res.name,
+        note: res.admits > 1 ? `${res.stillIn} of ${res.admits} still inside` : null,
+        doorNote: res.doorNote || null,
+      });
+      if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
       return;
     }
 
@@ -321,12 +391,22 @@ function ScanScreen({ role }) {
       name: res.name,
       note: res.ticketRef ? `${res.tier || res.kind} · ${res.ticketRef}` : res.kind,
       checkId: !!res.idRequired,
+      // "2 OF 4 IN" rather than "ADMITS 4" — what is left is the useful half.
+      admits: res.admits,
+      inHere: res.inHere,
+      doorNote: res.doorNote || null,
     });
     if (navigator.vibrate) navigator.vibrate(40);
   };
 
   const start = async () => {
     setError("");
+    /*
+      Back to IN whenever the camera is started. The failure that costs a night
+      is a phone that was put down in OUT and picked up an hour later by
+      somebody else; there is no equivalent cost to being reset to IN.
+    */
+    setDirection("IN");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },   // rear camera
@@ -400,6 +480,10 @@ function ScanScreen({ role }) {
       */}
       <IndexBand top items={[
         { label: "DOOR", value: armed.armed ? "ARMED" : "NOT ARMED" },
+        // The direction sits in the band as well as on the button, because the
+        // band is the thing anyone glances at, and a phone in OUT that nobody
+        // notices is the one failure that quietly ruins a headcount.
+        ...(direction === "OUT" ? [{ label: "SCANNING", value: "PEOPLE OUT" }] : []),
         { label: "LINK", value: offline ? "OFFLINE" : "ONLINE" },
         ...(queued > 0 ? [{ label: "TO SYNC", value: String(queued) }] : []),
         { label: "ADMITTED", value: roster?.party?.capacity
@@ -463,7 +547,34 @@ function ScanScreen({ role }) {
                 {result.name}
               </p>
             )}
-            {result.admits > 1 && (
+            {result.doorNote && (
+              /*
+                ── N04 · THE NOTE, ON TOP OF THE ANSWER ────────────────────
+
+                Placed above the name and given its own ground, because a note
+                is a reason to do something other than what the big coloured
+                panel just said. Underneath the fold it would be read after the
+                decision, which is not reading it at all.
+              */
+              <p className="m-0 mt-3 mx-auto px-4 py-2.5"
+                 style={{ ...fontUtility, fontSize: "11px", letterSpacing: "0.14em",
+                          lineHeight: 1.5, maxWidth: "22em",
+                          background: (NOTE_TONE[result.doorNote.tone] || NOTE_TONE.INFO).bg,
+                          color: (NOTE_TONE[result.doorNote.tone] || NOTE_TONE.INFO).fg }}>
+                <span className="block" style={{ fontSize: "8.5px", letterSpacing: "0.2em", opacity: 0.8 }}>
+                  {(NOTE_TONE[result.doorNote.tone] || NOTE_TONE.INFO).label}
+                </span>
+                {result.doorNote.note}
+              </p>
+            )}
+
+            {result.admits > 1 && result.inHere ? (
+              <p className="m-0 mt-2"
+                 style={{ ...fontDisplay, fontSize: "22px", color: result.tone.fg,
+                          fontVariantNumeric: "tabular-nums" }}>
+                {result.inHere} OF {result.admits} IN
+              </p>
+            ) : result.admits > 1 && (
               <p className="m-0 mt-3 py-2.5"
                  style={{ ...fontDisplay, fontSize: "22px", color: result.tone.fg,
                           border: `1px solid rgba(243,235,217,0.55)` }}>
@@ -485,7 +596,52 @@ function ScanScreen({ role }) {
           </div>
         )}
 
-        <div className="mt-5" style={{ border: "1px solid " + theme.ink, background: theme.ink }}>
+        {/*
+          ── N03 · IN OR OUT ────────────────────────────────────────────────
+
+          Above the camera, not below it, and the width of the screen. This is
+          the single most dangerous control on the page: a phone left in OUT
+          quietly marks arriving guests as leaving, and nobody notices until
+          the headcount is nonsense.
+
+          So it is impossible to miss when it is not on IN — the whole strip
+          inverts, and a line appears underneath saying in plain words what the
+          next scan will do. Nothing here is a subtle toggle.
+        */}
+        <div className="flex mt-5" style={{ border: `1px solid ${theme.ink}` }}>
+          {[
+            ["IN", "LETTING PEOPLE IN"],
+            ["OUT", "MARKING PEOPLE OUT"],
+          ].map(([dir, say]) => {
+            const on = direction === dir;
+            return (
+              <button key={dir} onClick={() => setDirection(dir)}
+                      aria-pressed={on}
+                      className="flex-1 py-4"
+                      style={{ ...fontUtility, fontSize: "12px", letterSpacing: "0.24em",
+                               cursor: "pointer", border: 0,
+                               background: on ? (dir === "OUT" ? theme.brass : theme.ink) : "transparent",
+                               color: on ? theme.bg : theme.ink2 }}>
+                {dir}
+                <span className="block" style={{ fontSize: "8px", letterSpacing: "0.16em",
+                                                 opacity: on ? 0.75 : 0, marginTop: "3px" }}>
+                  {say}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {direction === "OUT" && (
+          <p className="m-0 mt-2 px-3 py-2.5 text-center"
+             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.16em", lineHeight: 1.6,
+                      background: theme.brass, color: theme.bg }}>
+            EVERY SCAN NOW MARKS SOMEONE <strong>LEAVING</strong>.<br />
+            SWITCH BACK TO IN BEFORE THE NEXT ARRIVAL.
+          </p>
+        )}
+
+        <div className="mt-3" style={{ border: "1px solid " + theme.ink, background: theme.ink }}>
           <video ref={videoRef} playsInline muted
                  style={{ width: "100%", display: running ? "block" : "none", aspectRatio: "1 / 1", objectFit: "cover" }} />
           {!running && (
@@ -536,7 +692,7 @@ function ScanScreen({ role }) {
                 if (!typed) return;
                 // A typed entry may be either the pass code or the number on
                 // screen; the server works out which.
-                const res = await api.scanByCode(typed);
+                const res = await api.scanByCode(typed, direction);
                 if (res.ok) {
                   setAdmitted((n) => n + 1);
                   setResult({ tone: TONE.VALID, name: res.name, note: `${res.kind} · checked by code`, checkId: !!res.idRequired });

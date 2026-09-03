@@ -1343,7 +1343,29 @@ async function handleApi(request, env, url, ctx) {
         minimumAge: pass.minimum_age, rotating: !!pass.rotating, over,
         startsAt: pass.starts_at,
         // Stored as JSON text; parsed here so the page never has to.
-        lineup: (() => { try { return JSON.parse(pass.lineup || "[]"); } catch { return []; } })(),
+        /*
+          ── G06 · THE RUNNING ORDER ────────────────────────────────────
+
+          Two sources, on purpose and only for now. `set_times` is where the
+          console writes, and it wins whenever it has anything; the `lineup`
+          column is what existed before and is kept as a fallback so a night
+          set up under the old scheme does not lose its times the day this
+          ships. Once every live night has been re-entered, the column can go.
+        */
+        lineup: await (async () => {
+          const rows = await env.DB.prepare(
+            "SELECT name, at_label, room FROM set_times WHERE party_id = ? ORDER BY sort_order ASC, id ASC"
+          ).bind(pass.party_id).all().catch(() => ({ results: [] }));
+          const live = rows.results || [];
+          if (live.length) {
+            return live.map((r) => ({
+              artist: r.name,
+              time: r.at_label || "",
+              room: r.room || null,
+            }));
+          }
+          try { return JSON.parse(pass.lineup || "[]"); } catch { return []; }
+        })(),
       },
       code: over ? null : code6,
       // Seconds until the number changes, so the page can show a countdown
