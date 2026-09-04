@@ -2,7 +2,7 @@ import { SOCIAL } from "../lib/social";
 import { useOrganisationSchema, usePageMeta } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
-import Mark from "../components/Mark";
+import LogoMark from "../components/Mark";
 import Countdown from "../components/Countdown";
 import { useSite } from "../lib/site";
 import React, { useEffect, useState } from "react";
@@ -130,7 +130,7 @@ function Mark() {
         to be sharpest. This has no such ceiling, and it inherits the stock
         colour rather than carrying it baked in.
       */}
-      <Mark
+      <LogoMark
         height={null}
         title="Hidden State"
         className={`block${inked ? " hs-ink-on" : ""}`}

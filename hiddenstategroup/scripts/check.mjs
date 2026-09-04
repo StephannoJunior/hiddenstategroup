@@ -135,5 +135,79 @@ console.log("\n5. every /api path called is answered");
   if (problems === before) good(`${paths.size} paths, all answered`);
 }
 
+/*
+  ── 6 · A NAME IMPORTED AND ALSO DECLARED ──────────────────────────────────
+
+  WHY THIS CHECK EXISTS. Home.jsx already had a local component called Mark —
+  the hero block — and an import of the logo component, also called Mark, was
+  added above it. That is a hard build failure, and it reached a build.
+
+  It got that far because the type-check being run was doing SYNTAX checking
+  only: `tsc --allowJs` without `--checkJs` never looks at what the names in a
+  .jsx file mean, so a file can be perfectly well-formed and still declare the
+  same name twice. `--checkJs` does catch it (TS2440), but TypeScript is not a
+  dependency of this project and adding one so a check can run is the wrong
+  trade.
+
+  So this does the one job that mattered, in plain JavaScript, with nothing to
+  install: for every file, collect what it imports and what it declares at the
+  top level, and complain when a name is in both. It is not a type-checker and
+  is not pretending to be one — it catches exactly the mistake that got
+  through, which is what a check is for.
+*/
+console.log("\n6. no name is both imported and declared");
+{
+  const before = problems;
+  let files = 0;
+
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!/\.(js|jsx)$/.test(entry.name)) continue;
+      files += 1;
+
+      const text = decomment(readFileSync(full, "utf8"));
+      const imported = new Map();   // name -> the line it arrived on
+
+      for (const m of text.matchAll(/^import\s+([\s\S]+?)\s+from\s+["'][^"']+["']/gm)) {
+        const clause = m[1];
+        const line = text.slice(0, m.index).split("\n").length;
+
+        // A default import: the bare name before any brace or comma.
+        const dflt = clause.trim().match(/^([A-Za-z_$][\w$]*)/);
+        if (dflt && !clause.trim().startsWith("{") && !clause.trim().startsWith("*")) {
+          imported.set(dflt[1], line);
+        }
+        // A namespace import: * as name
+        const ns = clause.match(/\*\s+as\s+([A-Za-z_$][\w$]*)/);
+        if (ns) imported.set(ns[1], line);
+        // Named imports, taking whatever each was renamed to.
+        const braces = clause.match(/\{([\s\S]*)\}/);
+        if (braces) {
+          for (const part of braces[1].split(",")) {
+            const name = part.trim().split(/\s+as\s+/).pop().trim();
+            if (name) imported.set(name, line);
+          }
+        }
+      }
+      if (!imported.size) continue;
+
+      // Top-level declarations only — indented ones are inside something and
+      // are allowed to shadow.
+      const declared = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
+      for (const m of text.matchAll(declared)) {
+        const name = m[1];
+        if (!imported.has(name)) continue;
+        const at = text.slice(0, m.index).split("\n").length;
+        bad(`${full} declares '${name}' at line ${at}, but line ${imported.get(name)} imports it`);
+      }
+    }
+  };
+
+  walk("src");
+  if (problems === before) good(`${files} files, no name used twice`);
+}
+
 console.log(problems ? `\n${problems} problem(s)\n` : "\nnothing to fix\n");
 process.exit(problems ? 1 : 0);
