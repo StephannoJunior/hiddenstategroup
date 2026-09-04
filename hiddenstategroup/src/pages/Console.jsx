@@ -8,13 +8,13 @@ import {
 import DoorGate from "../components/DoorGate";
 import * as api from "../lib/api";
 import ImagePicker from "../components/ImagePicker";
-import { useArtists } from "../lib/data";
+import { useArtists, useRecords } from "../lib/data";
 /*
   The second eighteen's panels live in their own file. Console.jsx was three
   thousand lines before any of them, and a file nobody can hold in their head
   is a file where a change in one panel breaks another.
 */
-import { Demos, Bookings, Waitlist, SetTimes, Kits, After } from "./ConsoleExtra";
+import { Demos, Bookings, Waitlist, SetTimes, Kits, After, ReleaseLinks } from "./ConsoleExtra";
 
 /*
   The console.
@@ -3322,6 +3322,9 @@ function ConsoleScreen({ role }) {
   // The same roster the public pages draw from, so a press kit can only be
   // written for somebody who is actually on it.
   const roster = useArtists() || [];
+  // The same releases the public page draws from, so a link can only be added
+  // to a record that actually exists.
+  const catalogue = useRecords() || [];
   const [party, setParty] = useState("");
   const [msg, setMsg] = useState("");
   const [codesLeft, setCodesLeft] = useState(null);
@@ -3529,6 +3532,12 @@ function ConsoleScreen({ role }) {
         {["artists","records","mixes"].includes(tab) && role.can.issuePasses && (
           <ContentEditor key={tab} kind={tab} />
         )}
+        {/*
+          The links live under RECORDS rather than in a tab of their own: they
+          are part of a release, and a separate tab would mean adding a record
+          in one place and telling people where to hear it in another.
+        */}
+        {tab === "records" && role.can.issuePasses && <ReleaseLinks records={catalogue} />}
         {tab === "settings" && role.can.manageTeam && <Settings parties={parties} />}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { usePageMeta } from "../lib/seo";
 import React, { useEffect, useState } from "react";
+import { useLang } from "../lib/lang";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts,
@@ -22,6 +23,7 @@ import * as api from "../lib/api";
 export default function Pass() {
   useGoogleFonts();
   const { code } = useParams();
+  const { t } = useLang();
   const [state, setState] = useState({ loading: true });
   const [left, setLeft] = useState(30);
   const [qr, setQr] = useState(null);
@@ -290,7 +292,7 @@ export default function Pass() {
             </div>
             <p className="text-center mt-2 mb-0"
                style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.18em", color: theme.ink2 }}>
-              REFRESHES IN {left}s
+              {t("refreshesIn")} {left}s
             </p>
           </>
         )}
@@ -305,7 +307,7 @@ export default function Pass() {
           style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
                    color: theme.ink, borderBottom: `1px solid ${theme.brass}` }}
         >
-          ADD TO YOUR CALENDAR
+          {t("addToCalendar")}
         </a>
       </p>
 
@@ -313,7 +315,7 @@ export default function Pass() {
         <div className="mt-7">
           <p className="m-0 mb-2 text-center"
              style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.brass }}>
-            SET TIMES
+            {t("setTimes")}
           </p>
           <div style={{ borderTop: `1px solid ${theme.ink}` }}>
             {party.lineup.map((slot, i) => (
@@ -365,13 +367,14 @@ export default function Pass() {
 
       <p className="text-center mt-4 m-0"
          style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em", color: theme.ink2 }}>
-        {party.minimumAge}+ · ID MAY BE REQUESTED
+        {party.minimumAge}+ · {t("idMayBeRequested")}
       </p>
     </>
   );
 }
 
 function ForwardInvite({ code, party }) {
+  const { t } = useLang();
   const [said, setSaid] = useState("");
   const link = `${window.location.origin}/guestlist?from=${encodeURIComponent(code)}`;
 
@@ -396,7 +399,7 @@ function ForwardInvite({ code, party }) {
     <div className="mt-7 pt-5" style={{ borderTop: `1px solid ${theme.rule}` }}>
       <p className="m-0 text-center"
          style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.brass }}>
-        BRING SOMEONE
+        {t("bringSomeone")}
       </p>
       <p className="m-0 mt-2 text-center"
          style={{ ...fontText, fontSize: "15.5px", lineHeight: 1.55, color: theme.ink2 }}>
@@ -408,7 +411,7 @@ function ForwardInvite({ code, party }) {
                 style={{ ...fontUtility, fontSize: "10px", letterSpacing: "0.2em",
                          padding: "11px 22px", cursor: "pointer",
                          background: theme.ink, color: theme.bg, border: 0 }}>
-          {said ? said.toUpperCase() : "SEND AN INVITE"}
+          {said ? t("linkCopiedSend") : t("sendAnInvite")}
         </button>
       </p>
     </div>

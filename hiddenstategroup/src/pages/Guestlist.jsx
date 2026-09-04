@@ -1,5 +1,6 @@
 import { usePageMeta } from "../lib/seo";
 import { useSite } from "../lib/site";
+import { useLang } from "../lib/lang";
 import React, { useEffect, useState } from "react";
 import { Nav, Footer, useGoogleFonts, Field, inputStyle,
          IndexBand, PageHead, fontDisplay, fontUtility, fontText, theme } from "../components/Shared";
@@ -22,6 +23,7 @@ import * as api from "../lib/api";
 export default function Guestlist() {
   useGoogleFonts();
   const site = useSite();
+  const { t } = useLang();
   usePageMeta({
     title: "Guest list",
     description: "Request a place on the Hidden State guest list.",
@@ -105,7 +107,7 @@ export default function Guestlist() {
         { label: "MOST PER REQUEST", value: String(Math.max(1, Number(site.maxPeoplePerRequest) || 6)) },
         { label: "REPLY BY", value: "EMAIL" },
       ]} />
-      <PageHead flush kicker="THE GUEST LIST" title="Ask for a pass"
+      <PageHead flush kicker={t("theGuestList")} title={t("askForAPass")}
                 sub="ONE REQUEST, ONE ANSWER — BY EMAIL" />
 
       <section className="max-w-[560px] mx-auto px-[18px] pb-16">
@@ -113,7 +115,7 @@ export default function Guestlist() {
         {sent ? (
           <div className="mt-8 p-8 text-center" style={{ border: "1px solid " + theme.ink }}>
             <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-              {waiting ? "ON THE WAITING LIST" : "REQUEST RECEIVED"}
+              {waiting ? t("onTheWaitingList") : t("requestReceived")}
             </p>
 
             {waiting ? (
@@ -129,7 +131,7 @@ export default function Guestlist() {
                   {waiting}
                 </p>
                 <p className="m-0 mt-1" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.ink2 }}>
-                  IN THE QUEUE
+                  {t("inTheQueue")}
                 </p>
                 <p className="m-0 mt-4" style={{ ...fontText, fontSize: "16px", lineHeight: 1.55, color: theme.ink2 }}>
                   {thanks || "The list is full for this one. If a place comes free you will get your pass by email, in the order people asked."}
@@ -138,7 +140,7 @@ export default function Guestlist() {
             ) : (
               <>
                 <h2 className="mt-3 mb-2" style={{ ...fontDisplay, fontWeight: 400, fontSize: "28px", color: theme.ink }}>
-                  Thank you.
+                  {t("thankYou")}
                 </h2>
                 <p className="m-0" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>
                   {thanks || "We'll be in touch. If you're on the list, your pass arrives by email before the night — keep an eye on your junk folder too."}
@@ -148,17 +150,17 @@ export default function Guestlist() {
           </div>
         ) : (
           <form onSubmit={submit} className="mt-8 space-y-5">
-            <Field label="Full name">
+            <Field label={t("fullName")}>
               <input required style={inputStyle} value={form.name} onChange={update("name")} />
             </Field>
-            <Field label="Email">
+            <Field label={t("email")}>
               <input required type="email" style={inputStyle} value={form.email} onChange={update("email")} />
             </Field>
-            <Field label="Phone">
+            <Field label={t("phone")}>
               <input required type="tel" style={inputStyle} value={form.phone} onChange={update("phone")} />
             </Field>
 
-            <Field label="How many of you">
+            <Field label={t("howManyOfYou")}>
               <select style={inputStyle} value={form.people}
                       onChange={(e) => setForm((f) => ({ ...f, people: Number(e.target.value) }))}>
                 {/*
@@ -168,12 +170,12 @@ export default function Guestlist() {
                   to come from the same place.
                 */}
                 {Array.from({ length: Math.max(1, Number(site.maxPeoplePerRequest) || 6) }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>{n === 1 ? "Just me" : `${n} people`}</option>
+                  <option key={n} value={n}>{n === 1 ? t("justMe") : `${n} ${t("peopleWord")}`}</option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Anything we should know">
+            <Field label={t("anythingToKnow")}>
               <textarea
                 rows={3}
                 maxLength={150}
@@ -184,14 +186,14 @@ export default function Guestlist() {
               />
               <span className="block text-right mt-1"
                     style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink2 }}>
-                {150 - form.note.length} LEFT
+                {150 - form.note.length} {t("charsLeft")}
               </span>
             </Field>
 
             <label className="flex items-start gap-3 pt-1" style={{ cursor: "pointer" }}>
               <input type="checkbox" checked={form.age} onChange={update("age")} style={{ marginTop: "3px" }} />
               <span style={{ ...fontText, fontSize: "16px", lineHeight: 1.5, color: theme.ink }}>
-                I confirm I am {minimumAge} or over. ID may be requested at the door.
+                {t("iConfirmAge")} {minimumAge} {t("orOver")}
               </span>
             </label>
 
@@ -205,7 +207,7 @@ export default function Guestlist() {
             <button type="submit" disabled={sending} className="px-9 py-3.5"
                     style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em",
                              background: theme.ink, color: theme.bg, opacity: sending ? 0.6 : 1 }}>
-              {sending ? "SENDING…" : "ASK FOR A PASS"}
+              {sending ? t("sending") : t("askForAPass").toUpperCase()}
             </button>
 
             <p className="m-0 pt-2" style={{ ...fontText, fontSize: "14.5px", lineHeight: 1.55, color: theme.ink }}>

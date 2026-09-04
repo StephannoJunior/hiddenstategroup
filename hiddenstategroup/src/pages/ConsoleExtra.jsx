@@ -912,3 +912,145 @@ export function After({ parties = [] }) {
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   L03 · WHERE A RECORD LIVES
+   ═══════════════════════════════════════════════════════════════════════════
+
+   One record at a time, edited as a list and saved whole — the same shape as
+   the running order, and for the same reason: these get reordered and deleted
+   from the middle, and sending the finished list is the only version of that
+   which cannot half-apply.
+
+   PRE-SAVE IS A TICK, NOT A SEPARATE LIST. A row marked pre-save is shown
+   before the release date and hidden after it, and every other row does the
+   opposite. That means the same page turns itself over at midnight on release
+   day with nobody touching it — which is the entire point, because the person
+   who would have to remember is asleep.
+*/
+
+const PLATFORMS = [
+  "SPOTIFY", "APPLE MUSIC", "BEATPORT", "BANDCAMP",
+  "SOUNDCLOUD", "YOUTUBE", "TIDAL", "DEEZER", "TRAXSOURCE",
+];
+
+export function ReleaseLinks({ records = [] }) {
+  const [slug, setSlug] = useState(records[0]?.slug || "");
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    if (!slug) { setLoading(false); return; }
+    setLoading(true);
+    api.listReleaseLinks(slug).then((res) => {
+      setLoading(false);
+      if (res.ok) setRows((res.links || []).map((l) => ({
+        label: l.label, url: l.url, presave: !!l.presave,
+      })));
+      else setMsg(res.error || "Could not read the links.");
+    });
+  }, [slug]);
+  useEffect(() => { load(); }, [load]);
+
+  const set = (i, k, v) => setRows((list) => list.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  const add = (label = "") => setRows((list) => [...list, { label, url: "", presave: false }]);
+  const drop = (i) => setRows((list) => list.filter((_, j) => j !== i));
+  const move = (i, by) => setRows((list) => {
+    const next = [...list];
+    const j = i + by;
+    if (j < 0 || j >= next.length) return next;
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
+
+  const save = async () => {
+    setBusy(true);
+    setMsg("");
+    const res = await api.saveReleaseLinks(slug, rows.filter((r) => r.label.trim() && r.url.trim()));
+    setBusy(false);
+    setMsg(res.ok ? "Saved." : (res.error || "Could not save."));
+  };
+
+  const record = records.find((r) => r.slug === slug);
+  const dated = record && record.releaseDate && !Number.isNaN(new Date(record.releaseDate).getTime());
+  const out = !dated ? true : Date.now() >= new Date(record.releaseDate).getTime();
+
+  if (!records.length) return <Empty>No records yet.</Empty>;
+
+  return (
+    <Panel title="WHERE THIS RECORD LIVES"
+           right={`${rows.length} LINK${rows.length === 1 ? "" : "S"}`}>
+
+      <Note tone={msg === "Saved." ? "ok" : "bad"}>{msg}</Note>
+
+      <Field label="Which record">
+        <select value={slug} onChange={(e) => setSlug(e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+          {records.map((r) => (
+            <option key={r.slug} value={r.slug}>{r.title} — {r.artist}</option>
+          ))}
+        </select>
+      </Field>
+
+      <p className="m-0 mt-3 mb-5" style={{ ...fontText, fontSize: "16px", lineHeight: 1.55, color: theme.ink2 }}>
+        {!dated
+          ? "This record has no proper release date on it, so everything here is shown as already out. Pre-save rows will never appear until it gets one."
+          : out
+            ? `Out since ${new Date(record.releaseDate).toLocaleDateString()} — the ordinary links are showing and pre-save rows are hidden.`
+            : `Out on ${new Date(record.releaseDate).toLocaleDateString()} — only pre-save rows are showing until then. The page turns itself over at midnight; nobody needs to be awake for it.`}
+      </p>
+
+      {loading ? (
+        <Empty>Reading…</Empty>
+      ) : (
+        <>
+          {rows.map((r, i) => (
+            <div key={i} className="py-3" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+              <div className="flex gap-2 items-start">
+                <span style={{ ...fontUtility, fontSize: "10px", color: theme.brass, paddingTop: "12px",
+                               width: "24px", flex: "none", fontVariantNumeric: "tabular-nums" }}>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <div className="flex-1 grid gap-2" style={{ gridTemplateColumns: "minmax(120px,1fr) minmax(180px,2fr)" }}>
+                  <input placeholder="SPOTIFY" value={r.label}
+                         onChange={(e) => set(i, "label", e.target.value.toUpperCase())} style={inputStyle} />
+                  <input placeholder="https://…" value={r.url} inputMode="url"
+                         onChange={(e) => set(i, "url", e.target.value)} style={inputStyle} />
+                </div>
+                <div className="flex flex-col gap-1" style={{ paddingTop: "4px" }}>
+                  <Btn onClick={() => move(i, -1)} aria-label="Move up">↑</Btn>
+                  <Btn onClick={() => move(i, 1)} aria-label="Move down">↓</Btn>
+                  <Btn danger onClick={() => drop(i)} aria-label="Remove">×</Btn>
+                </div>
+              </div>
+              <label className="flex items-center gap-2.5 mt-2" style={{ cursor: "pointer", paddingLeft: "32px" }}>
+                <input type="checkbox" checked={r.presave}
+                       onChange={(e) => set(i, "presave", e.target.checked)} />
+                <span style={{ ...fontText, fontSize: "15px", color: r.presave ? theme.brass : theme.ink2 }}>
+                  Pre-save — shown only until release day, then this row disappears
+                </span>
+              </label>
+            </div>
+          ))}
+
+          <div className="flex flex-wrap gap-1.5 mt-5 mb-4">
+            {PLATFORMS.filter((n) => !rows.some((r) => r.label === n)).map((n) => (
+              <Btn key={n} onClick={() => add(n)}>+ {n}</Btn>
+            ))}
+            <Btn onClick={() => add("")}>+ SOMETHING ELSE</Btn>
+          </div>
+
+          <Btn wide on onClick={save} disabled={busy || !slug}>
+            {busy ? "SAVING…" : "SAVE THE LINKS"}
+          </Btn>
+
+          <p className="m-0 mt-4" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+            A link with no address is dropped when you save — that is how you
+            remove one you added by mistake.
+          </p>
+        </>
+      )}
+    </Panel>
+  );
+}

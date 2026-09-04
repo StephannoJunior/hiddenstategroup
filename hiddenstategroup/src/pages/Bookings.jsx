@@ -1,5 +1,6 @@
 import { usePageMeta } from "../lib/seo";
 import { useSite } from "../lib/site";
+import { useLang } from "../lib/lang";
 import React, { useState } from "react";
 import { Nav, Footer, useGoogleFonts, Field, inputStyle,
          IndexBand, PageHead, fontDisplay, fontUtility, fontText, theme } from "../components/Shared";
@@ -31,6 +32,7 @@ const ROOM_HINTS = ["Under 200", "200–500", "500–1000", "1000–3000", "3000
 export default function Bookings() {
   useGoogleFonts();
   const site = useSite();
+  const { t } = useLang();
   usePageMeta({
     title: "Bookings",
     description: "Book a Hidden State artist — dates, rooms and availability.",
@@ -80,7 +82,7 @@ export default function Bookings() {
         { label: "TERRITORY", value: "WORLDWIDE" },
         { label: "REPLY", value: open ? "BY EMAIL" : "CLOSED" },
       ]} />
-      <PageHead flush kicker="BOOKINGS" title="Book an artist"
+      <PageHead flush kicker={t("bookings")} title={t("bookAnArtist")}
                 sub="ASK ONCE — ANSWERED IN ONE REPLY" />
 
       <section className="max-w-[620px] mx-auto px-[18px] pb-16">
@@ -88,7 +90,7 @@ export default function Bookings() {
         {!open ? (
           <div className="mt-8 p-8 text-center" style={{ border: `1px solid ${theme.rule}`, background: theme.sunk }}>
             <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-              CLOSED
+              {t("closedForNow")}
             </p>
             <p className="m-0 mt-3" style={{ ...fontText, fontSize: "17px", lineHeight: 1.55, color: theme.ink }}>
               We are not taking enquiries through the site at the moment.
@@ -204,7 +206,7 @@ export default function Bookings() {
             <button type="submit" disabled={sending} className="px-9 py-3.5"
                     style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em",
                              background: theme.ink, color: theme.bg, opacity: sending ? 0.6 : 1 }}>
-              {sending ? "SENDING…" : "SEND THE ENQUIRY"}
+              {sending ? t("sending") : t("sendTheEnquiry")}
             </button>
           </form>
         )}

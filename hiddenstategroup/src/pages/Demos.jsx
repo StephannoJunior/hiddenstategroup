@@ -1,5 +1,6 @@
 import { usePageMeta } from "../lib/seo";
 import { useSite } from "../lib/site";
+import { useLang } from "../lib/lang";
 import React, { useState } from "react";
 import { Nav, Footer, useGoogleFonts, Field, inputStyle,
          IndexBand, PageHead, fontDisplay, fontUtility, fontText, theme } from "../components/Shared";
@@ -28,6 +29,7 @@ import * as api from "../lib/api";
 export default function Demos() {
   useGoogleFonts();
   const site = useSite();
+  const { t } = useLang();
   usePageMeta({
     title: "Demos",
     description: "Send Hidden State a demo. One link, and we listen to everything.",
@@ -72,7 +74,7 @@ export default function Demos() {
         { label: "WE ANSWER", value: open ? "WHAT WE CAN" : "NOTHING JUST NOW" },
         { label: "SEND", value: "ONE" },
       ]} />
-      <PageHead flush kicker="DEMOS" title="Send us one thing"
+      <PageHead flush kicker={t("demos")} title={t("sendUsOneThing")}
                 sub="A LINK — NOT A FOLDER, NOT AN ATTACHMENT" />
 
       <section className="max-w-[560px] mx-auto px-[18px] pb-16">
@@ -80,7 +82,7 @@ export default function Demos() {
         {!open ? (
           <div className="mt-8 p-8 text-center" style={{ border: `1px solid ${theme.rule}`, background: theme.sunk }}>
             <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.2em", color: theme.brass }}>
-              CLOSED
+              {t("closedForNow")}
             </p>
             <p className="m-0 mt-3" style={{ ...fontText, fontSize: "17px", lineHeight: 1.55, color: theme.ink }}>
               {site.demosClosedMessage ||
@@ -160,7 +162,7 @@ export default function Demos() {
             <button type="submit" disabled={sending} className="px-9 py-3.5"
                     style={{ ...fontUtility, fontSize: "10.5px", letterSpacing: "0.2em",
                              background: theme.ink, color: theme.bg, opacity: sending ? 0.6 : 1 }}>
-              {sending ? "SENDING…" : "SEND IT"}
+              {sending ? t("sending") : t("sendIt")}
             </button>
 
             <p className="m-0 pt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.55, color: theme.ink2 }}>

@@ -1,7 +1,8 @@
 import { usePageMeta, useAlbumSchema } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
-import React from "react";
+import React, { useEffect, useState } from "react";
+import * as api from "../lib/api";
 import {
   Nav, Footer, useGoogleFonts, Instagram,
   PageHead, IndexBand, fontDisplay, fontUtility, fontText, theme,
@@ -42,6 +43,8 @@ function Album({ a }) {
               {a.kind === "SINGLE" ? t("listen") : t("playAlbum")}
             </a>
           )}
+
+          <ReleaseLinks slug={a.slug} releaseDate={a.releaseDate} />
         </div>
       </div>
 
@@ -68,6 +71,73 @@ function Album({ a }) {
         ))}
       </div>
     </section>
+  );
+}
+
+/*
+  ── L03 · WHERE A RECORD LIVES ──────────────────────────────────────────────
+
+  Every platform a release is on, so a bio link can point at one page instead
+  of at whichever service we happen to prefer this month.
+
+  RELEASE DAY HAPPENS BY ITSELF. Rows marked `presave` show before the release
+  date and disappear after it; ordinary rows do the opposite. The switch is the
+  date already on the record, so nobody has to be awake at midnight to change a
+  page, and nobody has to remember a week later that they never did.
+
+  THE COMPARISON IS DONE IN LOCAL TIME, deliberately. A release is "out" when
+  it is the release date where the reader is, which is what every streaming
+  service does and what everybody expects. Comparing in UTC would show a
+  listener in Bucharest a pre-save button for two hours after their friends had
+  already heard it.
+
+  Loaded per record rather than with the page. There is nothing to show for
+  most releases, and a failed request leaves the section absent rather than
+  broken — this is an addition to a page that already works.
+*/
+function ReleaseLinks({ slug, releaseDate }) {
+  const [links, setLinks] = useState([]);
+
+  useEffect(() => {
+    if (!slug) return;
+    let alive = true;
+    api.listReleaseLinks(slug)
+      .then((res) => { if (alive && res.ok) setLinks(res.links || []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [slug]);
+
+  if (!links.length) return null;
+
+  const out = (() => {
+    if (!releaseDate) return true;                 // no date on file: treat as out
+    const when = new Date(releaseDate);
+    if (Number.isNaN(when.getTime())) return true; // "Spring 2026" is not a date
+    // Midnight local on the release date.
+    return Date.now() >= new Date(
+      when.getFullYear(), when.getMonth(), when.getDate()).getTime();
+  })();
+
+  const shown = links.filter((l) => (out ? !l.presave : !!l.presave));
+  if (!shown.length) return null;
+
+  return (
+    <div className="mt-6">
+      <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.2em", color: theme.brass }}>
+        {out ? "LISTEN EVERYWHERE" : "SAVE IT FOR RELEASE DAY"}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {shown.map((l) => (
+          <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer"
+             className="inline-block px-5 py-3"
+             style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.18em",
+                      color: theme.ink, border: `1px solid ${theme.ink}`,
+                      textDecoration: "none" }}>
+            {l.label.toUpperCase()} ↗
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
 

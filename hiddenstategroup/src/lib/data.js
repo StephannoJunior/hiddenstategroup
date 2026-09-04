@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import * as api from "./api";
 import ARTISTS_JSON from "../content/artists.json";
+import RECORDS_JSON from "../content/records.json";
 import EVENTS_JSON from "../content/events.json";
 import SETTINGS from "../content/settings.json";
 
@@ -125,3 +126,11 @@ export function useContent(kind, fallback) {
 }
 
 export const useArtists = () => useContent("artists", ARTISTS_JSON);
+
+/*
+  The releases, live from the server with the bundled file as the fallback —
+  the same arrangement as the roster. The public records page reads the
+  bundled ALBUMS directly because it must render before any request finishes;
+  this is for the console, where being current matters more than being instant.
+*/
+export const useRecords = () => useContent("records", RECORDS_JSON);
