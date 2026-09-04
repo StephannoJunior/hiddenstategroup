@@ -35,6 +35,7 @@ const PRECACHE = [
   "/icons/icon-192.jpg",
   "/icons/apple-touch-icon.jpg",
   "/wordmark-black.png",
+  "/mark.svg",
 ];
 
 self.addEventListener("install", (event) => {

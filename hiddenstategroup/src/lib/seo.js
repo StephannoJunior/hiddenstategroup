@@ -127,7 +127,7 @@ export function useArticleSchema(article) {
         "@type": "Organization",
         name: SITE,
         url: BASE,
-        logo: { "@type": "ImageObject", url: `${BASE}/wordmark-black.png` },
+        logo: { "@type": "ImageObject", url: `${BASE}/mark.svg` },
       },
       // Word count is a weak signal on its own, but it separates a real piece
       // from a two-line notice, and both live in this list.
@@ -157,7 +157,7 @@ export function useOrganisationSchema(accounts = []) {
     name: SITE,
     alternateName: "Hidden State Group",
     url: BASE,
-    logo: `${BASE}/wordmark-black.png`,
+    logo: `${BASE}/mark.svg`,
     image: `${BASE}/club.webp`,
     description:
       "Hidden State — record label, booking agency and artist roster.",

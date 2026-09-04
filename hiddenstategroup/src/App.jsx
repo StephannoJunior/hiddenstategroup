@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import GlassBar from "./components/GlassBar";
 import ErrorBoundary from "./components/ErrorBoundary";
+import Mark from "./components/Mark";
 import { LangProvider } from "./lib/lang";
 import { SiteProvider, useSite } from "./lib/site";
 import { countView } from "./lib/api";
@@ -171,8 +172,10 @@ function ClosedGate({ children }) {
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontFamily: "'EB Garamond', Georgia, serif", padding: "24px" }}>
       <div style={{ textAlign: "center", maxWidth: "420px" }}>
-        <img src="/wordmark-black.png" alt="Hidden State"
-             style={{ height: "44px", width: "auto", margin: "0 auto 26px", display: "block" }} />
+        {/* Outlines, so the holding page is sharp on every screen and needs
+            no image request on the one page most likely to be reached when
+            something is already wrong. */}
+        <Mark height={44} color={theme.ink} style={{ margin: "0 auto 26px" }} />
         <div style={{ borderTop: `2px solid ${theme.ink}` }} />
         <div style={{ borderTop: `1px solid ${theme.ink}`, marginTop: "3px" }} />
         <p style={{ fontSize: "20px", lineHeight: 1.5, marginTop: "26px" }}>

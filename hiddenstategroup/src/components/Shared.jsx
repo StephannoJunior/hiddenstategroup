@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { X, Search } from "lucide-react";
 import { MARK_SJ, MARK_SEAL, MARK_NOPROBLEM } from "../lib/marks";
+import Mark from "./Mark";
 import { ARTISTS } from "../lib/data";
 import { SOCIAL } from "../lib/social";
 import { LiveDateline, LanguageSwitch } from "./Dateline";
@@ -456,15 +457,30 @@ export function Nothing({ children, note = null }) {
     </div>
   );
 }
-export function Wordmark({ size = "h-9", dark = false }) {
-  // The official line logo. `dark` picks the ink version for paper backgrounds.
+/*
+  ── THE WORDMARK, NOW AN OUTLINE ──────────────────────────────────────────
+
+  This was two PNGs — one light, one dark — and they had already drifted
+  apart: /wordmark.png carried the group line and /wordmark-black.png did not,
+  so the masthead said one thing on paper and another on ink and nobody had
+  noticed.
+
+  One set of outlines replaces both. It takes `currentColor`, so the ground it
+  sits on decides its colour and there is nothing to keep in step; it is sharp
+  at any size and on any screen; and because it is real geometry it can be
+  drawn rather than merely shown.
+
+  The API is unchanged — a Tailwind height class and `dark` — so nothing that
+  calls this has to change. `size` still governs the height; the width follows
+  the artwork's own proportion rather than being guessed at.
+*/
+export function Wordmark({ size = "h-9", dark = false, style = {}, ...rest }) {
   return (
-    <img
-      fetchpriority="high"
-      decoding="async"
-      src={dark ? "/wordmark-black.png" : "/wordmark.png"}
-      alt="Hidden State"
+    <Mark
+      height={null}
       className={`${size} w-auto block`}
+      style={{ color: dark ? theme.ink : theme.bg, ...style }}
+      {...rest}
     />
   );
 }

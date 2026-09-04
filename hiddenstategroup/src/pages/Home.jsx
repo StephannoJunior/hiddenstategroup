@@ -2,6 +2,7 @@ import { SOCIAL } from "../lib/social";
 import { useOrganisationSchema, usePageMeta } from "../lib/seo";
 import { useLang } from "../lib/lang";
 import Img from "../components/Img";
+import Mark from "../components/Mark";
 import Countdown from "../components/Countdown";
 import { useSite } from "../lib/site";
 import React, { useEffect, useState } from "react";
@@ -123,9 +124,19 @@ function Mark() {
   */
   return (
     <Sleeve src={src} alt="" height={`clamp(300px, ${vw}vw, 620px)`} pos="center 46%">
-      <Img src="/wordmark.png" alt="Hidden State" eager transparent
-           className={`block${inked ? " hs-ink-on" : ""}`}
-           style={{ width: "min(340px, 66%)", marginBottom: "14px" }} />
+      {/*
+        The hero mark, as outlines. It was a PNG whose width was capped at
+        340px — beyond that it went soft, which is exactly where a hero wants
+        to be sharpest. This has no such ceiling, and it inherits the stock
+        colour rather than carrying it baked in.
+      */}
+      <Mark
+        height={null}
+        title="Hidden State"
+        className={`block${inked ? " hs-ink-on" : ""}`}
+        style={{ width: "min(420px, 72%)", height: "auto",
+                 color: theme.onInk, marginBottom: "14px" }}
+      />
       <p className="m-0" style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.24em", color: theme.onInk }}>
         FROM ANOTHER STATE OF MIND
       </p>
