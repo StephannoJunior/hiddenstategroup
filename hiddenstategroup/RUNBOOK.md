@@ -62,9 +62,29 @@ One `--command` per statement; D1 rejects a file with several in it.
     npx wrangler d1 execute hiddenstate --remote --file=migrate-votes-index2.sql
     npx wrangler d1 execute hiddenstate --remote --file=migrate-oops.sql
     npx wrangler d1 execute hiddenstate --remote --file=migrate-oops-index.sql
+    npx wrangler d1 execute hiddenstate --remote --file=migrate-next.sql
 
-Every migration file is written so that running it twice does nothing the
-second time. If you lose track of which have been applied, run them all.
+Every file above is written so that running it twice does nothing the second
+time. If you lose track of which have been applied, run them all.
+
+Then the three that **cannot** be written that way — SQLite has no
+`ADD COLUMN IF NOT EXISTS`, and D1 abandons the rest of a file after one
+statement fails, so these go one at a time:
+
+    npx wrangler d1 execute hiddenstate --remote --command "ALTER TABLE requests ADD COLUMN referrer TEXT"
+    npx wrangler d1 execute hiddenstate --remote --command "ALTER TABLE requests ADD COLUMN offer_expires TEXT"
+    npx wrangler d1 execute hiddenstate --remote --command "DROP INDEX idx_scans_admitted"
+
+Each is *expected* to fail if you have already run it (`duplicate column
+name`, `no such index`). That failure is safe and means the change is already
+there.
+
+**Read `migrate-next-alter.md` before the third one.** Dropping that index is
+what makes plus-ones and re-entry possible, and it is also what has been
+enforcing "a pass works once". The rule moves into the Worker, which counts
+admissions minus exits against each pass's own `admits` — not weakened, but
+moved into code. Confirm it at a door before you rely on it: scan one
+single-place pass twice and check the second is refused.
 
 ---
 
