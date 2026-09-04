@@ -102,7 +102,7 @@ export default function About() {
 
         <p className="text-center mt-9 m-0"
            style={{ ...fontDisplay, fontStyle: "italic", fontSize: "20px", color: theme.ink2 }}>
-          Estd. 2005 — located in Hidden State.
+          Estd. 2025 — located in Hidden State.
         </p>
       </section>
 

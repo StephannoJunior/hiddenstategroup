@@ -65,7 +65,7 @@ function Facts() {
     <IndexBand
       top
       items={[
-        { label: "EST", value: "2005" },
+        { label: "EST", value: "2025" },
         { label: "DIVISIONS", value: "05" },
         { label: "ROSTER", value: `${String(ARTISTS.length).padStart(2, "0")} ARTISTS` },
         { label: "CATALOGUE", value: `${String(ALBUMS.length).padStart(2, "0")} LP / ${String(tracks).padStart(2, "0")} TRK` },
