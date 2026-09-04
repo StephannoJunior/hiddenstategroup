@@ -216,9 +216,19 @@ export const maintenance = (action, extra = {}) =>
   with the boundary in it.
 */
 export async function uploadImage(file, folder = "posts") {
+  return uploadFile(file, { folder });
+}
+
+/*
+  The general form. `sealed` puts the file behind a kit link rather than on
+  the open web — a rider says what an artist needs backstage and where they
+  will be, and that is not a photograph.
+*/
+export async function uploadFile(file, { folder = "posts", sealed = false } = {}) {
   const body = new FormData();
   body.append("file", file);
   body.append("folder", folder);
+  if (sealed) body.append("sealed", "1");
 
   // Built as a Headers object so the type is unambiguous; the browser
   // still sets content-type itself, which multipart requires.
@@ -232,6 +242,50 @@ export async function uploadImage(file, folder = "posts") {
   } catch {
     return { ok: false, error: "Couldn't reach the server. Check the signal." };
   }
+}
+
+/*
+  ── K23 · A PHOTOGRAPH, IN THE THREE SIZES THAT ARE WANTED ────────────────
+
+  The browser makes the thumbnail and the web copy before anything is sent
+  (see lib/pictures.js), and all three go up together. The original is
+  uploaded untouched, because that is the one a printer will use.
+
+  THE FULL SIZE GOES FIRST, and that is deliberate: it is the only one that
+  cannot be made again. If the connection dies after it, the caller still has
+  a usable photograph and the two derived copies can be remade from it later.
+  Losing the original because a thumbnail was being uploaded first would be
+  the one unrecoverable failure here.
+
+  Returns one object describing the photograph, which is what goes into the
+  kit — not three unrelated uploads for the caller to keep track of.
+*/
+export async function uploadPicture(file, folder = "kits") {
+  const { threeSizes, describe } = await import("./pictures");
+  const sizes = await threeSizes(file);
+
+  const full = await uploadFile(sizes.full, { folder });
+  if (!full.ok) return full;
+
+  const web = sizes.web ? await uploadFile(sizes.web, { folder }) : null;
+  const thumb = sizes.thumb ? await uploadFile(sizes.thumb, { folder }) : null;
+
+  return {
+    ok: true,
+    photo: {
+      url: full.path,
+      // A missing derived copy falls back to the original rather than to
+      // nothing: a heavy page beats a broken one.
+      web: (web && web.ok && web.path) || full.path,
+      thumb: (thumb && thumb.ok && thumb.path) || (web && web.ok && web.path) || full.path,
+      width: sizes.width,
+      height: sizes.height,
+      bytes: full.bytes || 0,
+      note: describe(full.bytes || 0, sizes.width, sizes.height),
+      credit: "",
+      caption: "",
+    },
+  };
 }
 
 export const listMedia = () => call("/media");
@@ -574,13 +628,55 @@ export const decideBooking = (id, status, note) =>
   call(`/bookings/${id}`, { method: "PATCH", body: { status, note } });
 
 // ── L02 · the press kit ─────────────────────────────────────────────────────
-export const readKitByLink = (token) =>
-  call(`/epk/link/${encodeURIComponent(token)}`, { auth: false });
+/*
+  The word travels in the address rather than a header, because the sealed
+  files, the ZIP and the one-sheet are plain links the browser follows — and a
+  header cannot be attached to those. It is a short-lived shared word for one
+  kit, not a password to an account.
+*/
+export const readKitByLink = (token, word) =>
+  call(`/epk/link/${encodeURIComponent(token)}${word ? `?word=${encodeURIComponent(word)}` : ""}`,
+       { auth: false });
 export const readKit = (artistId) => call(`/epk/artist/${artistId}`);
 export const saveKit = (artistId, kit) =>
   call(`/epk/artist/${artistId}`, { method: "PUT", body: kit });
 
 // ── L03 · where a record lives ──────────────────────────────────────────────
+// ── the press kit · K01–K20 ────────────────────────────────────────────────
+
+// Everything the kit holds beyond the fields epk already had — the stage
+// plot, selected dates, quotes, the players, the contact. One document.
+export const readKitExtra = (artistId) => call(`/epk/extra/${artistId}`);
+export const saveKitExtra = (artistId, data) =>
+  call(`/epk/extra/${artistId}`, { method: "PUT", body: data });
+
+// K06 · start from another artist's kit. The rider and the hospitality are
+// most of what is copied; the biography and the photographs never are.
+export const copyKit = (fromId, toId) =>
+  call("/epk/copy", { method: "POST", body: { from: fromId, to: toId } });
+
+// K17 · when the link has been opened. Times only — never who.
+export const kitOpens = (token) => call(`/share/${encodeURIComponent(token)}/opens`);
+
+// K20 · a word on the door. An empty word takes the password off.
+export const setShareWord = (token, word) =>
+  call(`/share/${encodeURIComponent(token)}/word`, { method: "PUT", body: { word } });
+
+/*
+  A sealed file — the rider, the stage plot — is reachable only through a live
+  kit link, so its address carries the token rather than the bucket key. These
+  are plain addresses rather than fetches: the browser downloads them, and a
+  PDF should open in the viewer the reader already has.
+*/
+export const kitFileUrl = (token, key) =>
+  `/api/kit/${encodeURIComponent(token)}/file/${encodeURIComponent(key)}`;
+
+// K15 · everything at full size, in one download.
+export const kitZipUrl = (token) => `/api/kit/${encodeURIComponent(token)}/all.zip`;
+
+// K16 · the one-sheet, generated from the kit so it can never disagree with it.
+export const kitSheetUrl = (token) => `/api/kit/${encodeURIComponent(token)}/one-sheet.html`;
+
 export const listReleaseLinks = (record) =>
   call(`/links?record=${encodeURIComponent(record)}`, { auth: false });
 export const saveReleaseLinks = (record, links) =>

@@ -2352,6 +2352,7 @@ const SETTING_SECTIONS = [
   "THE SITE",
   "THE GUEST LIST",
   "THE WAITING LIST",
+  "PRESS KITS",
   "DEMOS",
   "BOOKINGS",
   "EMAIL",
@@ -3054,6 +3055,53 @@ function Settings({ parties }) {
           <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
             Their position is shown underneath this, in figures. A number is
             something to wait for; "full" is a door closing.
+          </p>
+        </div>
+      </Section>
+
+      <Section title="PRESS KITS" {...saver("PRESS KITS")}>
+        <Switch k="kitZip" label="Let a promoter take everything in one download"
+                help="A ZIP with the photographs at full size, the logos, the rider and the biographies. This is the single most requested thing from any press kit, and the reason people ask for a Dropbox folder instead of using the link you sent." />
+        <Switch k="kitOnesheet" label="Offer a printable one-sheet"
+                help="One page built from the kit — the main photograph, the short biography, selected dates and the contact. Because it is generated it can never disagree with the kit." />
+        <Switch k="kitWatermark" label="Mark the photographs on the page"
+                help="A faint mark on what is shown, never on what is downloaded. It makes a screenshot obviously a screenshot without handing a promoter a watermarked file they cannot use — which would be worse than no watermark at all." />
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            What the mark says
+          </p>
+          <input value={values.kitWatermarkText}
+                 onChange={(e) => set("kitWatermarkText", e.target.value)}
+                 style={{ ...inputStyle, width: "100%" }} />
+        </div>
+
+        <Choice k="kitLinkDays" label="How long a new kit link lasts"
+                help="Nothing here is retrospective — links you have already made keep whatever they were given. A kit link that never expires is the right default: it lives in a promoter's inbox for a year, and it is killed on purpose rather than by surprise."
+                options={[
+                  { value: 0, label: "UNTIL REVOKED" },
+                  { value: 30, label: "30 DAYS" },
+                  { value: 90, label: "90 DAYS" },
+                  { value: 365, label: "A YEAR" },
+                ]} />
+
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            The line at the foot of every kit
+          </p>
+          <input value={values.kitFooterNote}
+                 onChange={(e) => set("kitFooterNote", e.target.value)}
+                 style={{ ...inputStyle, width: "100%" }} />
+        </div>
+        <div className="py-3">
+          <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+            Who to write to when an artist has nobody set
+          </p>
+          <input value={values.kitContactFallback}
+                 onChange={(e) => set("kitContactFallback", e.target.value)}
+                 placeholder="bookings@hiddenstategroup.com"
+                 style={{ ...inputStyle, width: "100%" }} />
+          <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+            So a promoter is never left with a kit and no way to reach anybody.
           </p>
         </div>
       </Section>

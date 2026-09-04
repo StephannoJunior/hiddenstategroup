@@ -710,6 +710,26 @@ const DEFAULT_SETTINGS = {
     Both refused on the server when closed. The page hides the form as a
     courtesy; this is what actually says no.
   */
+  /*
+    ── PRESS KITS ───────────────────────────────────────────────────────────
+
+    Everything about a kit that should be changeable without a deploy. The
+    two that matter most are at the top: whether a promoter can take the whole
+    thing in one download, and how long a link you make today keeps working.
+  */
+  kitZip: true,               // K15 · offer everything as one download
+  kitOnesheet: true,          // K16 · offer the printable one page
+  kitWatermark: false,        // K19 · mark the previews, never the downloads
+  kitWatermarkText: "HIDDEN STATE — PRESS USE",
+  // K18 · how long a new link lasts. 0 means it does not expire and is
+  // revoked by hand instead, which is right for a kit and wrong for anything
+  // else. Days.
+  kitLinkDays: 0,
+  kitFooterNote: "Private link — please do not publish it.",
+  // Used on a kit whose artist has no contact of their own, so a promoter is
+  // never left with no way to reach anybody.
+  kitContactFallback: "",
+
   demosOpen: true,
   demosClosedMessage: "We are not listening to demos at the moment. Try again in a few weeks.",
   demosNote: "One link — SoundCloud, Drive, wherever it lives. We listen to everything and answer what we can.",
@@ -1097,9 +1117,158 @@ async function topUpPool(env, lowWater) {
 const PRIVATE_PREFIX = "backups/";
 const KEEP_BACKUPS = 12;
 
+/*
+  ── K24 · THE RIDER IS NOT PUBLIC ──────────────────────────────────────────
+
+  /media/ has no login on it, by design: it serves the photographs on the
+  site. Anything in the bucket is therefore readable by anyone who knows its
+  name, and `backups/` was carved out for exactly that reason.
+
+  A press kit needs a second carve-out. A photograph is meant to be shared —
+  that is what the kit is for. A RIDER IS NOT: it says what an artist needs
+  backstage, and often where they will be and when. It should be readable only
+  through a live, unrevoked kit link, and stop being readable the moment that
+  link is killed.
+
+  So files uploaded to a kit as documents go under `sealed/`, this route
+  refuses them the same way it refuses backups, and /kit/<token>/file/<key>
+  is the only way to them.
+*/
+const SEALED_PREFIX = "sealed/";
+const isReserved = (key) =>
+  key.startsWith(PRIVATE_PREFIX) || key.startsWith(SEALED_PREFIX);
+
 // A table can grow without anyone watching. Rather than fail on a huge one,
 // take the newest rows and say so in the file.
 const MAX_ROWS = 20000;
+
+/*
+  ── A ZIP, BY HAND ──────────────────────────────────────────────────────────
+
+  K15 needs to hand a promoter one download with the photographs, the logos,
+  the rider and the words in it. That means writing a ZIP, and there is no
+  library here to do it — nothing can be installed into a Worker at runtime,
+  and adding a dependency for this would be a strange trade.
+
+  It turns out not to need one. A ZIP is three things in a row:
+
+    · for each file: a small header, then the file's bytes
+    · then a directory listing every file and where it started
+    · then a record saying where the directory is
+
+  STORED, NOT DEFLATED — compression method 0. Two reasons, and the second is
+  the real one: implementing DEFLATE by hand would be a genuinely hard piece
+  of code to get right, and everything going in here is a JPEG, a PNG or a
+  PDF, all of which are already compressed. Deflating them would spend a lot
+  of effort to make the file very slightly LARGER.
+
+  The one fiddly part is CRC-32, which every entry must carry and which the
+  reader checks. Get it wrong and the archive opens and then reports every
+  file as corrupt, which is worse than not opening at all.
+*/
+
+let CRC_TABLE = null;
+function crcTable() {
+  if (CRC_TABLE) return CRC_TABLE;
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  CRC_TABLE = t;
+  return t;
+}
+
+function crc32(bytes) {
+  const t = crcTable();
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = t[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/*
+  A name safe to put in an archive and on a stranger's disk. Not paranoia:
+  a path separator or a leading dot in an archive entry is a real attack, and
+  a colon in a filename simply fails to extract on Windows.
+*/
+function safeName(text) {
+  return String(text || "file")
+    .normalize("NFKD")
+    .replace(/[^\w\s.-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/^[.-]+/, "")
+    .slice(0, 70) || "file";
+}
+
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const parts = [];
+  const dir = [];
+  let offset = 0;
+
+  const u16 = (n) => [n & 0xFF, (n >>> 8) & 0xFF];
+  const u32 = (n) => [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF];
+
+  for (const file of files) {
+    const nameBytes = enc.encode(file.name);
+    const data = file.bytes;
+    const crc = crc32(data);
+
+    const local = [
+      ...u32(0x04034b50),   // local file header
+      ...u16(20),           // version needed
+      ...u16(0x0800),       // flags — bit 11: the name is UTF-8
+      ...u16(0),            // method 0: stored
+      ...u16(0), ...u16(0), // time and date, left at zero
+      ...u32(crc),
+      ...u32(data.length),  // compressed size
+      ...u32(data.length),  // uncompressed size
+      ...u16(nameBytes.length),
+      ...u16(0),            // no extra field
+    ];
+    parts.push(new Uint8Array(local), nameBytes, data);
+
+    dir.push({ nameBytes, crc, size: data.length, offset });
+    offset += local.length + nameBytes.length + data.length;
+  }
+
+  const central = [];
+  for (const e of dir) {
+    central.push(...[
+      ...u32(0x02014b50),   // central directory header
+      ...u16(20), ...u16(20),
+      ...u16(0x0800), ...u16(0),
+      ...u16(0), ...u16(0),
+      ...u32(e.crc),
+      ...u32(e.size), ...u32(e.size),
+      ...u16(e.nameBytes.length),
+      ...u16(0), ...u16(0), ...u16(0),
+      ...u16(0), ...u32(0),
+      ...u32(e.offset),
+    ], ...e.nameBytes);
+  }
+  const centralBytes = new Uint8Array(central);
+
+  const end = new Uint8Array([
+    ...u32(0x06054b50),     // end of central directory
+    ...u16(0), ...u16(0),
+    ...u16(dir.length), ...u16(dir.length),
+    ...u32(centralBytes.length),
+    ...u32(offset),
+    ...u16(0),
+  ]);
+
+  let total = centralBytes.length + end.length;
+  for (const p of parts) total += p.length;
+
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  out.set(centralBytes, at); at += centralBytes.length;
+  out.set(end, at);
+  return out;
+}
 
 async function backupDatabase(env) {
   if (!env.MEDIA) return { ok: false, error: "No bucket is connected." };
@@ -1624,15 +1793,67 @@ async function handleApi(request, env, url, ctx) {
     const file = form && form.get("file");
     if (!file || typeof file === "string") return fail("No file received.");
 
-    const ALLOWED = {
+    /*
+      ── K22 · WHAT MAY BE UPLOADED, AND THE ONE TYPE THAT IS DIFFERENT ─────
+
+      Pictures were the only thing allowed, which is why a press kit had to be
+      assembled out of pasted addresses. Documents and archives are added here:
+      a rider is a PDF, and a promoter putting your mark on a poster wants the
+      vector, not a screenshot of it.
+
+      SVG IS NOT IN THIS LIST, and its absence is the whole point.
+
+      An SVG is a document that can contain JavaScript. Served from
+      hiddenstategroup.com it runs with this site's privileges — it can read
+      the signed-in session and act as whoever opened it. "Only the team can
+      upload" is not a defence: the team is the target worth attacking.
+
+      Of the three ways to have SVG safely, this takes the second: it does not
+      arrive as an SVG at all. A designer's .svg goes inside a ZIP, which
+      cannot execute anything and which every design tool opens without
+      thinking about it. That costs a promoter one double-click and costs us
+      no attack surface. Serving uploads from a separate domain is the fuller
+      answer and is a DNS change plus an afternoon; if that is ever done, SVG
+      can be allowed directly and this comment should be revisited.
+    */
+    const PICTURES = {
       "image/jpeg": "jpg", "image/png": "png",
       "image/webp": "webp", "image/gif": "gif",
     };
-    const ext = ALLOWED[file.type];
-    if (!ext) return fail("Images only — JPEG, PNG, WebP or GIF.");
+    const DOCUMENTS = {
+      "application/pdf": "pdf",
+      "application/zip": "zip",
+      "application/x-zip-compressed": "zip",
+      "application/postscript": "eps",     // .eps and .ai are both this
+      "font/otf": "otf", "font/ttf": "ttf",
+      "text/plain": "txt",
+    };
+    const ext = PICTURES[file.type] || DOCUMENTS[file.type];
+    if (!ext) {
+      return fail(
+        /^image\/svg/.test(file.type)
+          ? "An SVG cannot be uploaded on its own — put it in a ZIP and upload that."
+          : "Pictures (JPEG, PNG, WebP, GIF) and files (PDF, ZIP, EPS, AI) only."
+      );
+    }
 
-    const MAX = 8 * 1024 * 1024;
-    if (file.size > MAX) return fail("That image is over 8MB. Please shrink it first.");
+    /*
+      ── K21 · BIGGER FILES ────────────────────────────────────────────────
+
+      The cap was 8MB, which is under half of what comes out of a real camera,
+      and "shrink it first" is precisely the step nobody does. The browser now
+      makes the web-sized copies before uploading, so what arrives here at full
+      size is the print original — and that is the one worth keeping whole.
+
+      Storage is not the reason for a cap; a roster's worth of photographs is
+      pennies a month. The reason is that a Worker holds the request while it
+      streams, so this is the size beyond which an upload on a hotel wifi
+      starts failing in ways that are hard to explain to anybody.
+    */
+    const MAX = 40 * 1024 * 1024;
+    if (file.size > MAX) {
+      return fail(`That file is ${(file.size / 1048576).toFixed(0)}MB. The limit is 40MB.`);
+    }
 
     /*
       The stored name is ours, not theirs. A filename from a phone can contain
@@ -1641,17 +1862,50 @@ async function handleApi(request, env, url, ctx) {
     */
     const folder = (form.get("folder") || "uploads").toString().replace(/[^a-z0-9-]/gi, "").slice(0, 24) || "uploads";
     const stamp = new Date().toISOString().slice(0, 10);
-    const key = `${folder}/${stamp}-${randomHex(6)}.${ext}`;
+
+    /*
+      `sealed` puts the file behind a kit link instead of on the open web —
+      see SEALED_PREFIX. The caller asks for it; the prefix is built here so a
+      folder name can never reach into it by accident.
+    */
+    const sealed = form.get("sealed") === "1" || form.get("sealed") === "true";
+    const key = sealed
+      ? `${SEALED_PREFIX}${folder}/${stamp}-${randomHex(10)}.${ext}`
+      : `${folder}/${stamp}-${randomHex(6)}.${ext}`;
 
     await env.MEDIA.put(key, file.stream(), {
-      httpMetadata: { contentType: file.type, cacheControl: "public, max-age=31536000, immutable" },
-      customMetadata: { uploadedBy: who.username, originalName: String(file.name || "").slice(0, 120) },
+      httpMetadata: {
+        contentType: file.type,
+        // A sealed file must not sit in a shared cache — the whole point is
+        // that access is decided per request, by a link that can be revoked.
+        cacheControl: sealed ? "private, max-age=0, no-store"
+                             : "public, max-age=31536000, immutable",
+      },
+      customMetadata: {
+        uploadedBy: who.username,
+        originalName: String(file.name || "").slice(0, 120),
+      },
     });
 
-    return json({ ok: true, path: `/media/${key}`, key });
+    return json({
+      ok: true,
+      key,
+      sealed,
+      bytes: file.size,
+      kind: PICTURES[file.type] ? "picture" : "file",
+      // A sealed file has no public address at all. Giving it one that 404s
+      // would be worse than giving it none.
+      path: sealed ? null : `/media/${key}`,
+      name: String(file.name || "").slice(0, 120),
+    });
   }
 
   // What has been uploaded, so the editor can offer them.
+  /*
+    The picture list the console's picker shows. Sealed files are deliberately
+    absent: they are documents behind a kit link, not photographs to choose
+    from, and offering them here would put a rider one click from a blog post.
+  */
   if (path === "/media" && method === "GET") {
     const who = await readSession(env, request);
     if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
@@ -3153,6 +3407,19 @@ async function handleApi(request, env, url, ctx) {
     if (!expires && kind === "DOOR") {
       expires = new Date(Date.now() + 36 * 3600 * 1000).toISOString();
     }
+    /*
+      ── K18 · A KIT LINK'S OWN CLOCK ─────────────────────────────────────
+      From the setting rather than hardcoded, because how long a kit link
+      should live is a decision about how you work — a link for one promoter
+      and a link on a roster page want different answers. Zero means it does
+      not expire and is revoked by hand instead, which is the default and the
+      right one for a kit.
+    */
+    if (!expires && kind === "EPK") {
+      const cfgLink = await getSettings(env);
+      const days = Math.max(0, Number(cfgLink.kitLinkDays) || 0);
+      if (days > 0) expires = new Date(Date.now() + days * 86400000).toISOString();
+    }
 
     await env.DB.prepare(
       "INSERT INTO share_links (token, kind, ref, label, expires_at, created_at, created_by) " +
@@ -3522,9 +3789,501 @@ async function handleApi(request, env, url, ctx) {
     in forwarded email threads with people we have never met. It is sent only
     when the artist's own record says it should be.
   */
+  /*
+    ═══════════════════════════════════════════════════════════════════════
+    THE PRESS KIT · K01–K20
+    ═══════════════════════════════════════════════════════════════════════
+  */
+
+  /*
+    ── THE REST OF THE KIT ─────────────────────────────────────────────────
+    One JSON document per artist — the stage plot, selected dates, quotes,
+    the players, the contact. See migrate-kit.sql for why it is one column.
+  */
+  if (path.startsWith("/epk/extra/") && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const id = decodeURIComponent(path.slice(11));
+    const row = await env.DB.prepare("SELECT data FROM epk_extra WHERE artist_id = ?")
+      .bind(id).first().catch(() => null);
+    let data = {};
+    try { data = JSON.parse(row?.data || "{}"); } catch { data = {}; }
+    return json({ ok: true, extra: data });
+  }
+
+  if (path.startsWith("/epk/extra/") && method === "PUT") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const id = Number(decodeURIComponent(path.slice(11)));
+    if (!id) return fail("Which artist?");
+
+    /*
+      SHAPED, NOT TRUSTED. The column is JSON, which means the browser could
+      put anything at all in it — and a document that is read back and drawn
+      into a page is exactly the wrong place to keep whatever arrives. Every
+      field is named here, capped here, and anything unrecognised is dropped.
+    */
+    const t = (v, n) => (v == null ? null : String(v).slice(0, n));
+    const list = (v, n, shape) =>
+      (Array.isArray(v) ? v : []).slice(0, n).map(shape).filter(Boolean);
+
+    const shaped = {
+      stagePlot: body.stagePlot ? {
+        url: t(body.stagePlot.url, 400),
+        key: t(body.stagePlot.key, 300),
+        name: t(body.stagePlot.name, 120),
+        sealed: !!body.stagePlot.sealed,
+      } : null,
+      riderFile: body.riderFile ? {
+        key: t(body.riderFile.key, 300),
+        name: t(body.riderFile.name, 120),
+        bytes: Number(body.riderFile.bytes) || 0,
+      } : null,
+      dates: list(body.dates, 40, (d) => {
+        const venue = t(d && d.venue, 100);
+        return venue ? { venue, city: t(d.city, 60), year: t(d.year, 12) } : null;
+      }),
+      quotes: list(body.quotes, 20, (q) => {
+        const text = t(q && q.text, 400);
+        return text ? { text, who: t(q.who, 100), where: t(q.where, 100) } : null;
+      }),
+      listen: list(body.listen, 6, (l) => {
+        const url = t(l && l.url, 500);
+        return url && /^https?:\/\//i.test(url) ? { url, label: t(l.label, 60) } : null;
+      }),
+      video: t(body.video, 500),
+      territories: t(body.territories, 300),
+      updatedNote: t(body.updatedNote, 200),
+    };
+
+    await env.DB.prepare(
+      "INSERT INTO epk_extra (artist_id, data, updated_at, updated_by) VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT (artist_id) DO UPDATE SET data = excluded.data, " +
+      "  updated_at = excluded.updated_at, updated_by = excluded.updated_by"
+    ).bind(id, JSON.stringify(shaped), now(), who.username).run();
+    return json({ ok: true });
+  }
+
+  /*
+    ── K06 · START FROM ANOTHER ARTIST'S KIT ───────────────────────────────
+
+    WHAT IS COPIED AND WHAT IS NOT, deliberately. The rider, the hospitality
+    and the contact are usually identical across a roster and are the tedious
+    part. The biographies and the photographs are NEVER copied: a kit that
+    silently arrives holding another artist's biography is how the wrong name
+    ends up on a poster, and it would be found out by the one promoter who
+    read both.
+  */
+  if (path === "/epk/copy" && method === "POST") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const from = Number(body.from), to = Number(body.to);
+    if (!from || !to || from === to) return fail("Copy from which artist, to which?");
+
+    const src = await env.DB.prepare("SELECT * FROM epk WHERE artist_id = ?").bind(from).first();
+    if (!src) return fail("That artist has no kit to copy.", 404);
+
+    const existing = await env.DB.prepare("SELECT * FROM epk WHERE artist_id = ?").bind(to).first();
+    await env.DB.prepare(
+      "INSERT INTO epk (artist_id, bio_short, bio_long, rider, hospitality, photos, logos, links, " +
+      "  contact, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT (artist_id) DO UPDATE SET rider = excluded.rider, " +
+      "  hospitality = excluded.hospitality, contact = excluded.contact, " +
+      "  logos = excluded.logos, updated_at = excluded.updated_at, updated_by = excluded.updated_by"
+    ).bind(to,
+      existing?.bio_short || null, existing?.bio_long || null,
+      src.rider, src.hospitality,
+      existing?.photos || "[]",          // never the photographs
+      src.logos || "[]",
+      existing?.links || "[]",
+      src.contact, now(), who.username).run();
+
+    const extra = await env.DB.prepare("SELECT data FROM epk_extra WHERE artist_id = ?")
+      .bind(from).first().catch(() => null);
+    if (extra?.data) {
+      let d = {};
+      try { d = JSON.parse(extra.data); } catch { d = {}; }
+      // The dates and the quotes belong to the artist who earned them.
+      const carried = JSON.stringify({
+        stagePlot: null, riderFile: d.riderFile || null,
+        dates: [], quotes: [], listen: [], video: null,
+        territories: d.territories || null,
+      });
+      await env.DB.prepare(
+        "INSERT INTO epk_extra (artist_id, data, updated_at, updated_by) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT (artist_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at"
+      ).bind(to, carried, now(), who.username).run();
+    }
+    return json({ ok: true, copied: ["rider", "hospitality", "contact", "logos", "territories"] });
+  }
+
+  /*
+    ── K17 · WHEN THE LINK WAS OPENED ──────────────────────────────────────
+    Times, and nothing else. See migrate-kit.sql.
+  */
+  if (path.match(/^\/share\/[^/]+\/opens$/) && method === "GET") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const token = decodeURIComponent(path.split("/")[2]);
+    const rows = await env.DB.prepare(
+      "SELECT at FROM share_opens WHERE token = ? ORDER BY at DESC LIMIT 200"
+    ).bind(token).all().catch(() => ({ results: [] }));
+    return json({ ok: true, opens: (rows.results || []).map((r) => r.at) });
+  }
+
+  /*
+    ── K20 · A WORD ON THE DOOR ────────────────────────────────────────────
+    Hashed and salted like any other password. An empty word removes it.
+  */
+  if (path.match(/^\/share\/[^/]+\/word$/) && method === "PUT") {
+    const who = await readSession(env, request);
+    if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
+    const token = decodeURIComponent(path.split("/")[2]);
+    const word = String(body.word || "").trim();
+
+    if (!word) {
+      await env.DB.prepare("DELETE FROM share_secrets WHERE token = ?").bind(token).run();
+      return json({ ok: true, cleared: true });
+    }
+    if (word.length < 4) return fail("A word of at least four letters, please.");
+
+    const salt = randomHex(16);
+    const hash = await hashPassword(word, salt);
+    await env.DB.prepare(
+      "INSERT INTO share_secrets (token, hash, salt, created_at, created_by) VALUES (?, ?, ?, ?, ?) " +
+      "ON CONFLICT (token) DO UPDATE SET hash = excluded.hash, salt = excluded.salt, " +
+      "  created_at = excluded.created_at, created_by = excluded.created_by"
+    ).bind(token, hash, salt, now(), who.username).run();
+    return json({ ok: true });
+  }
+
+  /*
+    ── OPENING A KIT LINK ──────────────────────────────────────────────────
+
+    One function, because there are now four ways in — the page, a sealed
+    file, the ZIP and the one-sheet — and every one of them has to answer the
+    same questions in the same order. Written once, they cannot drift apart;
+    written four times, one of them eventually forgets the password.
+  */
+  const openKit = async (token, given) => {
+    const row = await env.DB.prepare("SELECT * FROM share_links WHERE token = ?")
+      .bind(token).first();
+    if (!row || row.revoked || row.kind !== "EPK") return { error: "This link is not working.", status: 404 };
+    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+      return { error: "This link has expired. Ask for a new one.", status: 410 };
+    }
+
+    const secret = await env.DB.prepare("SELECT hash, salt FROM share_secrets WHERE token = ?")
+      .bind(token).first().catch(() => null);
+    if (secret) {
+      if (!given) return { needsWord: true, status: 401 };
+      const tried = await hashPassword(String(given), secret.salt);
+      if (!safeEqual(tried, secret.hash)) {
+        return { needsWord: true, wrong: true, error: "That is not the word.", status: 401 };
+      }
+    }
+    return { link: row };
+  };
+
+  const noteOpen = async (token) => {
+    await env.DB.prepare(
+      "UPDATE share_links SET uses = uses + 1, last_used = ? WHERE token = ?"
+    ).bind(now(), token).run().catch(() => {});
+    await env.DB.prepare("INSERT INTO share_opens (token, at) VALUES (?, ?)")
+      .bind(token, now()).run().catch(() => {});
+  };
+
+  /*
+    ── K24 · A SEALED FILE ─────────────────────────────────────────────────
+
+    The rider and the stage plot. Reachable only through a live kit link, and
+    unreachable the moment that link is revoked or expires — which is the
+    whole difference between this and putting them in the public bucket.
+
+    The key is checked against the sealed prefix rather than trusted: without
+    that line this route would happily hand out a database backup to anyone
+    who put its name in the address.
+  */
+  if (path.match(/^\/kit\/[^/]+\/file\//) && method === "GET") {
+    const parts = path.split("/");
+    const token = decodeURIComponent(parts[2]);
+    const key = decodeURIComponent(parts.slice(4).join("/"));
+
+    const gate = await openKit(token, url.searchParams.get("word"));
+    if (gate.error || gate.needsWord) {
+      return new Response(gate.error || "A word is needed.", { status: gate.status });
+    }
+    if (!key.startsWith(SEALED_PREFIX)) return new Response("Not found", { status: 404 });
+    if (!env.MEDIA) return new Response("Not found", { status: 404 });
+
+    const object = await env.MEDIA.get(key);
+    if (!object) return new Response("Not found", { status: 404 });
+
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    // Never in a shared cache: access is decided per request by a link that
+    // can be killed, and a cached copy would outlive the killing.
+    headers.set("cache-control", "private, max-age=0, no-store");
+    headers.set("content-disposition",
+      `inline; filename="${(object.customMetadata?.originalName || "file").replace(/["\\]/g, "")}"`);
+    return new Response(object.body, { headers });
+  }
+
+  /*
+    ── K15 · EVERYTHING, IN ONE DOWNLOAD ───────────────────────────────────
+
+    The single most asked-for thing in any press kit, and the reason promoters
+    ask for a Dropbox folder instead of using the link you sent.
+
+    BUILT BY HAND, STORED, NOT DEFLATED. A ZIP with no compression is a
+    container: a header, each file's bytes, then a directory at the end. That
+    is a hundred lines here and needs no library — and there is nothing to
+    gain by compressing anyway, because JPEGs and PDFs are already compressed
+    and would come out fractionally larger.
+
+    THE LIMIT IS MEMORY, honestly. A Worker holds this in memory while it
+    builds, so it caps at a sensible total and says so rather than dying
+    halfway through a download somebody is waiting on.
+  */
+  if (path.match(/^\/kit\/[^/]+\/all\.zip$/) && method === "GET") {
+    const token = decodeURIComponent(path.split("/")[2]);
+    const gate = await openKit(token, url.searchParams.get("word"));
+    if (gate.error || gate.needsWord) {
+      return new Response(gate.error || "A word is needed.", { status: gate.status });
+    }
+    const cfg = await getSettings(env);
+    if (!cfg.kitZip) return new Response("Not available.", { status: 404 });
+
+    const artist = await env.DB.prepare("SELECT name FROM artists WHERE id = ?")
+      .bind(gate.link.ref).first();
+    const kit = await env.DB.prepare("SELECT * FROM epk WHERE artist_id = ?")
+      .bind(gate.link.ref).first();
+    if (!kit) return new Response("Nothing to download yet.", { status: 404 });
+
+    const parse = (v) => { try { return JSON.parse(v || "[]"); } catch { return []; } };
+    const extraRow = await env.DB.prepare("SELECT data FROM epk_extra WHERE artist_id = ?")
+      .bind(gate.link.ref).first().catch(() => null);
+    let extra = {};
+    try { extra = JSON.parse(extraRow?.data || "{}"); } catch { extra = {}; }
+
+    const wanted = [];
+    parse(kit.photos).forEach((p, i) => {
+      if (p.url) wanted.push({ name: `photographs/${String(i + 1).padStart(2, "0")}${p.credit ? " - " + safeName(p.credit) : ""}`, path: p.url });
+    });
+    parse(kit.logos).forEach((l, i) => {
+      if (l.url) wanted.push({ name: `logos/${safeName(l.label || "logo-" + (i + 1))}`, path: l.url });
+    });
+    if (extra.riderFile?.key) wanted.push({ name: "rider", key: extra.riderFile.key });
+    if (extra.stagePlot?.key) wanted.push({ name: "stage-plot", key: extra.stagePlot.key });
+    if (extra.stagePlot?.url) wanted.push({ name: "stage-plot", path: extra.stagePlot.url });
+
+    const files = [];
+    // The words, so a kit without a single photograph is still worth taking.
+    const words =
+      `${artist?.name || "Artist"}\n\n` +
+      (kit.bio_short ? `SHORT BIOGRAPHY\n\n${kit.bio_short}\n\n` : "") +
+      (kit.bio_long ? `LONG BIOGRAPHY\n\n${kit.bio_long}\n\n` : "") +
+      (kit.rider ? `TECHNICAL RIDER\n\n${kit.rider}\n\n` : "") +
+      (kit.hospitality ? `HOSPITALITY\n\n${kit.hospitality}\n\n` : "") +
+      (kit.contact ? `CONTACT\n\n${kit.contact}\n` : "");
+    files.push({ name: "read-me.txt", bytes: new TextEncoder().encode(words) });
+
+    const MAX_TOTAL = 90 * 1024 * 1024;
+    let total = words.length;
+    for (const w of wanted) {
+      const key = w.key || (w.path || "").replace(/^\/media\//, "");
+      if (!key || (!w.key && isReserved(key))) continue;
+      const object = await env.MEDIA.get(key);
+      if (!object) continue;
+      const buf = new Uint8Array(await object.arrayBuffer());
+      if (total + buf.length > MAX_TOTAL) break;
+      total += buf.length;
+      const ext = key.split(".").pop().slice(0, 5);
+      files.push({ name: `${w.name}.${ext}`, bytes: buf });
+    }
+
+    const zip = makeZip(files);
+    return new Response(zip, {
+      headers: {
+        "content-type": "application/zip",
+        "content-disposition":
+          `attachment; filename="${safeName(artist?.name || "press-kit")}-press-kit.zip"`,
+        "cache-control": "private, max-age=0, no-store",
+      },
+    });
+  }
+
+  /*
+    ── K16 · THE ONE-SHEET ─────────────────────────────────────────────────
+
+    One page: the primary photograph, the short biography, selected dates and
+    the contact. What you attach when somebody wants a PDF rather than a link,
+    and what goes in a folder at a conference.
+
+    IT IS HTML, NOT A PDF, and that is the whole design. Generating a real PDF
+    inside a Worker means a typesetting library, embedded fonts, and a
+    dependency that would be by far the largest thing in this project — to
+    produce a worse-looking page than the browser makes for free. This opens
+    with the print dialogue already up; the reader presses Save as PDF and
+    gets a better file than we could have made, with real text in it that can
+    be searched and copied.
+
+    GENERATED FROM THE KIT, so it can never disagree with the kit. A one-sheet
+    kept as its own document is a one-sheet that is out of date by the second
+    booking.
+  */
+  if (path.match(/^\/kit\/[^/]+\/one-sheet\.html$/) && method === "GET") {
+    const token = decodeURIComponent(path.split("/")[2]);
+    const gate = await openKit(token, url.searchParams.get("word"));
+    if (gate.error || gate.needsWord) {
+      return new Response(gate.error || "A word is needed.", { status: gate.status });
+    }
+    const cfg = await getSettings(env);
+    if (!cfg.kitOnesheet) return new Response("Not available.", { status: 404 });
+
+    const id = gate.link.ref;
+    const artist = await env.DB.prepare(
+      "SELECT name, alias, type, country, location, genres FROM artists WHERE id = ?"
+    ).bind(id).first();
+    const kit = await env.DB.prepare("SELECT * FROM epk WHERE artist_id = ?").bind(id).first();
+    if (!artist) return new Response("Not found", { status: 404 });
+
+    const parse = (v) => { try { return JSON.parse(v || "[]"); } catch { return []; } };
+    const extraRow = await env.DB.prepare("SELECT data FROM epk_extra WHERE artist_id = ?")
+      .bind(id).first().catch(() => null);
+    let extra = {};
+    try { extra = JSON.parse(extraRow?.data || "{}"); } catch { extra = {}; }
+
+    const photos = parse(kit?.photos);
+    const hero = photos[0];
+    const genres = parse(artist.genres);
+    const dates = (extra.dates || []).slice(0, 8);
+
+    // Everything that reaches the page goes through this. A biography is
+    // typed by a person into a form, and a person can type a < .
+    const esc = (t) => String(t == null ? "" : t)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+    const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>${esc(artist.name)} — one sheet</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,900&family=EB+Garamond&family=Space+Mono&display=swap">
+<style>
+  @page { size: A4; margin: 14mm; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'EB Garamond',Georgia,serif;color:#14120E;background:#EDE4D0;
+       font-size:11pt;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .sheet{max-width:190mm;margin:0 auto;padding:14mm 10mm;background:#EDE4D0}
+  .kicker{font-family:'Space Mono',monospace;font-size:7pt;letter-spacing:.22em;color:#6E2118}
+  .rule2{border-top:2px solid #14120E;margin-top:3mm}
+  .rule1{border-top:1px solid #14120E;margin-top:1mm}
+  h1{font-family:'Bodoni Moda',Georgia,serif;font-weight:900;font-size:34pt;line-height:.98;
+     letter-spacing:-.02em;margin-top:6mm}
+  .alias{font-style:italic;font-size:13pt;color:#4A443A;margin-top:1mm}
+  .tags{margin-top:3mm}
+  .tags span{font-family:'Space Mono',monospace;font-size:6.5pt;letter-spacing:.14em;
+             border:1px solid #C9BCA0;padding:1.4mm 2.4mm;margin-right:1.6mm;color:#4A443A}
+  .grid{display:grid;grid-template-columns:62mm 1fr;gap:8mm;margin-top:7mm;align-items:start}
+  .hero{width:100%;display:block;border:1px solid #C9BCA0}
+  .credit{font-family:'Space Mono',monospace;font-size:6pt;letter-spacing:.12em;
+          color:#4A443A;margin-top:1.4mm}
+  h2{font-family:'Space Mono',monospace;font-size:7.5pt;letter-spacing:.2em;font-weight:400;
+     border-bottom:1px solid #14120E;padding-bottom:1.2mm;margin-top:6mm;color:#14120E}
+  h2:first-of-type{margin-top:0}
+  p.body{margin-top:2.5mm;color:#4A443A;font-size:10.5pt;line-height:1.55}
+  .dates{margin-top:2.5mm}
+  .dates div{display:flex;gap:3mm;border-bottom:1px solid #C9BCA0;padding:1.4mm 0;font-size:9.5pt}
+  .dates b{font-weight:400;flex:1}
+  .dates i{font-style:normal;color:#4A443A;font-family:'Space Mono',monospace;font-size:7pt;
+           letter-spacing:.1em}
+  .foot{border-top:2px solid #14120E;margin-top:8mm;padding-top:2.5mm;
+        font-family:'Space Mono',monospace;font-size:6.5pt;letter-spacing:.16em;color:#4A443A;
+        display:flex;justify-content:space-between;gap:4mm}
+  @media screen{ body{padding:18px} .sheet{box-shadow:0 2px 30px rgba(0,0,0,.16)} }
+</style></head>
+<body><div class="sheet">
+  <p class="kicker">HIDDEN STATE · PRESS</p>
+  <div class="rule2"></div><div class="rule1"></div>
+  <h1>${esc(artist.name)}</h1>
+  ${artist.alias ? `<p class="alias">${esc(artist.alias)}</p>` : ""}
+  <div class="tags">${[artist.type, artist.country, artist.location, ...genres]
+      .filter(Boolean).map((t) => `<span>${esc(String(t).toUpperCase())}</span>`).join("")}</div>
+
+  <div class="grid">
+    <div>
+      ${hero ? `<img class="hero" src="${esc(hero.web || hero.url)}" alt="">
+                ${hero.credit ? `<p class="credit">© ${esc(hero.credit)}</p>` : ""}` : ""}
+    </div>
+    <div>
+      <h2>BIOGRAPHY</h2>
+      <p class="body">${esc(kit?.bio_short || kit?.bio_long || "").slice(0, 900)}</p>
+
+      ${dates.length ? `<h2>SELECTED DATES</h2><div class="dates">${
+        dates.map((d) => `<div><b>${esc(d.venue)}</b><i>${
+          esc([d.city, d.year].filter(Boolean).join(" · "))}</i></div>`).join("")
+      }</div>` : ""}
+
+      ${kit?.contact || cfg.kitContactFallback
+        ? `<h2>BOOKINGS</h2><p class="body">${esc(kit?.contact || cfg.kitContactFallback)}</p>`
+        : ""}
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>HIDDENSTATEGROUP.COM</span>
+    <span>${esc(new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" }).toUpperCase())}</span>
+  </div>
+</div>
+<script>
+  /*
+    The print dialogue, once the photograph has actually loaded — printing
+    before it arrives produces a sheet with a hole where the artist should be.
+    Guarded so that opening this to read it does not fight the reader.
+  */
+  addEventListener("load", function () {
+    if (location.search.indexOf("print") !== -1 || !document.images.length) {
+      setTimeout(function () { window.print(); }, 350);
+    } else {
+      var img = document.images[0];
+      var go = function () { setTimeout(function () { window.print(); }, 250); };
+      if (img.complete) go(); else { img.onload = go; img.onerror = go; }
+    }
+  });
+</script>
+</body></html>`;
+
+    return new Response(html, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "private, max-age=0, no-store",
+      },
+    });
+  }
+
   if (path.startsWith("/epk/link/") && method === "GET") {
-    const link = await openShare(decodeURIComponent(path.slice(10)), "EPK");
-    if (!link) return fail("This link is not working.", 404);
+    const token = decodeURIComponent(path.slice(10));
+
+    /*
+      Through openKit, which is the one place that knows the four questions a
+      kit link has to answer: does it exist, has it been revoked, has it
+      expired, and does it want a word. The page, the sealed files, the ZIP
+      and the one-sheet all ask the same function, so they cannot drift apart.
+    */
+    const gate = await openKit(token, url.searchParams.get("word"));
+    if (gate.needsWord) {
+      // Not an error — a state the page draws a form for. `wrong` tells the
+      // difference between arriving and getting it wrong, which is the
+      // difference between a prompt and a correction.
+      return json({ ok: false, needsWord: true, wrong: !!gate.wrong,
+                    error: gate.error || null }, 401);
+    }
+    if (gate.error) return fail(gate.error, gate.status || 404);
+
+    const link = gate.link;
+    await noteOpen(token);
 
     const artist = await env.DB.prepare(
       "SELECT id, name, alias, type, genres, country, location, descr, bio, photo, poster, instagram " +
@@ -3534,8 +4293,14 @@ async function handleApi(request, env, url, ctx) {
 
     const kit = await env.DB.prepare("SELECT * FROM epk WHERE artist_id = ?")
       .bind(link.ref).first().catch(() => null);
+    const extraRow = await env.DB.prepare("SELECT data FROM epk_extra WHERE artist_id = ?")
+      .bind(link.ref).first().catch(() => null);
 
     const jsonish = (v) => { try { return JSON.parse(v || "[]"); } catch { return []; } };
+    let extra = {};
+    try { extra = JSON.parse(extraRow?.data || "{}"); } catch { extra = {}; }
+
+    const cfg = await getSettings(env);
     return json({
       ok: true,
       artist,
@@ -3543,9 +4308,32 @@ async function handleApi(request, env, url, ctx) {
         bioShort: kit.bio_short, bioLong: kit.bio_long,
         rider: kit.rider, hospitality: kit.hospitality,
         photos: jsonish(kit.photos), logos: jsonish(kit.logos), links: jsonish(kit.links),
-        contact: kit.contact,
+        contact: kit.contact || cfg.kitContactFallback || null,
         updatedAt: kit.updated_at,
       } : null,
+      /*
+        The sealed files are described but never addressed: the reader is given
+        a key to ask for through /kit/<token>/file/, not a path they could keep
+        after the link is revoked.
+      */
+      extra: {
+        dates: extra.dates || [],
+        quotes: extra.quotes || [],
+        listen: extra.listen || [],
+        video: extra.video || null,
+        territories: extra.territories || null,
+        stagePlot: extra.stagePlot || null,
+        riderFile: extra.riderFile ? { key: extra.riderFile.key, name: extra.riderFile.name } : null,
+      },
+      // What this particular kit is allowed to offer, decided here rather
+      // than by the page drawing buttons that would 404.
+      offers: {
+        zip: !!cfg.kitZip,
+        onesheet: !!cfg.kitOnesheet,
+        watermark: !!cfg.kitWatermark,
+        watermarkText: cfg.kitWatermarkText || "",
+        footer: cfg.kitFooterNote || "",
+      },
     });
   }
 
@@ -4615,7 +5403,7 @@ export default {
         to this bucket would have published every guest, every email address
         and every pass at a URL anyone could type.
       */
-      if (key.startsWith(PRIVATE_PREFIX)) return new Response("Not found", { status: 404 });
+      if (isReserved(key)) return new Response("Not found", { status: 404 });
 
       const object = await env.MEDIA.get(key);
       if (!object) return new Response("Not found", { status: 404 });
