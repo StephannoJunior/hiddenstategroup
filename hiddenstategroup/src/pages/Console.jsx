@@ -15,6 +15,7 @@ import { useArtists, useRecords } from "../lib/data";
   is a file where a change in one panel breaks another.
 */
 import { Demos, Bookings, Waitlist, SetTimes, Kits, After, ReleaseLinks } from "./ConsoleExtra";
+import { LiquidBar, PoolDesk } from "./ConsoleDesks";
 
 /*
   The console.
@@ -53,12 +54,14 @@ const TABS = [
   { id: "kits",     label: "PRESS KITS",need: "issuePasses", group: "content" },
   { id: "demos",    label: "DEMOS",     need: "issuePasses", group: "content" },
   { id: "bookings", label: "BOOKINGS",  need: "issuePasses", group: "content" },
+  { id: "pool",     label: "THE POOL",  need: "issuePasses", group: "content" },
   { id: "activity", label: "ACTIVITY",  need: "manageTeam",  group: "system" },
   { id: "after",    label: "AFTER",     need: "manageTeam",  group: "system" },
   { id: "faults",   label: "FAULTS",    need: "manageTeam",  group: "system" },
   { id: "reading",  label: "READERSHIP",need: "manageTeam",  group: "system" },
   { id: "backups",  label: "BACKUPS",   need: "manageTeam",  group: "system" },
   { id: "team",     label: "TEAM",      need: "manageTeam",  group: "system" },
+  { id: "bar",      label: "LIQUID BAR",need: "manageTeam",  group: "system" },
   { id: "settings", label: "SETTINGS",  need: "manageTeam",  group: "system" },
 ];
 
@@ -2348,7 +2351,6 @@ const SETTING_SECTIONS = [
   "THE STAFF DOOR",
   "MOVEMENT",
   "THE SONG POOL",
-  "THE FLOATING BAR",
   "THE SITE",
   "THE GUEST LIST",
   "THE WAITING LIST",
@@ -2857,55 +2859,16 @@ function Settings({ parties }) {
               help="Shown in place of the form when the master switch above is off." />
       </Section>
 
-      <Section title="THE FLOATING BAR" {...saver("THE FLOATING BAR")}>
-        <Choice k="barFinish" label="Glass finish"
-                help="LENS carries almost no colour of its own — it works by squeezing whatever is behind it toward a middle tone, so it holds up over paper and over a photograph alike. CLEAR is the most transparent and the least forgiving over busy content. INK leans dark and belongs over photography."
-                options={[
-                  { value: "LENS",  label: "LENS",  swatch: "#DCD3C0" },
-                  { value: "CLEAR", label: "CLEAR", swatch: "#F4F1E9" },
-                  { value: "INK",   label: "INK",   swatch: "#2A2620" },
-                ]} />
+      {/*
+        THE FLOATING BAR HAS ITS OWN DESK.
 
-        <p className="m-0 mb-3" style={{ ...fontText, fontSize: "14.5px", lineHeight: 1.55, color: theme.ink2 }}>
-          The bar measures itself rather than counting tabs: it shares the
-          width while they fit and scrolls once they genuinely do not, on any
-          screen. These two set how big each tab is when it does scroll.
-        </p>
-
-        {[
-          { key: "barTabWidth", label: "Tab width when scrolling", unit: "px" },
-          { key: "barLabelSize", label: "Label size", unit: "px" },
-        ].map((r) => (
-          <div key={r.key} className="flex items-center gap-3 py-3"
-               style={{ borderBottom: `1px solid ${theme.rule}` }}>
-            <span className="flex-1" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
-              {r.label}
-            </span>
-            <input type="number" step={r.key === "barLabelSize" ? "0.5" : "1"}
-                   value={values[r.key]}
-                   onChange={(e) => set(r.key, Number(e.target.value))}
-                   style={{ ...inputStyle, width: "90px", textAlign: "right" }} />
-            <span style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.14em", color: theme.ink2, width: "34px" }}>
-              {r.unit}
-            </span>
-          </div>
-        ))}
-
-        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={!!values.barShowLabels} style={{ marginTop: "4px" }}
-                 onChange={(e) => set("barShowLabels", e.target.checked)} />
-          <span>
-            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
-              Show labels under the icons
-            </span>
-            <span className="block" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
-              Turn off for icons only. Far more fit across, at the cost of
-              having to know what each one means.
-            </span>
-          </span>
-        </label>
-      </Section>
-
+        Its controls used to be a subsection here, which was the wrong shape
+        for them twice over: two of the numbers that mattered most were not
+        settings at all but constants in the stylesheet, and the ones that
+        were settings could only be judged by saving, leaving, and looking at
+        the bar. It is the one part of the site you cannot choose in the
+        abstract, so it now has a screen with the real material on it.
+      */}
       <Section title="THE SITE" {...saver("THE SITE")}>
         <div className="py-3">
           <p className="m-0 mb-2" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
@@ -3586,6 +3549,8 @@ function ConsoleScreen({ role }) {
           in one place and telling people where to hear it in another.
         */}
         {tab === "records" && role.can.issuePasses && <ReleaseLinks records={catalogue} />}
+        {tab === "pool" && role.can.issuePasses && <PoolDesk parties={parties} />}
+        {tab === "bar" && role.can.manageTeam && <LiquidBar />}
         {tab === "settings" && role.can.manageTeam && <Settings parties={parties} />}
           </div>
         </div>

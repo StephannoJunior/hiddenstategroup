@@ -890,6 +890,38 @@ const DEFAULT_SETTINGS = {
   barShowLabels: true,
 
   /*
+    ── HOW DARK THE GLASS IS ──────────────────────────────────────────────
+
+    Nought to a hundred, where a hundred is nearly opaque. It moves the tint
+    AND the backdrop brightness together on one curve, which is the whole
+    reason it exists: those were two separate hardcoded numbers, and they
+    were both doing the darkening at once. Multiplied out, about fourteen per
+    cent of the page was reaching the eye through the bar — a black slab, not
+    dark glass — and neither number looked wrong on its own.
+
+    The console shows what this actually means next to the slider, as the
+    percentage of the page that still comes through, because "62" tells you
+    nothing about a thing you are judging by eye.
+  */
+  barDarkness: 62,
+  /*
+    The blur radius, in pixels. This is the expensive one: the compositor
+    re-samples everything behind the bar through it, and the cost climbs
+    fast. Twenty-two is a long way past the point where more is visible.
+  */
+  barBlur: 22,
+  // How much colour survives the backdrop. Under 100 drains it; over 200 is
+  // where glass starts to read as glass rather than as tracing paper.
+  barSaturation: 175,
+  /*
+    A multiplier on how quickly everything moves, not a duration. Above 1 is
+    quicker. It scales the response of every spring at once, so the bar keeps
+    its character — the selection still leads, the corners still arrive last —
+    and only the tempo changes.
+  */
+  barSpeed: 1,
+
+  /*
     ── THE LOOK ─────────────────────────────────────────────────────────────
     The design is a system, not a set of hardcoded values, so the parts of it
     that are a matter of taste can be changed from the console on a Tuesday
@@ -940,6 +972,7 @@ const PUBLIC_SETTINGS = [
   // does not need publishing to everyone who loads any page.
   "maxPeoplePerRequest",
   "barFinish", "barTabWidth", "barLabelSize", "barShowLabels",
+  "barDarkness", "barBlur", "barSaturation", "barSpeed",
   "paperTone", "accentTone", "grainStrength", "photoHalftone", "photoDuotone",
   "heroImage", "heroHeightVw", "showContactSheet",
   "storyHeadline", "closingLine", "footerNote",

@@ -6,7 +6,8 @@ import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 import * as api from "../lib/api";
 import { useSite } from "../lib/site";
-import { Spring, driveSprings, glassStyle, lipStyle, specStyle, lozengeStyle } from "../lib/liquid";
+import { Spring, springSet, driveSprings, glassStyle, lipStyle, specStyle,
+         lozengeStyle, resolveFinish } from "../lib/liquid";
 
 /*
   GlassBar — floating navigation on phones.
@@ -419,7 +420,49 @@ export default function GlassBar() {
   // already be there. Only a change of SELECTION travels.
   const hasPlaced = useRef(false);
 
+  /*
+    ── THE SELECTION LEAVES ON THE TOUCH, NOT ON THE ROUTE ──────────────────
+
+    THIS IS THE WHOLE REASON THE BAR FELT LATE, AND IT IS NOT A CURVE.
+
+    Until now nothing moved until React had been all the way round the loop.
+    Touch a tab and the sequence was: the Link navigates; the router updates
+    the location; the component re-renders; a layout effect measures the tab
+    and calls setLozenge, which renders AGAIN; a second layout effect finally
+    hands the number to the spring. Only then does the first frame of motion
+    exist — and hanging off that same render is the destination page mounting,
+    which on a phone is a lazy chunk, a Suspense boundary and a whole subtree.
+
+    So the pill was never slow. It was ON TIME, and it was starting a couple
+    of hundred milliseconds after the finger, from behind a page mount. That
+    is a different fault from a soft spring and no amount of stiffening would
+    have touched it. It is also exactly what "it doesn't respect the movement"
+    describes: the motion had come loose from the gesture that caused it.
+
+    So it moves on POINTERDOWN — before the click, before the navigation,
+    before any render — by measuring the tab straight off the DOM and handing
+    the numbers to the spring. Nothing goes through state, so nothing
+    re-renders; the route-driven effect below arrives at the same target a
+    moment later and finds the spring already on its way there.
+
+    A touch that turns into a SCROLL rather than a tap has to give the pill
+    back, which is what leadBack is for: the browser fires pointercancel the
+    instant a scroller claims the gesture, and the selection returns to
+    wherever the route actually is.
+  */
+  const leadTo = useCallback((key) => {
+    if (!hasPlaced.current) return;      // nothing has been measured yet
+    const el = tabRefs.current[key];
+    if (!el || !el.offsetWidth) return;
+    rig.current?.to({ lx: el.offsetLeft, lw: el.offsetWidth });
+  }, []);
+
   const activeKey = previewKey || (activeIndex >= 0 ? allTabs[activeIndex].key : null);
+
+  // A gesture that became a scroll gives the selection back to the route.
+  const leadBack = useCallback(() => {
+    if (activeKey) leadTo(activeKey);
+  }, [activeKey, leadTo]);
 
   useLayoutEffect(() => {
     if (!open || !activeKey) {
@@ -484,7 +527,26 @@ export default function GlassBar() {
     specular drifts instead of sitting still.
   */
   const finish = site.barFinish || "INK";
-  const glass = glassStyle(finish, theme.ink);
+  /*
+    THE THREE NUMBERS THE CONSOLE CAN MOVE. Undefined means "whatever the
+    finish itself says", so a site that has never touched the settings gets
+    the designed values and nothing has to be seeded into the database.
+  */
+  const tune = {
+    darkness: site.barDarkness,
+    blur: site.barBlur,
+    saturation: site.barSaturation,
+  };
+  const mat = resolveFinish(finish, tune);
+  const glass = glassStyle(finish, theme.ink, tune);
+
+  /*
+    HOW FAST, as a multiplier rather than a duration. Above one is quicker.
+    Bounded on both sides: below about a half the bar reads as syrup, and
+    above two the springs are moving further per frame than the integrator
+    can follow honestly.
+  */
+  const speed = Math.max(0.5, Math.min(2, Number(site.barSpeed) || 1));
 
   /*
     Two layers over the pane, under the contents: the lip that gives the edge
@@ -493,8 +555,8 @@ export default function GlassBar() {
     shone on a surface rather than as light behaving.
   */
   const specRef = useRef(null);
-  const lipLayer = <span aria-hidden="true" style={lipStyle(finish)} />;
-  const specLayer = <span ref={specRef} aria-hidden="true" style={specStyle(finish, 0)} />;
+  const lipLayer = <span aria-hidden="true" style={lipStyle(finish, tune)} />;
+  const specLayer = <span ref={specRef} aria-hidden="true" style={specStyle(finish, 0, tune)} />;
 
   /*
     ── THE GEOMETRY, ON SPRINGS ───────────────────────────────────────────
@@ -519,9 +581,16 @@ export default function GlassBar() {
   */
   const paneRef = useRef(null);
   const stageW = useRef(0);
+  /*
+    The last geometry actually written to each node, so a frame that would
+    write the same pixel writes nothing at all. See the writer below.
+  */
+  const paneGeom = useRef({ w: -1, h: -1, m: -1, r: -1, s: -1 });
+  const lozGeom = useRef({ x: -1, w: -1 });
 
   const springs = useRef(null);
   if (!springs.current) {
+    const K = springSet(speed);
     springs.current = {
       /*
         LOWER DAMPING THAN BEFORE, ON PURPOSE.
@@ -536,9 +605,9 @@ export default function GlassBar() {
         right way round: a widening capsule reads as something being poured
         sideways, and a height that overshoots just looks like a mistake.
       */
-      w: new Spring(PILL_W, { stiffness: 235, damping: 20 }),
-      h: new Spring(PILL_H, { stiffness: 260, damping: 25 }),
-      m: new Spring(-PILL_W / 2, { stiffness: 235, damping: 20 }),
+      w: new Spring(PILL_W, K.w),
+      h: new Spring(PILL_H, K.h),
+      m: new Spring(-PILL_W / 2, K.m),
       /*
         THE RADIUS IS SPRUNG TOO. A capsule whose corners snap while its
         width flows is the one detail that gives away that a shape is being
@@ -546,8 +615,8 @@ export default function GlassBar() {
         corners arrive just after the edges do — which is what a heavy liquid
         actually does.
       */
-      r: new Spring(PILL_H / 2, { stiffness: 215, damping: 19 }),
-      s: new Spring(1, { stiffness: 520, damping: 21 }),
+      r: new Spring(PILL_H / 2, K.r),
+      s: new Spring(1, K.s),
       /*
         THE SELECTION, ON THE SAME LOOP AS EVERYTHING ELSE.
 
@@ -574,8 +643,8 @@ export default function GlassBar() {
         zero at rest, largest in the middle of the flight, and self-correcting
         if you tap somewhere else halfway through. No timer to get wrong.
       */
-      lx: new Spring(0, { stiffness: 265, damping: 22 }),
-      lw: new Spring(0, { stiffness: 310, damping: 26 }),
+      lx: new Spring(0, K.lx),
+      lw: new Spring(0, K.lw),
     };
   }
 
@@ -610,19 +679,63 @@ export default function GlassBar() {
         */
         const loz = lozRef.current;
         if (loz) {
-          const vel = springs.current.lx.vel;
-          const extra = Math.min(Math.abs(vel) * 0.045, 72);
-          loz.style.width = (lw + extra) + "px";
-          loz.style.transform = `translate3d(${lx - (vel < 0 ? extra : 0)}px,0,0)`;
-          loz.style.borderRadius = Math.min(20, (lw + extra) / 2) + "px";
+          /*
+            THE STRETCH, AS A LENGTH — NOT AS A VELOCITY.
+
+            This was |velocity| x 0.045, capped at 72px, and both halves were
+            wrong. Velocity is pixels per second, so the coefficient silently
+            depended on how stiff the spring happened to be: making the bar
+            quicker — which is exactly what "less slow" means — would have
+            made the capsule stretch FURTHER on the same journey. And 72px of
+            stretch on a 64px tab is the selection more than doubling in width
+            in mid-air, which is what read as a glitch.
+
+            Dividing by the spring's own natural frequency turns a velocity
+            back into a DISTANCE: how far the capsule would coast if it were
+            let go. That is the same size at every speed setting, which is the
+            point, and it is bounded by the capsule's own width so a narrow
+            tab cannot throw a long smear across its neighbours.
+          */
+          const sp = springs.current.lx;
+          const reach = Math.abs(sp.vel) / Math.sqrt(sp.k / sp.m);
+          const extra = Math.min(reach * 0.34, lw * 0.5, 28);
+          const width = Math.round(lw + extra);
+          const left = Math.round(lx - (sp.vel < 0 ? extra : 0));
+          const g = lozGeom.current;
+          if (width !== g.w) {
+            loz.style.width = width + "px";
+            loz.style.borderRadius = Math.min(20, width / 2) + "px";
+            g.w = width;
+          }
+          if (left !== g.x) {
+            loz.style.transform = `translate3d(${left}px,0,0)`;
+            g.x = left;
+          }
         }
 
         const node = paneRef.current;
         if (!node) return;
-        node.style.width = w + "px";
-        node.style.height = h + "px";
-        node.style.marginLeft = m + "px";
-        node.style.borderRadius = r + "px";
+        /*
+          ── WHY THESE ARE ROUNDED, AND ONLY WRITTEN WHEN THEY CHANGE ────────
+
+          This node carries a backdrop-filter. Changing its WIDTH or HEIGHT
+          does not merely move it — it invalidates the blur, and the
+          compositor re-samples and re-blurs everything behind the bar. That
+          is by a wide margin the most expensive thing happening on screen.
+
+          Unrounded, it happened on every frame of every movement INCLUDING
+          the long tail, where the spring is creeping the last half-pixel into
+          place: about ten frames of full-price re-blur for a change nobody
+          can see. Rounding to whole pixels and skipping writes that would not
+          change anything removes those frames outright — and they are exactly
+          the frames, at the end of a gesture, that a phone was dropping.
+        */
+        const W = Math.round(w), H = Math.round(h), M = Math.round(m), R = Math.round(r);
+        const pg = paneGeom.current;
+        if (W !== pg.w) { node.style.width = W + "px"; pg.w = W; }
+        if (H !== pg.h) { node.style.height = H + "px"; pg.h = H; }
+        if (M !== pg.m) { node.style.marginLeft = M + "px"; pg.m = M; }
+        if (R !== pg.r) { node.style.borderRadius = R + "px"; pg.r = R; }
         /*
           THE SQUASH GOES ON THE STAGE, NOT ON THE PANE.
 
@@ -635,8 +748,21 @@ export default function GlassBar() {
         */
         const stage = stageRef.current;
         if (stage) {
-          stage.style.transformOrigin = "50% 100%";
-          stage.style.transform = s === 1 ? "none" : `scale(${s})`;
+          /*
+            `s === 1` was an exact float comparison against a spring, and a
+            spring settles to WITHIN a tolerance rather than onto a number. It
+            came to rest at about .998 and stayed there — so the stage kept a
+            transform forever, and a permanent transform on the ancestor of a
+            clipping, rounded box is precisely the Safari combination this
+            file spends three comments warning about. It is snapped and
+            cleared instead.
+          */
+          const S = Math.abs(s - 1) < 0.003 ? 1 : Math.round(s * 1000) / 1000;
+          if (S !== paneGeom.current.s) {
+            stage.style.transformOrigin = "50% 100%";
+            stage.style.transform = S === 1 ? "none" : `scale(${S})`;
+            paneGeom.current.s = S;
+          }
         }
       },
       () => still
@@ -646,6 +772,16 @@ export default function GlassBar() {
     rig.current.kick();
     return () => rig.current?.stop();
   }, [still]);
+
+  /*
+    RETUNED IN PLACE when the console changes the speed, never rebuilt. A
+    spring carries a position AND a velocity; throwing it away for a new one
+    would drop both, and the bar would jump if the slider were moved while it
+    happened to be moving.
+  */
+  useEffect(() => {
+    rig.current?.tune(springSet(speed));
+  }, [speed]);
 
   /*
     Targets. The open bar fills the stage, so its width is measured rather
@@ -703,8 +839,15 @@ export default function GlassBar() {
     finish: ink on the pale finishes, stock on the dark one, and the accent
     for the label so the selection is signalled by more than a shape.
   */
-  const onGlass = finish === "INK" ? theme.bg : theme.ink;
-  const litInk = finish === "INK" ? theme.bg : theme.brass;
+  /*
+    Which way round the labels go is now decided by how dark the glass ACTUALLY
+    is, not by which finish was chosen. INK dialled down to a tenth is a pale
+    pane, and cream lettering on it is invisible — the same failure the old
+    `active ? theme.bg : theme.ink` rule had, one level up.
+  */
+  const onDark = mat.dark && mat.darkness >= 34;
+  const onGlass = onDark ? theme.bg : theme.ink;
+  const litInk = onDark ? theme.bg : theme.brass;
 
   const stageWidth = Math.min(1080, Math.max(560, allTabs.length * (tabWidth + 6)));
 
@@ -929,7 +1072,7 @@ export default function GlassBar() {
                       became a different material instead of a deeper part of
                       the same one.
                     */
-                    ...lozengeStyle(finish),
+                    ...lozengeStyle(finish, tune),
                     pointerEvents: "none",
                   }}
                 />
@@ -961,6 +1104,8 @@ export default function GlassBar() {
                       /* Says "you are here" to a screen reader. The lozenge
                          says it to everybody else. */
                       aria-current={active ? "page" : undefined}
+                      onPointerDown={() => leadTo(key)}
+                      onPointerCancel={leadBack}
                       onClick={(e) => {
                         if (wasDrag()) { e.preventDefault(); return; }
                         setOpen(false);
