@@ -16,7 +16,8 @@
     "test:restore": "node scripts/restore.mjs --drill",
     "check": "node scripts/check.mjs",
     "deploy": "npm run build && wrangler deploy",
-    "deploy:try": "npm run build && wrangler versions upload"
+    "deploy:try": "npm run build && wrangler versions upload",
+    "test:polls": "node scripts/poll-test.mjs"
   },
   "dependencies": {
     "jsqr": "^1.4.0",

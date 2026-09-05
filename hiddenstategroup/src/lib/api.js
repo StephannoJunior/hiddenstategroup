@@ -681,3 +681,29 @@ export const listReleaseLinks = (record) =>
   call(`/links?record=${encodeURIComponent(record)}`, { auth: false });
 export const saveReleaseLinks = (record, links) =>
   call("/links", { method: "PUT", body: { record, links } });
+
+/*
+  ── THE POLLS ───────────────────────────────────────────────────────────────
+
+  Reading a poll and voting in one are both public, and both carry `voter` —
+  the same opaque browser id the song pool uses, generated here and never sent
+  anywhere else.
+
+  NOTE WHAT IS NOT IN THIS FILE: any way to ask for the counts. There isn't
+  one, because whether they come back is not the page's decision to make. The
+  server sends them once you have voted and not before, and a client that
+  could ask for them anyway would make that rule a suggestion.
+*/
+export const listPolls = () =>
+  // sent WITH auth when a token exists: the team's view includes drafts,
+  // closed polls, and the ones that never leave the console
+  call(`/polls?voter=${encodeURIComponent(voterId())}`);
+
+export const votePoll = (id, options) =>
+  call(`/polls/${id}/vote`, { method: "POST", body: { options, voter: voterId() }, auth: false });
+
+// The team's side.
+export const createPoll = (poll) => call("/polls", { method: "POST", body: poll });
+export const editPoll = (id, changes) =>
+  call(`/polls/${id}`, { method: "PATCH", body: changes });
+export const deletePoll = (id) => call(`/polls/${id}`, { method: "DELETE" });

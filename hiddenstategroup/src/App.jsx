@@ -32,6 +32,7 @@ const MixArtist = lazy(() => import("./pages/MixArtist"));
 const About = lazy(() => import("./pages/About"));
 const Contact = lazy(() => import("./pages/Contact"));
 const SongPool = lazy(() => import("./pages/SongPool"));
+const Polls = lazy(() => import("./pages/Polls"));
 const Demos = lazy(() => import("./pages/Demos"));
 const Bookings = lazy(() => import("./pages/Bookings"));
 const Wall = lazy(() => import("./pages/Wall"));
@@ -113,6 +114,7 @@ const PREFETCH = {
   "/about": () => import("./pages/About"),
   "/contact": () => import("./pages/Contact"),
   "/pool": () => import("./pages/SongPool"),
+  "/polls": () => import("./pages/Polls"),
   "/mypass": () => import("./pages/MyPass"),
   "/console": () => import("./pages/Console"),
   "/scan": () => import("./pages/Scan"),
@@ -226,6 +228,7 @@ export default function App() {
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/pool" element={<SongPool />} />
+              <Route path="/polls" element={<Polls />} />
               <Route path="/demos" element={<Demos />} />
               <Route path="/bookings" element={<Bookings />} />
 

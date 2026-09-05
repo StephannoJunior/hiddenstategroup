@@ -128,6 +128,7 @@ const SECTIONS = [
   ["/records", "RECORDS"], ["/agency", "AGENCY"], ["/artists", "ROSTER"],
   ["/events", "EVENTS"], ["/news", "DISPATCHES"], ["/mixes", "SESSIONS"],
   ["/about", "ABOUT"], ["/contact", "CONTACT"], ["/pool", "THE POOL"],
+  ["/polls", "POLLS"],
 ];
 
 export function Folio() {

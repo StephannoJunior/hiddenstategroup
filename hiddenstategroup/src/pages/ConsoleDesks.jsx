@@ -711,3 +711,418 @@ export function PoolDesk({ parties }) {
     </>
   );
 }
+
+/* ══ THE POLLS ═════════════════════════════════════════════════════════════ */
+
+/*
+  ── WRITING A POLL ─────────────────────────────────────────────────────────
+
+  IT IS BORN A DRAFT, ALWAYS. There is no "create and open" button, and that
+  is deliberate: a poll goes out to everyone the instant it opens, a typo in a
+  question is public the moment you press the key, and the votes you collect
+  on a badly-worded option cannot be un-collected. So writing it and
+  publishing it are two decisions, made at two moments, with the poll readable
+  on this screen in between.
+
+  THE AUDIENCE IS A DECISION, NOT A DEFAULT. PUBLIC goes on /polls where
+  anybody can answer. TEAM never leaves the console — it is how the four of you
+  settle which track goes first without putting the question to the internet.
+  The worker enforces the difference in three separate places; this control
+  only chooses it.
+*/
+function NewPoll({ onMade }) {
+  const [question, setQuestion] = useState("");
+  const [note, setNote] = useState("");
+  const [audience, setAudience] = useState("PUBLIC");
+  const [picks, setPicks] = useState(1);
+  const [options, setOptions] = useState(["", ""]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const setOpt = (i, v) => setOptions((was) => was.map((o, n) => (n === i ? v : o)));
+  const filled = options.map((o) => o.trim()).filter(Boolean);
+
+  const make = async () => {
+    setErr("");
+    if (!question.trim()) { setErr("A poll needs a question."); return; }
+    if (filled.length < 2) { setErr("A poll needs at least two options."); return; }
+    setBusy(true);
+    const res = await api.createPoll({
+      question: question.trim(), note: note.trim(), audience,
+      picks: Math.min(picks, filled.length), options: filled,
+    });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error || "Couldn't write that."); return; }
+    setQuestion(""); setNote(""); setOptions(["", ""]); setPicks(1);
+    onMade();
+  };
+
+  return (
+    <div className="mb-9 p-4" style={{ border: `1px solid ${theme.rule}`, background: theme.sunk }}>
+      <p className="m-0 mb-3" style={{ ...fontUtility, fontSize: "8.5px", letterSpacing: "0.2em", color: theme.brass }}>
+        WRITE ONE
+      </p>
+
+      <input value={question} onChange={(e) => setQuestion(e.target.value)}
+             placeholder="The question" maxLength={200}
+             style={{ ...inputStyle, width: "100%", marginBottom: "8px" }} />
+      <input value={note} onChange={(e) => setNote(e.target.value)}
+             placeholder="A line under it — optional" maxLength={200}
+             style={{ ...inputStyle, width: "100%", marginBottom: "12px" }} />
+
+      {options.map((o, i) => (
+        <div key={i} className="flex items-center gap-2 mb-1.5">
+          <span style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.14em",
+                         color: theme.ink2, width: "22px" }}>
+            {String(i + 1).padStart(2, "0")}
+          </span>
+          <input value={o} onChange={(e) => setOpt(i, e.target.value)}
+                 placeholder={`Option ${i + 1}`} maxLength={120}
+                 style={{ ...inputStyle, flex: 1 }} />
+          {options.length > 2 && (
+            <Btn onClick={() => setOptions((was) => was.filter((_, n) => n !== i))}>—</Btn>
+          )}
+        </div>
+      ))}
+
+      <div className="flex flex-wrap items-center mt-3" style={{ gap: "6px" }}>
+        <Btn onClick={() => setOptions((was) => (was.length < 12 ? [...was, ""] : was))}
+             disabled={options.length >= 12}>
+          ADD AN OPTION
+        </Btn>
+        <span className="flex-1" />
+        <span style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.14em", color: theme.ink2 }}>
+          WHO SEES IT
+        </span>
+        {["PUBLIC", "TEAM"].map((a) => (
+          <Btn key={a} on={audience === a} onClick={() => setAudience(a)}>{a}</Btn>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3 py-3 mt-1" style={{ borderTop: `1px solid ${theme.rule}` }}>
+        <span className="flex-1" style={{ ...fontText, fontSize: "15px", color: theme.ink }}>
+          How many one person may pick
+        </span>
+        <input type="number" min="1" max={Math.max(2, filled.length || 2)} value={picks}
+               onChange={(e) => setPicks(Math.max(1, Number(e.target.value) || 1))}
+               style={{ ...inputStyle, width: "70px", textAlign: "right" }} />
+      </div>
+
+      <Note>{err}</Note>
+
+      <Btn wide on onClick={make} disabled={busy} style={{ opacity: busy ? 0.5 : 1 }}>
+        {busy ? "WRITING…" : "SAVE AS A DRAFT"}
+      </Btn>
+      <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+        It is a draft until you open it. Nothing is visible to anybody, and
+        nothing can be voted on, until you press OPEN below.
+      </p>
+    </div>
+  );
+}
+
+/* One poll on the desk: its numbers, and the two decisions you can make. */
+function PollRow({ poll, onChange, onDelete }) {
+  const [arming, setArming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!arming) return undefined;
+    const t = setTimeout(() => setArming(false), 4000);
+    return () => clearTimeout(t);
+  }, [arming]);
+
+  const total = poll.options.reduce((n, o) => n + (o.votes || 0), 0);
+  /*
+    VOTES, NOT VOTERS. On a poll where one person may pick three, the numbers
+    on the options add up to three times the turnout, and calling that total
+    "people" would overstate the room by exactly the pick limit. Where the two
+    genuinely differ the label says which one it is.
+  */
+  const people = poll.picks > 1 ? Math.ceil(total / poll.picks) : total;
+  const top = Math.max(1, ...poll.options.map((o) => o.votes || 0));
+
+  const act = async (fn) => { setBusy(true); await fn(); setBusy(false); };
+
+  return (
+    <div className="mb-7 pb-5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+      <div className="flex items-baseline flex-wrap gap-2 mb-1.5">
+        <span style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.18em",
+                       color: poll.status === "OPEN" ? theme.good
+                            : poll.status === "CLOSED" ? theme.ink2 : theme.warn }}>
+          {poll.status}
+        </span>
+        <span style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.18em",
+                       color: poll.audience === "TEAM" ? theme.brass : theme.ink2 }}>
+          {poll.audience === "TEAM" ? "TEAM ONLY" : "ON THE SITE"}
+        </span>
+        <span style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.14em", color: theme.ink2 }}>
+          {poll.picks > 1 ? `UP TO ${poll.picks}` : "ONE PICK"}
+        </span>
+        <span className="flex-1" />
+        <span style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.14em", color: theme.ink2 }}>
+          {poll.picks > 1
+            ? `${total} VOTES · ABOUT ${people} ${people === 1 ? "PERSON" : "PEOPLE"}`
+            : `${total} ${total === 1 ? "VOTE" : "VOTES"}`}
+        </span>
+      </div>
+
+      <p className="m-0" style={{ ...fontText, fontSize: "18px", lineHeight: 1.3, color: theme.ink }}>
+        {poll.question}
+      </p>
+      {poll.note && (
+        <p className="m-0 mt-0.5" style={{ ...fontText, fontSize: "14.5px", color: theme.ink2 }}>{poll.note}</p>
+      )}
+
+      <div className="mt-3">
+        {poll.options.map((o) => {
+          const n = o.votes || 0;
+          return (
+            <div key={o.id} className="relative overflow-hidden mb-1"
+                 style={{ border: `1px solid ${theme.rule}`, padding: "8px 11px" }}>
+              {/* Scaled to the LEADER, not to the total — on a poll where one
+                  person picks three, shares of the total are all small and
+                  every bar looks the same. Against the leader the shape of
+                  the result is readable at a glance, which is the only reason
+                  to draw a bar rather than print the number. */}
+              <span aria-hidden="true" style={{
+                position: "absolute", left: 0, top: 0, bottom: 0,
+                width: `${Math.round((n / top) * 100)}%`,
+                background: n === top && n > 0 ? "rgba(110,33,24,0.14)" : theme.sunk,
+              }} />
+              <span className="relative flex items-baseline gap-3">
+                <span className="flex-1" style={{ ...fontText, fontSize: "15px", color: theme.ink }}>
+                  {o.label}
+                </span>
+                <span style={{ ...fontUtility, fontSize: "9.5px", letterSpacing: "0.08em",
+                               color: theme.ink, fontVariantNumeric: "tabular-nums" }}>
+                  {n}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap mt-3" style={{ gap: "5px" }}>
+        {poll.status !== "OPEN" && (
+          <Btn on disabled={busy} onClick={() => act(() => onChange(poll.id, { status: "OPEN" }))}>
+            {poll.status === "CLOSED" ? "OPEN IT AGAIN" : "OPEN"}
+          </Btn>
+        )}
+        {poll.status === "OPEN" && (
+          <Btn disabled={busy} onClick={() => act(() => onChange(poll.id, { status: "CLOSED" }))}>
+            CLOSE
+          </Btn>
+        )}
+        <Btn danger disabled={busy}
+             onClick={() => { if (arming) act(() => onDelete(poll.id)); else setArming(true); }}>
+          {arming ? `PRESS AGAIN — ${total} ${total === 1 ? "VOTE GOES" : "VOTES GO"}` : "DELETE"}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+/*
+  ── ONE TEXT FIELD, DEFINED AT THE TOP LEVEL ───────────────────────────────
+
+  It matters that this is out here rather than inside the component that uses
+  it. A component declared inside a render is a NEW FUNCTION on every render,
+  and React compares component types by identity — so it does not see the same
+  input with a new value, it sees one component disappear and a different one
+  arrive. It unmounts the old node and mounts a fresh one.
+
+  For a row of buttons that is invisible. For a TEXT FIELD it is fatal: the
+  new node is not the focused one, so focus is lost after every single
+  keystroke and typing a headline means clicking back into the box for each
+  letter. Declared here, it is one type for the life of the module.
+*/
+const SettingLine = ({ label, value, placeholder, help, onChange }) => (
+  <div className="py-3" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+    <p className="m-0 mb-1.5" style={{ ...fontText, fontSize: "15.5px", color: theme.ink }}>{label}</p>
+    <input value={value || ""} onChange={(e) => onChange(e.target.value)}
+           placeholder={placeholder} style={{ ...inputStyle, width: "100%" }} />
+    {help && (
+      <p className="m-0 mt-1.5" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+        {help}
+      </p>
+    )}
+  </div>
+);
+
+/*
+  The words the page uses, and the one rule that is not per-poll.
+
+  These live HERE rather than in SETTINGS for the same reason the pool's
+  switches do: the moment you want to shut voting is the moment something has
+  gone wrong with a poll, and that is not the moment to go hunting through
+  thirteen sections of a settings screen. They are the same settings, saved
+  through the same endpoint — they simply appear where the work is.
+*/
+function PollRules() {
+  const [cfg, setCfg] = useState(null);
+  const [saved0, setSaved0] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    api.fetchSettings().then((res) => {
+      if (res.ok) { setCfg(res.settings); setSaved0(res.settings); }
+    });
+  }, []);
+
+  if (!cfg) return null;
+  const set = (k, v) => setCfg((s) => ({ ...s, [k]: v }));
+  const dirty = saved0 && Object.keys(cfg).some((k) => String(cfg[k]) !== String(saved0[k]));
+
+  const save = async () => {
+    setBusy(true);
+    const res = await api.saveSettings(cfg);
+    setBusy(false);
+    if (res.ok) { setSaved0(cfg); setDone(true); setTimeout(() => setDone(false), 2600); setMsg(""); }
+    else setMsg(res.error || "Couldn't save.");
+  };
+
+  return (
+    <div className="mb-8">
+      <div className="flex flex-wrap items-center" style={{ gap: "6px" }}>
+        <Btn on={cfg.pollsOpen !== false} onClick={() => { set("pollsOpen", cfg.pollsOpen === false); }}>
+          VOTING · {cfg.pollsOpen !== false ? "OPEN" : "CLOSED"}
+        </Btn>
+        <Btn on={open} onClick={() => setOpen((v) => !v)}>
+          {open ? "HIDE THE WORDS" : "THE WORDS & THE LIMIT"}
+        </Btn>
+        {dirty && (
+          <Btn wide on onClick={save} disabled={busy} style={{ opacity: busy ? 0.5 : 1 }}>
+            {busy ? "SAVING…" : done ? "SAVED" : "SAVE"}
+          </Btn>
+        )}
+      </div>
+      <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+        The master switch hides the whole page from visitors. An individual
+        poll is opened and closed on its own, below.
+      </p>
+
+      {open && (
+        <div className="mt-4 p-4" style={{ border: `1px solid ${theme.rule}`, background: theme.sunk }}>
+          <SettingLine value={cfg.pollsHeadline} onChange={(v) => set("pollsHeadline", v)} label="Headline" placeholder="Polls"
+                help="Leave empty for “Polls”." />
+          <SettingLine value={cfg.pollsSub} onChange={(v) => set("pollsSub", v)} label="Under the headline"
+                placeholder="THE COUNT APPEARS ONCE YOU HAVE VOTED"
+                help="Set in small tracked capitals, so keep it short." />
+          <SettingLine value={cfg.pollsNote} onChange={(v) => set("pollsNote", v)} label="A line above the list"
+                placeholder="e.g. We read every one of these."
+                help="Empty means nothing is shown." />
+          <SettingLine value={cfg.pollsClosedMessage} onChange={(v) => set("pollsClosedMessage", v)} label="When voting is closed"
+                placeholder="Nothing to vote on right now."
+                help="Shown in place of the list when the master switch is off, and when there is nothing open." />
+
+          <div className="flex items-center gap-3 py-3" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+            <span className="flex-1">
+              <span className="block" style={{ ...fontText, fontSize: "15.5px", color: theme.ink }}>
+                Different people per hour, from one address
+              </span>
+              <span className="block mt-1" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+                One vote per browser is the honest half of this, and a private
+                window clears it. This is what stops one person voting forty
+                times. It is never sent to the page — a limit nobody can read
+                is a limit nobody games. Zero switches it off.
+              </span>
+            </span>
+            <input type="number" min="0" value={cfg.pollsPerHour ?? 6}
+                   onChange={(e) => set("pollsPerHour", Math.max(0, Number(e.target.value) || 0))}
+                   style={{ ...inputStyle, width: "80px", textAlign: "right" }} />
+          </div>
+
+          <Note>{msg}</Note>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PollDesk() {
+  const [polls, setPolls] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [only, setOnly] = useState("ALL");
+  const [msg, setMsg] = useState("");
+
+  const load = React.useCallback(() => {
+    api.listPolls().then((res) => {
+      setLoading(false);
+      if (res.ok) { setPolls(res.polls || []); setMsg(""); }
+      else setMsg(res.error || "Couldn't read the polls.");
+    });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const change = async (id, changes) => {
+    const res = await api.editPoll(id, changes);
+    if (res.ok) load();
+    else setMsg(res.error || "Couldn't change that.");
+  };
+
+  const remove = async (id) => {
+    const res = await api.deletePoll(id);
+    if (res.ok) setPolls((list) => list.filter((p) => p.id !== id));
+    else setMsg(res.error || "Couldn't delete that.");
+  };
+
+  const shown = polls.filter((p) =>
+    only === "ALL" ? true
+      : only === "TEAM" ? p.audience === "TEAM"
+      : p.status === only);
+
+  const count = (st) => polls.filter((p) => p.status === st).length;
+
+  return (
+    <>
+      <IndexBand items={[
+        { label: "POLLS", value: loading ? "—" : String(polls.length).padStart(2, "0") },
+        { label: "OPEN", value: loading ? "—" : String(count("OPEN")).padStart(2, "0") },
+        { label: "DRAFTS", value: loading ? "—" : String(count("DRAFT")).padStart(2, "0") },
+        { label: "TEAM ONLY", value: loading ? "—" : String(polls.filter((p) => p.audience === "TEAM").length).padStart(2, "0") },
+      ]} />
+
+      <Panel title="THE POLLS" right={shown.length ? `${shown.length} SHOWN` : ""}>
+        <p className="m-0 mb-4" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+          A question with options, answered once per browser. Nobody outside
+          sees a count until they have voted — a visible tally steers the vote,
+          and a poll that steers its own vote measures itself. You see every
+          number here from the moment the first one arrives.
+        </p>
+
+        <PollRules />
+
+        <NewPoll onMade={load} />
+
+        <div className="flex flex-wrap mb-4" style={{ gap: "5px" }}>
+          {["ALL", "OPEN", "DRAFT", "CLOSED", "TEAM"].map((f) => (
+            <Btn key={f} on={only === f} onClick={() => setOnly(f)}>
+              {f === "TEAM" ? "TEAM ONLY" : f}
+            </Btn>
+          ))}
+          <span className="flex-1" />
+          <Btn onClick={load}>REFRESH</Btn>
+        </div>
+
+        <Note>{msg}</Note>
+
+        {loading ? (
+          <p className="m-0 py-6" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>Reading…</p>
+        ) : !shown.length ? (
+          <p className="m-0 py-6" style={{ ...fontText, fontSize: "16px", color: theme.ink2 }}>
+            {polls.length ? "Nothing matches that filter." : "No polls yet. Write one above."}
+          </p>
+        ) : (
+          shown.map((p) => (
+            <PollRow key={p.id} poll={p} onChange={change} onDelete={remove} />
+          ))
+        )}
+      </Panel>
+    </>
+  );
+}

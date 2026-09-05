@@ -15,7 +15,7 @@ import { useArtists, useRecords } from "../lib/data";
   is a file where a change in one panel breaks another.
 */
 import { Demos, Bookings, Waitlist, SetTimes, Kits, After, ReleaseLinks } from "./ConsoleExtra";
-import { LiquidBar, PoolDesk } from "./ConsoleDesks";
+import { LiquidBar, PoolDesk, PollDesk } from "./ConsoleDesks";
 
 /*
   The console.
@@ -55,6 +55,7 @@ const TABS = [
   { id: "demos",    label: "DEMOS",     need: "issuePasses", group: "content" },
   { id: "bookings", label: "BOOKINGS",  need: "issuePasses", group: "content" },
   { id: "pool",     label: "THE POOL",  need: "issuePasses", group: "content" },
+  { id: "polls",    label: "POLLS",     need: "issuePasses", group: "content" },
   { id: "activity", label: "ACTIVITY",  need: "manageTeam",  group: "system" },
   { id: "after",    label: "AFTER",     need: "manageTeam",  group: "system" },
   { id: "faults",   label: "FAULTS",    need: "manageTeam",  group: "system" },
@@ -3550,6 +3551,7 @@ function ConsoleScreen({ role }) {
         */}
         {tab === "records" && role.can.issuePasses && <ReleaseLinks records={catalogue} />}
         {tab === "pool" && role.can.issuePasses && <PoolDesk parties={parties} />}
+        {tab === "polls" && role.can.issuePasses && <PollDesk />}
         {tab === "bar" && role.can.manageTeam && <LiquidBar />}
         {tab === "settings" && role.can.manageTeam && <Settings parties={parties} />}
           </div>

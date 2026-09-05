@@ -31,7 +31,7 @@ const PORT = Number(process.env.SMOKE_PORT || 8137);
 
 const ROUTES = [
   "/", "/records", "/agency", "/artists", "/events", "/news", "/mixes",
-  "/about", "/contact", "/pool", "/mypass", "/admins-staff-boss",
+  "/about", "/contact", "/pool", "/polls", "/mypass", "/admins-staff-boss",
   "/console", "/scan", "/doorlist",
   "/demos", "/bookings",
   "/this-page-does-not-exist",
