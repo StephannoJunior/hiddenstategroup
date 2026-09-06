@@ -626,6 +626,51 @@ blockquote, .hs-pullquote {
 }
 
 /*
+  ── ROOM FOR THE BAR TO FLOAT OVER ──────────────────────────────────────────
+
+  THE BUG THIS FIXES. The floating bar is fixed 30px from the bottom and is
+  76px tall, so it covers the bottom 106 pixels of the viewport — 140 on a
+  phone with a home indicator. Pages padded themselves by hand and the most
+  common value was pb-16, which is 64. Forty-two pixels of every page, at
+  every screen size, sat UNDERNEATH the bar and could not be scrolled into
+  view, because there was nothing below them to scroll to.
+
+  On most pages that is the last line of a footer. In the console it was the
+  last section of SETTINGS and its SAVE button: reachable only by knowing they
+  were there and guessing at where to press.
+
+  It is one rule rather than thirty hand-tuned paddings for the reason all of
+  this keeps coming back to — a number copied into thirty places is a number
+  that is wrong in some of them, and the page nobody checked is the one
+  somebody needs. The bar's real geometry is written once, here, and the
+  clearance is derived from it.
+
+  `min-height` rather than `padding` would not do: a page shorter than the
+  screen has nothing to scroll and does not need the room, while a long one
+  needs it at the end. Padding gives it exactly where it is needed.
+*/
+:root {
+  /* Keep in step with GlassBar.jsx: BAR_H, and the bar's `bottom`. */
+  --bar-height: 76px;
+  --bar-gap: 30px;
+  --bar-clearance: calc(
+    env(safe-area-inset-bottom, 0px) + var(--bar-gap) + var(--bar-height) + 20px
+  );
+}
+
+[data-page] {
+  padding-bottom: var(--bar-clearance);
+}
+
+/*
+  Printing has no floating bar — it is display:none — so the space reserved
+  for it would be a blank strip at the foot of every printed page.
+*/
+@media print {
+  [data-page] { padding-bottom: 0; }
+}
+
+/*
   Long lists of records, artists and events change size only when the data
   does. Telling the browser their layout cannot affect anything outside them
   means a change inside one row re-lays-out that row and nothing else.
