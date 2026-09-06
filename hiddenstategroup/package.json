@@ -15,7 +15,7 @@
     "test:door": "node scripts/door-test.mjs",
     "test:restore": "node scripts/restore.mjs --drill",
     "check": "node scripts/check.mjs",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && wrangler deploy --env=\"\"",
     "deploy:try": "npm run build && wrangler versions upload --env preview",
     "test:polls": "node scripts/poll-test.mjs",
     "test:pages": "node scripts/pages-test.mjs",

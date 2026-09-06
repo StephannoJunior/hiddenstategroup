@@ -3694,90 +3694,58 @@ export default {
       token. Those are private because their address is unguessable, and a
       sitemap is a list of addresses.
     */
+    /*
+      ── THE SITEMAP: THE BUILT FILE, PLUS WHAT ONLY THE DATABASE KNOWS ──────
+
+      This started as "generate the whole thing live" and that was wrong twice,
+      both times in the direction of quietly losing pages.
+
+      FIRST it listed thirteen URLs where the built file lists forty-five,
+      because scripts/sitemap.mjs walks the bundled JSON and I had only
+      thought about the sections.
+
+      THEN, having added the detail pages, it read EVENTS OUT OF THE parties
+      TABLE — and /events and /events/:id do not render from parties at all.
+      They render from the bundled events.json. parties is the door system: a
+      different thing, with one row in it where the bundle has seven. So the
+      "fix" dropped six reachable pages and invented one that may not resolve.
+
+      The lesson both times: the built file was doing more than it looked like
+      it was doing, and anything that REPLACES it is one oversight away from
+      deleting real pages from the index — silently, with no error and no
+      missing page, just traffic that stops arriving.
+
+      So it does not replace it. It takes the built file as the floor and adds
+      what the database knows and the bundle cannot: pages built in the
+      console since the last deploy. Nothing that was listed can be lost,
+      because nothing is ever removed.
+    */
     if (url.pathname === "/sitemap.xml") {
       try {
-        const SECTIONS = [
-          ["/", "1.0"], ["/news", "0.9"], ["/artists", "0.9"], ["/events", "0.9"],
-          ["/agency", "0.8"], ["/records", "0.8"], ["/mixes", "0.7"],
-          ["/about", "0.6"], ["/contact", "0.6"], ["/pool", "0.5"], ["/polls", "0.5"],
-          ["/demos", "0.6"], ["/bookings", "0.7"],
-        ];
+        const builtFile = await env.ASSETS.fetch(
+          new Request(new URL("/sitemap.xml", url.origin), { method: "GET" })
+        );
+        let xml = await builtFile.text();
+        if (!xml.includes("</urlset>")) throw new Error("the built sitemap is not a sitemap");
+
         const today = new Date().toISOString().slice(0, 10);
         const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-        const rows = [];
-        for (const [loc, priority] of SECTIONS) {
-          rows.push({ loc, priority, lastmod: today });
-        }
 
-        /*
-          ── EVERY PAGE THAT HAS AN ADDRESS, NOT JUST THE SECTIONS ───────────
-
-          The built file listed forty-five URLs — every artist, every night,
-          every article, every session — because scripts/sitemap.mjs walks the
-          bundled JSON. A first version of this route listed thirteen, and
-          swapping it in would have QUIETLY DROPPED THIRTY-TWO REAL PAGES from
-          everything Google knows about.
-
-          That is the whole hazard of replacing a generated file with a live
-          route: the file was doing more than it looked like it was doing. So
-          this reads the same four kinds out of the database, where they are
-          now more current than the bundle anyway.
-
-          Records are deliberately absent, as they were before: releases live
-          on /records rather than at their own address, and listing a URL that
-          redirects is worse than not listing it.
-        */
-        const detail = await Promise.all([
-          env.DB.prepare("SELECT id AS slug, updated_at FROM artists WHERE published = 1")
-            .all().catch(() => ({ results: [] })),
-          env.DB.prepare("SELECT id AS slug, doors_close_at AS updated_at FROM parties WHERE archived = 0")
-            .all().catch(() => ({ results: [] })),
-          env.DB.prepare("SELECT slug, IFNULL(updated_at, sort_date) AS updated_at FROM posts WHERE published = 1")
-            .all().catch(() => ({ results: [] })),
-          env.DB.prepare("SELECT slug, updated_at FROM mixes WHERE published = 1")
-            .all().catch(() => ({ results: [] })),
-        ]);
-        const KINDS = [["/artists", "0.7"], ["/events", "0.7"], ["/news", "0.7"], ["/mixes", "0.6"]];
-        detail.forEach((set, i) => {
-          const [base, priority] = KINDS[i];
-          for (const r of set.results || []) {
-            if (!r.slug && r.slug !== 0) continue;
-            rows.push({
-              loc: `${base}/${r.slug}`,
-              priority,
-              // A real date where there is one. Claiming everything changed
-              // today is the fastest way to be ignored.
-              lastmod: /^\d{4}-\d{2}-\d{2}/.test(String(r.updated_at || ""))
-                ? String(r.updated_at).slice(0, 10) : today,
-            });
-          }
-        });
-
-        const built = await env.DB.prepare(
+        const pages = await env.DB.prepare(
           "SELECT slug, updated_at FROM pages WHERE published = 1 ORDER BY sort_order, slug"
         ).all().catch(() => ({ results: [] }));
-        for (const pg of built.results || []) {
-          rows.push({
-            loc: `/${pg.slug}`,
-            priority: "0.6",
-            lastmod: String(pg.updated_at || today).slice(0, 10),
-          });
+
+        const extra = (pages.results || [])
+          .filter((pg) => pg.slug && !xml.includes(`/${pg.slug}</loc>`))
+          .map((pg) =>
+            `  <url><loc>https://hiddenstategroup.com/${esc(pg.slug)}</loc>` +
+            `<lastmod>${esc(String(pg.updated_at || today).slice(0, 10))}</lastmod>` +
+            `<priority>0.6</priority></url>`
+          );
+
+        if (extra.length) {
+          xml = xml.replace("</urlset>", extra.join("\n") + "\n</urlset>");
         }
-
-        /*
-          IF THIS SOMEHOW PRODUCES LESS THAN THE SECTIONS ALONE, something is
-          wrong with the database and the built file is better than what this
-          would emit. Falling through to it is the safer answer.
-        */
-        if (rows.length < SECTIONS.length) throw new Error("sitemap came back too short");
-
-        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
-          `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-          rows.map((r) =>
-            `  <url><loc>https://hiddenstategroup.com${esc(r.loc)}</loc>` +
-            `<lastmod>${esc(r.lastmod)}</lastmod>` +
-            `<priority>${esc(r.priority)}</priority></url>`
-          ).join("\n") + `\n</urlset>\n`;
 
         return new Response(xml, {
           headers: {
@@ -3787,8 +3755,9 @@ export default {
           },
         });
       } catch (err) {
-        console.log("sitemap failed, falling back to the built file:", err && err.message);
-        // The file in dist is stale rather than wrong. Better than nothing.
+        console.log("sitemap merge failed, serving the built file:", err && err.message);
+        // The built file alone is complete for everything except pages made
+        // in the console since the last deploy. A good fallback.
       }
     }
 
