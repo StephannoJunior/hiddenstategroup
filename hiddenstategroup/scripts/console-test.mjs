@@ -100,15 +100,41 @@ const PARTY = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
-const SETTINGS = {
-  barFinish: "INK", barTabWidth: 64, barLabelSize: 7.5, barShowLabels: true,
-  barDarkness: 62, barBlur: 22, barSaturation: 175, barSpeed: 1,
-  paperTone: "BOARD", accentTone: "OXBLOOD", grainStrength: "NORMAL",
-  poolOpen: true, poolEventOpen: true, poolHouseOpen: true,
-  pollsOpen: true, pollsPerHour: 6,
-  cspEnforce: false, siteClosed: false,
-  maxPeoplePerRequest: 6,
-};
+/*
+  ── THE SETTINGS FIXTURE IS THE REAL DEFAULTS ───────────────────────────────
+
+  Hand-written, it had twenty of the hundred and three, and the Settings screen
+  renders a control for every one — so the first `values.something.split(...)`
+  on an absent setting threw and the whole console went to the error boundary.
+  A fixture that is a SUBSET of the truth is a fixture that will be wrong again
+  the next time somebody adds a setting.
+
+  So it is read out of worker/lib/core.js, which is where the defaults actually
+  live. It cannot drift, and a setting added tomorrow is in the test the same
+  afternoon.
+*/
+function realDefaults() {
+  try {
+    const core = readFileSync(new URL("../worker/lib/core.js", import.meta.url), "utf8");
+    const from = core.indexOf("export const DEFAULT_SETTINGS = {");
+    const open = core.indexOf("{", from);
+    // Walk to the matching brace rather than guessing at "\n};" — the object
+    // has nested braces in its comments and its default strings.
+    let depth = 0, end = open;
+    for (let i = open; i < core.length; i++) {
+      const ch = core[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") { depth--; if (!depth) { end = i; break; } }
+    }
+    // eslint-disable-next-line no-new-func
+    return new Function("return " + core.slice(open, end + 1))();
+  } catch (err) {
+    console.log(`  ! could not read the real defaults (${err.message}) — using a stub`);
+    return { barFinish: "INK", poolOpen: true, pollsOpen: true };
+  }
+}
+
+const SETTINGS = realDefaults();
 
 /*
   ── THE KEYS ARE NOT A GUESS ───────────────────────────────────────────────
@@ -130,13 +156,19 @@ const FIXTURES = {
   "/api/public-parties": { ok: true, parties: [PARTY] },
   "/api/passes": { ok: true, passes: [] },
   "/api/requests": { ok: true, requests: [] },
-  "/api/waitlist": { ok: true, waiting: [] },
-  "/api/settimes": { ok: true, times: [] },
-  "/api/stats": { ok: true, stats: {}, totals: {} },
+  "/api/waitlist": { ok: true, queue: [], room: 0, issued: 0, capacity: 300 },
+  "/api/settimes": { ok: true, sets: [] },
+  // Stats reads data.totals and data.byHour straight off the response.
+  "/api/stats": {
+    ok: true,
+    totals: { issued: 0, admitted: 0, noShows: 0, refusals: 0 },
+    byHour: [],
+  },
   "/api/activity": { ok: true, feed: [] },
-  "/api/afters": { ok: true, sent: [], letters: [] },
+  "/api/afters": { ok: true, letters: [] },
   "/api/oops": { ok: true, errors: [] },
-  "/api/views": { ok: true, total: 0, pages: [], days: [] },
+  // Readership does setData(res), then reads whatever it needs off it.
+  "/api/views": { ok: true, total: 0, pages: [], days: [], busiest: null },
   "/api/backups": { ok: true, backups: [] },
   "/api/epk": { ok: true, kit: null, kits: [], artists: [] },
   "/api/links": { ok: true, links: [] },
@@ -285,14 +317,25 @@ async function main() {
         fail(`${label} — this is the LOGIN screen, not the console`);
         continue;
       }
-      // The tab strip is only drawn once somebody is signed in, and every tab
-      // is named in it. A screen that does not contain its own name is not it.
-      if (!text.toUpperCase().includes(label)) {
-        fail(`${label} — the console rendered, but this tab is not on it`);
+      /*
+        THE ERROR BOUNDARY'S OWN MARKER, checked BEFORE the tab-name test.
+        Without it a crashed tab was reported as "this tab is not on it" —
+        true, and the wrong explanation: the strip was gone because the whole
+        console had been replaced by the fallback. A test that reports the
+        wrong cause costs more time than one that says nothing.
+      */
+      if (/STOP PRESS/i.test(text)) {
+        fail(`${label} — it CRASHED; the error boundary is on screen`);
         continue;
       }
       if (/Something went wrong|Cannot read|undefined is not/i.test(text)) {
         fail(`${label} — an error is on screen`);
+        continue;
+      }
+      // The tab strip is only drawn once somebody is signed in, and every tab
+      // is named in it. A screen that does not contain its own name is not it.
+      if (!text.toUpperCase().includes(label)) {
+        fail(`${label} — the console rendered, but this tab is not on it`);
         continue;
       }
       // React's own crash boundary, whatever it renders around it.
