@@ -27,6 +27,7 @@
 */
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { chromium } from "playwright";
 
@@ -129,8 +130,16 @@ function realDefaults() {
     // eslint-disable-next-line no-new-func
     return new Function("return " + core.slice(open, end + 1))();
   } catch (err) {
-    console.log(`  ! could not read the real defaults (${err.message}) — using a stub`);
-    return { barFinish: "INK", poolOpen: true, pollsOpen: true };
+    /*
+      NOT A WARNING — A FAILURE. Falling back to a stub means the Settings
+      screen is guaranteed to throw, and the run then reports that as though
+      the console were broken. It is not: the test is. Said plainly, at the
+      top, and counted.
+    */
+    console.log(`  ✗ could not read the real defaults: ${err.message}`);
+    console.log(`    Every settings-dependent screen will now fail for the WRONG reason.`);
+    brokenFixtures = true;
+    return {};
   }
 }
 
@@ -212,6 +221,7 @@ const TABS = [
 ];
 
 let failures = 0;
+let brokenFixtures = false;
 const fail = (m) => { console.log(`  ✗ ${m}`); failures++; };
 const pass = (m) => console.log(`  ok  ${m}`);
 
@@ -376,6 +386,10 @@ async function main() {
   await browser.close();
   server.close();
 
+  if (brokenFixtures) {
+    console.log("\nThe fixtures could not be built, so nothing above is trustworthy.\n");
+    process.exit(1);
+  }
   console.log(failures
     ? `\n${failures} problem(s) in the console\n`
     : `\nthe console opens, on every tab\n`);
