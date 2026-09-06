@@ -56,7 +56,8 @@ const Rows = ({ value, onChange, termLabel = "Term", detailLabel = "Detail" }) =
           <input value={r.detail || ""} placeholder={detailLabel}
                  onChange={(e) => set(i, "detail", e.target.value)}
                  style={{ ...inputStyle, flex: 1 }} />
-          <Btn onClick={() => onChange(rows.filter((_, n) => n !== i))}>—</Btn>
+          <Btn onClick={() => onChange(rows.filter((_, n) => n !== i))}
+               aria-label="Remove this row">—</Btn>
         </div>
       ))}
       <Btn onClick={() => onChange([...rows, { term: "", detail: "" }])}>ADD A ROW</Btn>
@@ -81,7 +82,8 @@ const Images = ({ value, onChange }) => {
           <input value={r.caption || ""} placeholder="caption"
                  onChange={(e) => set(i, "caption", e.target.value)}
                  style={{ ...inputStyle, flex: "0 0 30%" }} />
-          <Btn onClick={() => onChange(rows.filter((_, n) => n !== i))}>—</Btn>
+          <Btn onClick={() => onChange(rows.filter((_, n) => n !== i))}
+               aria-label="Remove this row">—</Btn>
         </div>
       ))}
       <Btn onClick={() => onChange([...rows, { src: "", caption: "" }])}>ADD AN IMAGE</Btn>

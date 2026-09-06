@@ -780,7 +780,8 @@ function NewPoll({ onMade }) {
                  placeholder={`Option ${i + 1}`} maxLength={120}
                  style={{ ...inputStyle, flex: 1 }} />
           {options.length > 2 && (
-            <Btn onClick={() => setOptions((was) => was.filter((_, n) => n !== i))}>—</Btn>
+            <Btn onClick={() => setOptions((was) => was.filter((_, n) => n !== i))}
+                 aria-label={`Remove option ${i + 1}`}>—</Btn>
           )}
         </div>
       ))}
