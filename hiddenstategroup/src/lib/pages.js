@@ -14,15 +14,55 @@ import { usePreview, applyDraft } from "./preview";
   fall back to — a site that has never had a built page should render as a
   site that has never had one, not as a flash of something stale.
 */
+/*
+  ── ONE REQUEST PER TABLE PER PAGE LOAD ─────────────────────────────────────
+
+  These two hooks are read from more than one place at once, and without this
+  each of those places would make its own identical request. Measured on the
+  version this replaces:
+
+    every page   /content/pages, because the floating bar asks for it
+    Home         /content/slots TWICE, once for each of its two seams
+    a built page /content/pages twice — its own, plus the bar's
+
+  Two byte-identical fetches racing each other is not a small waste on a
+  phone: it is a second connection, a second round trip, and a second chance
+  for one of them to be the slow one.
+
+  So the flight is shared. A promise is cached per table, and everything that
+  asks during its lifetime gets the same one. The window is short because this
+  is site chrome rather than a document — long enough to collapse the requests
+  of a single page load, far too short to show somebody yesterday's menu.
+
+  The console is deliberately NOT routed through here: it calls listContent
+  directly, so publishing and then looking is never answered from a cache that
+  predates the publish.
+*/
+const SHARE_MS = 20000;
+const shared = new Map();
+
+function loadOnce(kind) {
+  const hit = shared.get(kind);
+  if (hit && Date.now() - hit.at < SHARE_MS) return hit.flight;
+  const flight = api.listContent(kind)
+    .then((res) => (res.ok ? res.items || [] : []))
+    .catch(() => []);
+  shared.set(kind, { at: Date.now(), flight });
+  return flight;
+}
+
+/* Publishing from the Studio makes anything cached here out of date at once. */
+export function forgetPages() {
+  shared.clear();
+}
+
 export function usePages() {
   const [pages, setPages] = useState([]);
   const draft = usePreview();
 
   useEffect(() => {
     let alive = true;
-    api.listContent("pages").then((res) => {
-      if (alive && res.ok) setPages(res.items || []);
-    });
+    loadOnce("pages").then((items) => { if (alive) setPages(items); });
     return () => { alive = false; };
   }, []);
 
@@ -43,9 +83,7 @@ export function useSlot(where) {
 
   useEffect(() => {
     let alive = true;
-    api.listContent("slots").then((res) => {
-      if (alive && res.ok) setAll(res.items || []);
-    });
+    loadOnce("slots").then((items) => { if (alive) setAll(items); });
     return () => { alive = false; };
   }, []);
 

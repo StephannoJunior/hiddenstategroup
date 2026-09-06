@@ -4787,13 +4787,6 @@ async function handleApi(request, env, url, ctx) {
     Has this voter voted in this poll? One query, and the ONLY thing that
     decides whether counts are sent.
   */
-  const hasVoted = async (pollId, voter) => {
-    if (!voter) return false;
-    const row = await env.DB.prepare(
-      "SELECT 1 AS x FROM poll_votes WHERE poll_id = ? AND voter = ? LIMIT 1"
-    ).bind(pollId, voter).first();
-    return !!row;
-  };
 
   /*
     Options, with counts only when they are allowed. The tally is ONE query
@@ -4816,13 +4809,6 @@ async function handleApi(request, env, url, ctx) {
   };
 
   // Which options THIS voter picked, so the page can show them ticked.
-  const minePicks = async (pollId, voter) => {
-    if (!voter) return [];
-    const rows = await env.DB.prepare(
-      "SELECT option_id FROM poll_votes WHERE poll_id = ? AND voter = ?"
-    ).bind(pollId, voter).all();
-    return (rows.results || []).map((r) => r.option_id);
-  };
 
   /* ── the list ──────────────────────────────────────────────────────────── */
 
@@ -4848,16 +4834,69 @@ async function handleApi(request, env, url, ctx) {
           "SELECT * FROM polls WHERE audience = 'PUBLIC' AND status = 'OPEN' ORDER BY id DESC LIMIT 40"
         ).all();
 
-    const polls = [];
-    for (const p of rows.results || []) {
+    /*
+      ── FOUR QUERIES, NOT FOUR PER POLL ─────────────────────────────────────
+
+      This loop used to call hasVoted, minePicks and optionsFor for each poll
+      in turn — three or four round trips EACH, so a listing of forty polls
+      was about a hundred and sixty sequential queries to build one response.
+      It was fast with two polls, which is exactly how this kind of thing gets
+      written and then never noticed: the cost arrives long after the code
+      does, on the day somebody has finally used the feature enough for it to
+      matter.
+
+      Everything the loop asked for is now fetched once, for every poll at
+      once, and looked up in memory. Four queries whether there is one poll or
+      a hundred.
+    */
+    const list = rows.results || [];
+    const ids = list.map((p) => p.id);
+    const marks = ids.map(() => "?").join(",");
+
+    let allOptions = [], allTally = [], allMine = [];
+    if (ids.length) {
+      const [o, t, m] = await Promise.all([
+        env.DB.prepare(
+          `SELECT id, poll_id, label FROM poll_options WHERE poll_id IN (${marks}) ORDER BY ord ASC, id ASC`
+        ).bind(...ids).all(),
+        env.DB.prepare(
+          `SELECT poll_id, option_id, COUNT(*) AS n FROM poll_votes WHERE poll_id IN (${marks}) GROUP BY poll_id, option_id`
+        ).bind(...ids).all(),
+        voter
+          ? env.DB.prepare(
+              `SELECT poll_id, option_id FROM poll_votes WHERE voter = ? AND poll_id IN (${marks})`
+            ).bind(voter, ...ids).all()
+          : Promise.resolve({ results: [] }),
+      ]);
+      allOptions = o.results || [];
+      allTally = t.results || [];
+      allMine = m.results || [];
+    }
+
+    const optionsBy = new Map();
+    for (const o of allOptions) {
+      if (!optionsBy.has(o.poll_id)) optionsBy.set(o.poll_id, []);
+      optionsBy.get(o.poll_id).push({ id: o.id, label: o.label });
+    }
+    const countBy = new Map(allTally.map((r) => [`${r.poll_id}:${r.option_id}`, r.n]));
+    const mineBy = new Map();
+    for (const r of allMine) {
+      if (!mineBy.has(r.poll_id)) mineBy.set(r.poll_id, []);
+      mineBy.get(r.poll_id).push(r.option_id);
+    }
+
+    const polls = list.map((p) => {
       /*
         WHEN THE NUMBERS ARE ALLOWED OUT. The team always. Everybody else only
         once they have voted, or once the poll is closed — a closed poll has
-        nothing left to steer.
+        nothing left to steer. Unchanged from the version above; only the way
+        the facts were gathered has changed.
       */
-      const voted = await hasVoted(p.id, voter);
+      const mine = mineBy.get(p.id) || [];
+      const voted = mine.length > 0;
       const tallied = team || voted || p.status === "CLOSED";
-      polls.push({
+      const opts = optionsBy.get(p.id) || [];
+      return {
         id: p.id,
         question: p.question,
         note: p.note || "",
@@ -4868,10 +4907,12 @@ async function handleApi(request, env, url, ctx) {
         closed_at: p.closed_at,
         voted,
         tallied,
-        mine: await minePicks(p.id, voter),
-        options: await optionsFor(p.id, tallied),
-      });
-    }
+        mine,
+        options: tallied
+          ? opts.map((o) => ({ ...o, votes: countBy.get(`${p.id}:${o.id}`) || 0 }))
+          : opts,
+      };
+    });
     return json({ ok: true, polls, team });
   }
 

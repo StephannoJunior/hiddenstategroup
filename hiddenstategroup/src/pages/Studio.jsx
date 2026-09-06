@@ -4,7 +4,7 @@ import { IndexBand, fontDisplay, fontUtility, fontText, theme, inputStyle }
 import * as api from "../lib/api";
 import Blocks from "../components/Blocks";
 import BlockEditor from "../components/BlockEditor";
-import { SLOTS } from "../lib/pages";
+import { SLOTS, forgetPages } from "../lib/pages";
 
 /*
   ══ THE STUDIO ══════════════════════════════════════════════════════════════
@@ -378,6 +378,9 @@ export default function Studio() {
     setMsg(res.created ? "Published — it is on the site now." : "Published — the change is live.");
     setTone("good");
     setRef(null); setForm(null); setToken(null); setShowReal(false);
+    // The site shares one short-lived copy of pages and slots between the bar
+    // and the page reading them; publishing makes it stale that instant.
+    forgetPages();
     loadRows(); loadDrafts();
   };
 
