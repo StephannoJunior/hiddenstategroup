@@ -9,7 +9,7 @@
   route that does not exist. None of it throws. It just quietly does nothing,
   and you find out weeks later when you wonder why a switch has no effect.
 
-  Eight checks:
+  Nine checks:
     1. every declared setting is published, controllable and actually read
     2. the settings index matches the sections that exist
     3. every site.<setting> read is a real setting
@@ -18,6 +18,7 @@
     6. no name is both imported and declared in the same file
     7. every name a file reads is declared somewhere
     8. every write consults a session, or is named as deliberately public
+    9. every import resolves to a real export in the file it names
 
   Exits non-zero on any finding, so it can gate a deploy.
 */
@@ -27,7 +28,25 @@ import { join } from "node:path";
 const ROOT = new URL("../", import.meta.url).pathname;
 const read = (f) => readFileSync(join(ROOT, f), "utf8");
 
-const worker = read("worker/index.js");
+/*
+  THE WORKER IS SEVERAL FILES. The settings and their public list live in
+  lib/core.js; the routes live in index.js and beside it. `worker` is the whole
+  thing joined, because every check here asks a question about the worker as a
+  program rather than about a file — and the moment core.js was split out, a
+  version of this that still read index.js alone reported "0 settings" and
+  seventy-six false failures. Loudly wrong, which is the right way for a check
+  to break, but wrong.
+*/
+const worker = readdirSync(join(ROOT, "worker"))
+  .flatMap((e) => {
+    const p = "worker/" + e;
+    return statSync(join(ROOT, p)).isDirectory()
+      ? readdirSync(join(ROOT, p)).map((f) => p + "/" + f)
+      : [p];
+  })
+  .filter((f) => f.endsWith(".js"))
+  .map(read)
+  .join("\n");
 const apiSrc = read("src/lib/api.js");
 /*
   THE CONSOLE IS FOUR FILES, NOT ONE.
@@ -61,6 +80,21 @@ const files = [];
     else if (/\.jsx?$/.test(p)) files.push(p);
   }
 })("src");
+
+/*
+  The worker is a directory now, not a file. Checks 6 and 7 walk it the same
+  way they walk src — which matters more here than anywhere else: splitting a
+  monolith is exactly the operation that leaves a route calling a helper it no
+  longer imports, and "every name resolves" is the check that catches it.
+*/
+const workerFiles = [];
+(function walk(d) {
+  for (const e of readdirSync(join(ROOT, d))) {
+    const p = d + "/" + e;
+    if (statSync(join(ROOT, p)).isDirectory()) walk(p);
+    else if (/\.js$/.test(p)) workerFiles.push(p);
+  }
+})("worker");
 
 let problems = 0;
 const bad = (m) => { console.log("  ✗ " + m); problems++; };
@@ -307,7 +341,7 @@ console.log("\n7. every name used is declared somewhere");
     ).split(/\s+/));
 
     let n = 0;
-    for (const f of [...files, "worker/index.js"]) {
+    for (const f of [...files, ...workerFiles]) {
       let ast;
       try {
         ast = parser.parse(read(f), { sourceType: "module", plugins: ["jsx"] });
@@ -378,10 +412,20 @@ console.log("\n8. every write consults a session, or is deliberately public");
   }
 
   if (parser8 && typeof traverse8 === "function") {
-    const ast = parser8.parse(worker, { sourceType: "module" });
-    const at = (n) => worker.slice(n.start, n.end);
+    /*
+      EACH FILE SEPARATELY, not the concatenation. `worker` is every worker
+      file joined, which is right for the regex checks above and wrong here:
+      index.js imports names core.js declares, so the joined text redeclares
+      them and the parser refuses the whole thing. It did exactly that the
+      moment core.js was split out.
+    */
     const MUT = /method === "(POST|PATCH|PUT|DELETE)"/;
     let seen = 0;
+
+    for (const wf of workerFiles) {
+    const source = read(wf);
+    const ast = parser8.parse(source, { sourceType: "module" });
+    const at = (n) => source.slice(n.start, n.end);
 
     traverse8(ast, {
       IfStatement(path) {
@@ -401,11 +445,122 @@ console.log("\n8. every write consults a session, or is deliberately public");
           .find((v) => v.startsWith("/"));
         if (named && PUBLIC_WRITES.has(named)) return;
 
-        const line = worker.slice(0, path.node.start).split("\n").length;
-        bad(`worker/index.js:${line} writes without reading a session - ${test.replace(/\s+/g, " ").slice(0, 70)}`);
+        const line = source.slice(0, path.node.start).split("\n").length;
+        bad(`${wf}:${line} writes without reading a session - ${test.replace(/\s+/g, " ").slice(0, 70)}`);
       },
     });
+    }
     if (problems === before) good(`${seen} mutating routes, ${PUBLIC_WRITES.size} public on purpose`);
+  }
+}
+
+/*
+  ── 9 · EVERY IMPORT FINDS SOMETHING TO IMPORT ─────────────────────────────
+
+  Check 7 proves a name is BOUND. An import binds it — so `import { getSetings }
+  from "./lib/core.js"` passes check 7 perfectly while being a typo that fails
+  at build and, in a worker, at runtime for every request.
+
+  That gap did not matter while everything lived in one file. It matters now:
+  splitting a module is exactly the operation that produces an import of
+  something the other side does not export, and it is silent in the source.
+
+  So this resolves every relative import between our own files and asks the
+  target whether it actually exports that name. It follows re-exports one hop,
+  which is as far as this codebase goes.
+*/
+console.log("\n9. every import resolves to a real export");
+{
+  const before = problems;
+  let parser9 = null;
+  try { parser9 = await import("@babel/parser"); }
+  catch { console.log("  - skipped: no parser installed"); }
+
+  if (parser9) {
+    const EXT = ["", ".js", ".jsx", "/index.js", "/index.jsx"];
+    const exportsOf = new Map();
+
+    const readExports = (file) => {
+      if (exportsOf.has(file)) return exportsOf.get(file);
+      let out = new Set();
+      try {
+        const ast = parser9.parse(read(file), { sourceType: "module", plugins: ["jsx"] });
+        for (const n of ast.program.body) {
+          if (n.type === "ExportNamedDeclaration") {
+            if (n.declaration) {
+              if (n.declaration.declarations)
+                for (const d of n.declaration.declarations) if (d.id.name) out.add(d.id.name);
+              if (n.declaration.id) out.add(n.declaration.id.name);
+            }
+            for (const sp of n.specifiers || []) out.add(sp.exported.name);
+            // `export * from "./x"` — take whatever x exports.
+          } else if (n.type === "ExportAllDeclaration") {
+            out.add("*");
+          } else if (n.type === "ExportDefaultDeclaration") {
+            out.add("default");
+          }
+        }
+      } catch { out = null; }
+      exportsOf.set(file, out);
+      return out;
+    };
+
+    const resolve = (from, spec) => {
+      const base = from.split("/").slice(0, -1).join("/");
+      const parts = (base + "/" + spec).split("/");
+      const stack = [];
+      for (const seg of parts) {
+        if (seg === "." || seg === "") continue;
+        if (seg === "..") stack.pop();
+        else stack.push(seg);
+      }
+      const guess = stack.join("/");
+      for (const e of EXT) {
+        const candidate = guess + e;
+        try { readFileSync(join(ROOT, candidate), "utf8"); return candidate; } catch { /* next */ }
+      }
+      return null;
+    };
+
+    let n = 0;
+    const all = [...files, ...workerFiles];
+    for (const f of all) {
+      let ast;
+      try { ast = parser9.parse(read(f), { sourceType: "module", plugins: ["jsx"] }); }
+      catch { continue; }
+
+      for (const node of ast.program.body) {
+        if (node.type !== "ImportDeclaration") continue;
+        const spec = node.source.value;
+        if (!spec.startsWith(".")) continue;          // a package, not ours
+        /*
+          A JSON module has a default export as far as the bundler is
+          concerned, and no `export default` line to find. Asking this
+          question of one produces seven confident false failures.
+        */
+        if (/\.(json|css|svg|png|webp|woff2?)$/.test(spec)) continue;
+
+        const target = resolve(f, spec);
+        if (!target) {
+          bad(`${f} imports "${spec}" — no such file`);
+          continue;
+        }
+        const has = readExports(target);
+        if (!has || has.has("*")) continue;           // unparsable, or re-exports everything
+
+        for (const sp of node.specifiers) {
+          n++;
+          if (sp.type === "ImportSpecifier") {
+            if (!has.has(sp.imported.name))
+              bad(`${f} imports { ${sp.imported.name} } from ${target}, which does not export it`);
+          } else if (sp.type === "ImportDefaultSpecifier") {
+            if (!has.has("default"))
+              bad(`${f} imports a default from ${target}, which has none`);
+          }
+        }
+      }
+    }
+    if (problems === before) good(`${n} imports across ${all.length} files, all resolve`);
   }
 }
 

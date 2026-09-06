@@ -14,10 +14,22 @@
      host is the same hole as letting somebody paste HTML. This feeds it the
      things people actually paste and asserts which ones become a frame.
 */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 
 const app = readFileSync("src/App.jsx", "utf8");
-const worker = readFileSync("worker/index.js", "utf8");
+/*
+  Every worker file joined. RESERVED_SLUGS moved into lib/core.js when the
+  worker was split, and a version of this that still read index.js reported
+  all twenty-two real routes as unreserved — loudly wrong, which is how a
+  check should break, but wrong.
+*/
+const worker = readdirSync("worker")
+  .flatMap((e) => (statSync("worker/" + e).isDirectory()
+    ? readdirSync("worker/" + e).map((f) => "worker/" + e + "/" + f)
+    : ["worker/" + e]))
+  .filter((f) => f.endsWith(".js"))
+  .map((f) => readFileSync(f, "utf8"))
+  .join("\n");
 const blocks = readFileSync("src/components/Blocks.jsx", "utf8");
 
 let bad = 0;
@@ -40,7 +52,7 @@ const reserved = new Set(
 
 for (const r of unique) {
   check(`/${r} is reserved`, reserved.has(r.toLowerCase()),
-        "add it to RESERVED_SLUGS in worker/index.js");
+        "add it to RESERVED_SLUGS in worker/lib/core.js");
 }
 check("the catch-all page route is declared last",
       app.lastIndexOf('path="/:slug"') < app.lastIndexOf('path="*"'),
