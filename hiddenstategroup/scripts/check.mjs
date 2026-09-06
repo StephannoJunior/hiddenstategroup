@@ -68,6 +68,10 @@ const CONSOLE_FILES = [
   "src/pages/ConsoleDesks.jsx",
   "src/pages/Studio.jsx",
   "src/pages/KitEditor.jsx",
+  // Panels that outgrew Console.jsx and moved into a directory of their own.
+  ...readdirSync(join(ROOT, "src/pages/console"))
+    .filter((f) => /\.jsx?$/.test(f))
+    .map((f) => "src/pages/console/" + f),
 ];
 const consoleSrc = read("src/pages/Console.jsx");
 const consoleAll = CONSOLE_FILES.map(read).join("\n");
@@ -139,10 +143,22 @@ console.log("\n2. the settings index matches the sections rendered");
   const before = problems;
   // Bounded by the array's own closing bracket. A fixed slice length ran
   // past it and started reading the component below as section names.
-  const from = consoleSrc.indexOf("const SETTING_SECTIONS = [");
-  const arr = consoleSrc.slice(from, consoleSrc.indexOf("];", from));
+  /*
+    READ ACROSS THE WHOLE CONSOLE, and refuse to pass on nothing.
+
+    SETTING_SECTIONS moved out of Console.jsx when Settings did, and this
+    check went on reporting "0 sections, all listed" — a pass, in green, that
+    had stopped looking at anything. That is the worst way for a check to
+    break, and the fix is two things rather than one: read the console as a
+    set of files, AND treat an empty result as a failure, because there is no
+    world in which this site has no settings sections.
+  */
+  const from = consoleAll.indexOf("const SETTING_SECTIONS = [");
+  const arr = from === -1 ? "" : consoleAll.slice(from, consoleAll.indexOf("];", from));
   const declared = [...arr.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  const rendered = [...consoleSrc.matchAll(/<Section title="([^"]+)" \{\.\.\.saver\(/g)].map((m) => m[1]);
+  const rendered = [...consoleAll.matchAll(/<Section title="([^"]+)" \{\.\.\.saver\(/g)].map((m) => m[1]);
+  if (!declared.length) bad("SETTING_SECTIONS was not found in any console file");
+  if (!rendered.length) bad("no <Section> with a saver was found in any console file");
   for (const t of rendered) if (!declared.includes(t)) bad(`"${t}" is rendered but missing from SETTING_SECTIONS`);
   for (const t of declared) if (!rendered.includes(t)) bad(`SETTING_SECTIONS lists "${t}" but nothing renders it`);
   if (problems === before) good(`${declared.length} sections, all listed`);
