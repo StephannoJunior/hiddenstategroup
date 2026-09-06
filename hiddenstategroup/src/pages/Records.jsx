@@ -7,6 +7,8 @@ import {
   Nav, Footer, useGoogleFonts, Instagram,
   PageHead, IndexBand, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
+import Blocks from "../components/Blocks";
+import { useSlot } from "../lib/pages";
 import { ALBUMS, watchUrl } from "../lib/records";
 import { SOCIAL } from "../lib/social";
 
@@ -142,6 +144,7 @@ function ReleaseLinks({ slug, releaseDate }) {
 }
 
 export default function Records() {
+  const records_bottom = useSlot("records:bottom");
   useGoogleFonts();
   const { t } = useLang();
   useAlbumSchema(ALBUMS[0]);  // richest release gets the markup
@@ -166,6 +169,11 @@ export default function Records() {
         More releases coming.
       </p>
 
+      {records_bottom.length > 0 && (
+        <section className="max-w-[1180px] mx-auto px-[18px] py-10">
+          <Blocks blocks={records_bottom} />
+        </section>
+      )}
       <Footer />
     </div>
   );

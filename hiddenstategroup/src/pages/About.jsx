@@ -6,6 +6,8 @@ import {
   Nav, Footer, useGoogleFonts, Instagram,
   PageHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
+import Blocks from "../components/Blocks";
+import { useSlot } from "../lib/pages";
 import { ARTISTS } from "../lib/data";
 import { EMAILS } from "../lib/contacts";
 import { SOCIAL } from "../lib/social";
@@ -20,6 +22,7 @@ const DIVISIONS = [
 ];
 
 export default function About() {
+  const about_bottom = useSlot("about:bottom");
   useGoogleFonts();
   const { t } = useLang();
   usePageMeta({ title: "About", description: "One artist building a universe around a sound. Records, agency, events." });
@@ -106,6 +109,11 @@ export default function About() {
         </p>
       </section>
 
+      {about_bottom.length > 0 && (
+        <section className="max-w-[1180px] mx-auto px-[18px] py-10">
+          <Blocks blocks={about_bottom} />
+        </section>
+      )}
       <Footer />
     </div>
   );

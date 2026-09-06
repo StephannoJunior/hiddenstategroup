@@ -34,6 +34,7 @@ const About = lazy(() => import("./pages/About"));
 const Contact = lazy(() => import("./pages/Contact"));
 const SongPool = lazy(() => import("./pages/SongPool"));
 const Polls = lazy(() => import("./pages/Polls"));
+const BuiltPage = lazy(() => import("./pages/BuiltPage"));
 const Demos = lazy(() => import("./pages/Demos"));
 const Bookings = lazy(() => import("./pages/Bookings"));
 const Wall = lazy(() => import("./pages/Wall"));
@@ -279,6 +280,22 @@ export default function App() {
               <Route path="/admins-staff-boss" element={<TeamLogin />} />
 
               {/* Unknown URLs get a real page, not a silent redirect to home. */}
+              {/*
+                PAGES BUILT IN THE CONSOLE, at their own address.
+
+                LAST, and that position is load-bearing. React Router matches
+                in order, so every hand-written route above claims its name
+                first and a built page can never shadow one — /console stays
+                the console whatever somebody types into the builder. The
+                worker refuses those names as well, on publish, because two
+                defences that cannot both be forgotten are worth more than one
+                that is clever.
+
+                It still sits ABOVE the 404, because an unknown address has to
+                reach this before it can be declared missing — and BuiltPage
+                renders NotFound itself when the slug turns out not to exist.
+              */}
+              <Route path="/:slug" element={<BuiltPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

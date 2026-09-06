@@ -12,6 +12,8 @@ import {
   IndexBand, ContactSheet, Entry, Sleeve, InkSection, Plate, RegMark,
   fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
+import Blocks from "../components/Blocks";
+import { useSlot } from "../lib/pages";
 import { ARTICLES } from "../lib/news";
 import { ARTISTS, EVENTS } from "../lib/data";
 import { ALBUMS } from "../lib/records";
@@ -388,6 +390,8 @@ function TabBar() {
 }
 
 export default function Home() {
+  const home_top = useSlot("home:top");
+  const home_bottom = useSlot("home:bottom");
   useGoogleFonts();
   const site = useSite();
   // Every other rich result on the site points at this organisation.
@@ -414,6 +418,12 @@ export default function Home() {
       <Nav />
       {/* where the skip link lands */}
       <span id="main" tabIndex={-1} />
+      {home_top.length > 0 && (
+        <section className="max-w-[1180px] mx-auto px-[18px] py-10">
+          <Blocks blocks={home_top} />
+        </section>
+      )}
+
 
       <Facts />
       <Mark />
@@ -435,6 +445,11 @@ export default function Home() {
       <Divisions />
       <TabBar />
       <Closer />
+      {home_bottom.length > 0 && (
+        <section className="max-w-[1180px] mx-auto px-[18px] py-10">
+          <Blocks blocks={home_bottom} />
+        </section>
+      )}
       <Footer />
     </div>
   );

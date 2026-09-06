@@ -7,10 +7,13 @@ import {
   Nav, Footer, useGoogleFonts, Instagram, BookingDrawer,
   PageHead, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
+import Blocks from "../components/Blocks";
+import { useSlot } from "../lib/pages";
 import { ARTISTS, ROSTER_NOTE, useArtists } from "../lib/data";
 import { SOCIAL } from "../lib/social";
 
 export default function Agency() {
+  const agency_bottom = useSlot("agency:bottom");
   useGoogleFonts();
   const { t } = useLang();
   const artists = useArtists();
@@ -90,6 +93,11 @@ export default function Agency() {
         </p>
       </section>
 
+      {agency_bottom.length > 0 && (
+        <section className="max-w-[1180px] mx-auto px-[18px] py-10">
+          <Blocks blocks={agency_bottom} />
+        </section>
+      )}
       <Footer />
       <BookingDrawer open={drawer} onClose={() => setDrawer(false)} artist={chosen} />
     </div>

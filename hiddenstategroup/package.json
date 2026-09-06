@@ -17,7 +17,8 @@
     "check": "node scripts/check.mjs",
     "deploy": "npm run build && wrangler deploy",
     "deploy:try": "npm run build && wrangler versions upload",
-    "test:polls": "node scripts/poll-test.mjs"
+    "test:polls": "node scripts/poll-test.mjs",
+    "test:pages": "node scripts/pages-test.mjs"
   },
   "dependencies": {
     "jsqr": "^1.4.0",

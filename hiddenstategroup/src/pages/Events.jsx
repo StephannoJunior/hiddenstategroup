@@ -9,6 +9,8 @@ import {
   Nav, Footer, useGoogleFonts,
   PageHead, IndexBand, fontDisplay, fontUtility, fontText, theme,
 } from "../components/Shared";
+import Blocks from "../components/Blocks";
+import { useSlot } from "../lib/pages";
 import { EVENTS, EVENTS_NOTE } from "../lib/data";
 
 // Shown when an event has no artwork yet — set in type rather than a broken image.
@@ -76,6 +78,7 @@ function Card({ e }) {
 }
 
 export default function Events() {
+  const events_top = useSlot("events:top");
   useGoogleFonts();
   const site = useSite();
   const { t } = useLang();
@@ -88,6 +91,12 @@ export default function Events() {
       <Nav />
       {/* where the skip link lands */}
       <span id="main" tabIndex={-1} />
+      {events_top.length > 0 && (
+        <section className="max-w-[1180px] mx-auto px-[18px] py-10">
+          <Blocks blocks={events_top} />
+        </section>
+      )}
+
             <IndexBand top items={[
         { label: "UPCOMING", value: String(EVENTS.filter((e) => e.status !== "past").length).padStart(2, "0") },
         { label: "ARCHIVE", value: String(EVENTS.filter((e) => e.status === "past").length).padStart(2, "0") + " PAST" },

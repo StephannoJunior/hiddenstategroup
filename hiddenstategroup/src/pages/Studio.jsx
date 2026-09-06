@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { IndexBand, fontDisplay, fontUtility, fontText, theme, inputStyle }
   from "../components/Shared";
 import * as api from "../lib/api";
+import Blocks from "../components/Blocks";
+import BlockEditor from "../components/BlockEditor";
+import { SLOTS } from "../lib/pages";
 
 /*
   ══ THE STUDIO ══════════════════════════════════════════════════════════════
@@ -76,6 +79,47 @@ const KINDS = {
       { k: "cover", label: "Cover", image: true },
       { k: "sort_order", label: "Order", number: true },
     ],
+  },
+  /*
+    ── PAGES BUILT HERE ────────────────────────────────────────────────────
+
+    `blocks: true` is what tells the editor below to show the block arranger
+    instead of a list of fields, and to preview through <Blocks> rather than
+    through the card. Everything else — drafts, the preview token, publishing
+    — is unchanged, because the worker treats a page as one more content kind.
+  */
+  pages: {
+    label: "PAGES", key: "slug", route: (r) => `/${r.slug}`, blocks: true,
+    title: (r) => r.title || "Untitled",
+    blank: { slug: "", title: "", kicker: "", sub: "", blocks: [], in_nav: false,
+             nav_label: "", seo_description: "", sort_order: 0, published: false },
+    fields: [
+      { k: "title", label: "Title" },
+      { k: "slug", label: "Address", help: "The page lives at /this. Letters, numbers and hyphens." },
+      { k: "kicker", label: "The small line above the title" },
+      { k: "sub", label: "The line under it" },
+      { k: "seo_description", label: "Description for search engines", long: true },
+      { k: "nav_label", label: "Label in the bar", help: "Only used when it is in the bar. Keep it short." },
+      { k: "sort_order", label: "Order", number: true },
+    ],
+  },
+  /*
+    ── BLOCKS ON THE PAGES THAT ALREADY EXIST ──────────────────────────────
+
+    Not new pages: named seams in the hand-built ones. Chosen from a list
+    rather than typed, because a slot that does not exist in any page is a
+    slot whose contents nobody will ever see, and the person who typed it
+    would have no way of finding that out.
+  */
+  slots: {
+    label: "ON EXISTING PAGES", key: "id", route: (r) => `/${String(r.id || "").split(":")[0].replace(/^home$/, "")}`,
+    blocks: true, slot: true,
+    title: (r) => {
+      const found = SLOTS.find((x) => x.id === r.id);
+      return found ? `${found.page} — ${found.label}` : (r.id || "A place");
+    },
+    blank: { id: "", blocks: [], sort_order: 0, published: false },
+    fields: [],
   },
   mixes: {
     label: "SESSIONS", key: "slug", route: (r) => `/mixes/${r.slug}`,
@@ -299,9 +343,16 @@ export default function Studio() {
       // A record with no key cannot be published later, and the moment to
       // give it one is while the title is fresh rather than at the end.
       if (!payload[def.key]) {
-        payload[def.key] = def.key === "slug"
-          ? slugify(def.title(payload))
-          : String(Math.max(0, ...rows.map((r) => Number(r.id) || 0)) + 1);
+        /*
+          A slot's key is the place it goes, which is chosen from a list — it
+          can never be invented from a title, and inventing one would create a
+          slot no page renders.
+        */
+        if (!def.slot) {
+          payload[def.key] = def.key === "slug"
+            ? slugify(def.title(payload))
+            : String(Math.max(0, ...rows.map((r) => Number(r.id) || 0)) + 1);
+        }
       }
       const res = await api.saveDraft(kind, ref, payload);
       setSaving(false);
@@ -477,9 +528,57 @@ export default function Studio() {
                 </span>
               </div>
 
+              {def.slot && (
+                <div className="py-2.5" style={{ borderBottom: `1px solid ${theme.rule}` }}>
+                  <p className="m-0 mb-1.5" style={{ ...fontUtility, fontSize: "8px",
+                        letterSpacing: "0.16em", color: theme.ink2 }}>
+                    WHICH PLACE
+                  </p>
+                  <div className="flex flex-wrap" style={{ gap: "5px" }}>
+                    {SLOTS.map((sl) => (
+                      <Btn key={sl.id} on={form.id === sl.id} onClick={() => set("id", sl.id)}>
+                        {`${sl.page.toUpperCase()} · ${sl.label.toUpperCase()}`}
+                      </Btn>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {def.fields.map((f) => (
                 <Field key={f.k} field={f} value={form[f.k]} onChange={(v) => set(f.k, v)} />
               ))}
+
+              {def.blocks && (
+                <div className="mt-5">
+                  <p className="m-0 mb-2" style={{ ...fontUtility, fontSize: "8.5px",
+                        letterSpacing: "0.2em", color: theme.brass,
+                        borderBottom: `1px solid ${theme.rule}`, paddingBottom: "6px" }}>
+                    WHAT IS ON IT
+                  </p>
+                  <BlockEditor blocks={form.blocks} onChange={(v) => set("blocks", v)} />
+                </div>
+              )}
+
+              {def.label === "PAGES" && (
+                <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!form.in_nav} style={{ marginTop: "4px" }}
+                         onChange={(e) => set("in_nav", e.target.checked)} />
+                  <span>
+                    <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+                      Give it a tab in the floating bar
+                    </span>
+                    <span className="block mt-1" style={{ ...fontText, fontSize: "14px",
+                          lineHeight: 1.5, color: theme.ink2 }}>
+                      That bar is the site's navigation — the masthead carries
+                      the wordmark and nothing else — so this is what makes a
+                      page findable rather than only linkable. Off means it
+                      exists at its address for people you send it to. Four
+                      pages at most, and they sit before the pass and the
+                      console so those can never be pushed off the end.
+                    </span>
+                  </span>
+                </label>
+              )}
 
               <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
                 <input type="checkbox" checked={!!form.published} style={{ marginTop: "4px" }}
@@ -550,13 +649,44 @@ export default function Studio() {
                 </>
               ) : (
                 <>
-                  <Card kind={kind} record={form} />
+                  {def.blocks ? (
+                    /*
+                      A BUILT PAGE PREVIEWS THROUGH THE REAL RENDERER even
+                      inline. There is no second composition to drift here —
+                      <Blocks> is the component the live page uses, so this IS
+                      the page's body at a smaller width. The card exists for
+                      the record kinds, where the real page is a bespoke layout
+                      this cannot honestly reproduce.
+                    */
+                    <div style={{ border: `1px solid ${theme.rule}`, background: theme.bg,
+                                  padding: "18px 14px", maxHeight: "620px", overflowY: "auto" }}>
+                      {form.kicker && (
+                        <p className="m-0" style={{ ...fontUtility, fontSize: "7.5px",
+                              letterSpacing: "0.2em", color: theme.brass }}>
+                          {String(form.kicker).toUpperCase()}
+                        </p>
+                      )}
+                      {form.title && (
+                        <p className="m-0 mt-1.5 mb-4" style={{ ...fontDisplay, fontSize: "30px",
+                              lineHeight: 1.03, letterSpacing: "-0.02em", color: theme.ink }}>
+                          {form.title}
+                        </p>
+                      )}
+                      <Blocks blocks={form.blocks} gap="20px" />
+                      {!(form.blocks || []).length && (
+                        <p className="m-0 py-6" style={{ ...fontText, fontSize: "15px", color: theme.ink2 }}>
+                          Nothing on it yet.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <Card kind={kind} record={form} />
+                  )}
                   <p className="m-0 mt-2" style={{ ...fontText, fontSize: "13.5px",
                         lineHeight: 1.5, color: theme.ink2 }}>
-                    Updates as you type. Deliberately only a card — it is drawn
-                    here rather than by the site, so it is the right thing for
-                    catching a missing photograph or a name that runs long, and
-                    the wrong thing for deciding. Use the real page for that.
+                    {def.blocks
+                      ? "Drawn by the same component the live page uses, so this is the page's body rather than an impression of it. Only the width differs."
+                      : "Updates as you type. Deliberately only a card — it is drawn here rather than by the site, so it is the right thing for catching a missing photograph or a name that runs long, and the wrong thing for deciding. Use the real page for that."}
                   </p>
                 </>
               )}

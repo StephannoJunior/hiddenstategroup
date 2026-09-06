@@ -88,7 +88,53 @@ const CONTENT = {
            "coming_soon_note","sections","sort_order","published"],
     json: ["genres","sections"],
   },
+  /*
+    PAGES BUILT IN THE CONSOLE. Deliberately the same shape as the three
+    above, which is what lets drafts, the preview token and publishing work on
+    them without a line of new code in any of those routes. A page is a slug,
+    some words, and an ordered list of blocks.
+  */
+  pages: {
+    table: "pages", key: "slug",
+    cols: ["slug","title","kicker","sub","blocks","in_nav","nav_label",
+           "seo_description","sort_order","published"],
+    json: ["blocks"],
+  },
+  /*
+    BLOCKS DROPPED INTO A PAGE THAT ALREADY EXISTS. The id is the place —
+    "home:top", "about:bottom" — which is what makes a two-part key fit a
+    one-column primary key, and therefore fit everything above.
+  */
+  slots: {
+    table: "slots", key: "id",
+    cols: ["id","blocks","sort_order","published"],
+    json: ["blocks"],
+  },
 };
+
+/*
+  ── SLUGS A PAGE MAY NOT HAVE ───────────────────────────────────────────────
+
+  A built page lives at /<slug>, which is the same namespace every real route
+  lives in. Without this list somebody could publish a page called "console"
+  or "scan" and, depending on which route matched first, either shadow the
+  door tools or produce a page nobody can reach and nobody can explain.
+
+  It is checked when a page is PUBLISHED rather than when it is typed, because
+  the check belongs where the consequence is. A draft called "console" harms
+  nothing; publishing one does.
+
+  Kept as an explicit list rather than derived, because the routes live in the
+  front end and this is the back: a list that has to be updated by hand when a
+  route is added is worse than one that cannot be, but it is much better than
+  a clever rule that is wrong.
+*/
+const RESERVED_SLUGS = new Set([
+  "", "api", "assets", "static",
+  "news", "records", "agency", "artists", "events", "mixes", "about", "contact",
+  "pool", "polls", "demos", "bookings", "wall", "kit", "pass", "mypass", "scan",
+  "guestlist", "doorlist", "admin", "console", "admins-staff-boss", "p", "preview",
+]);
 
 const randomHex = (bytes = 32) =>
   [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -2192,6 +2238,16 @@ async function handleApi(request, env, url, ctx) {
 
       const key = String(data[def.key] ?? "").trim();
       if (!key) return fail(`This needs a ${def.key} before it can go out.`);
+
+      /*
+        A page cannot take a name the site already answers to. Checked here,
+        at the moment it would start mattering, and checked on this side
+        because the console can be lied to about what routes exist but the
+        worker cannot.
+      */
+      if (kind === "pages" && RESERVED_SLUGS.has(key.toLowerCase())) {
+        return fail(`"${key}" is a name the site already uses. Pick another.`);
+      }
 
       const exists = await env.DB.prepare(
         `SELECT ${def.key} AS k FROM ${def.table} WHERE ${def.key} = ?`

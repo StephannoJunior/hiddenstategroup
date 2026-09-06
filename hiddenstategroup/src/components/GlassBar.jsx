@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Home, Newspaper, Disc, Briefcase, Users, Calendar, Radio, Info,
-         Ticket, Shield, ScanLine, ClipboardList, Settings2, PenLine, Globe } from "lucide-react";
+         Ticket, Shield, ScanLine, ClipboardList, Settings2, PenLine, Globe,
+         FileText } from "lucide-react";
 import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 import * as api from "../lib/api";
 import { useSite } from "../lib/site";
+import { usePages } from "../lib/pages";
 import { Spring, springSet, driveSprings, glassStyle, lipStyle, specStyle,
          lozengeStyle, resolveFinish } from "../lib/liquid";
 
@@ -214,9 +216,36 @@ export default function GlassBar() {
 
   const extraTabs = role ? (onSystemPage ? teamTabs : [{ href: "/console", key: "team", Icon: Shield }]) : [passTab];
 
+  /*
+    ── PAGES BUILT IN THE CONSOLE ─────────────────────────────────────────
+
+    This bar IS the site's navigation — the masthead carries the wordmark and
+    nothing else — so a page that has asked to be "in the nav" means a tab
+    here, and there is nowhere else for it to go.
+
+    They come after the built-in tabs and before the signed-in extras, so a
+    page somebody adds can never push the pass or the console off the end.
+    That ordering is the whole safety property: the bar scrolls when the tabs
+    do not fit, and the one tab you must always be able to reach is the last
+    one, so nothing arbitrary is allowed after it.
+
+    The label is the page's own, and the icon is generic on purpose. Letting
+    somebody choose an icon means a bar where two tabs are the same picture,
+    and the icon is what a thumb aims at.
+  */
+  const built = usePages()
+    .filter((p) => p.published && p.in_nav && p.slug)
+    .slice(0, 4)
+    .map((p) => ({
+      href: `/${p.slug}`,
+      key: `page:${p.slug}`,
+      label: p.nav_label || p.title || p.slug,
+      Icon: FileText,
+    }));
+
   const allTabs = role && onSystemPage
     ? [{ href: "/", key: "site", Icon: Globe }, ...extraTabs]
-    : [...TABS, ...extraTabs];
+    : [...TABS, ...built, ...extraTabs];
 
   /*
     WHY THE BAR FELT SLOW.
@@ -1077,7 +1106,8 @@ export default function GlassBar() {
                   }}
                 />
 
-                {allTabs.map(({ href, key, Icon }, i) => {
+                {allTabs.map((tb, i) => {
+                  const { href, key, Icon } = tb;
                   /*
                     LIT BY THE SAME KEY THAT MOVES THE LOZENGE.
 
@@ -1155,7 +1185,7 @@ export default function GlassBar() {
                             transition: `color ${ms(300)}ms ${EASE}`,
                           }}
                         >
-                          {t(key)}
+                          {tb.label || t(key)}
                         </span>
                       )}
                     </Link>
