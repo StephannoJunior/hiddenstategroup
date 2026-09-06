@@ -707,3 +707,22 @@ export const createPoll = (poll) => call("/polls", { method: "POST", body: poll 
 export const editPoll = (id, changes) =>
   call(`/polls/${id}`, { method: "PATCH", body: changes });
 export const deletePoll = (id) => call(`/polls/${id}`, { method: "DELETE" });
+
+/*
+  ── DRAFTS ──────────────────────────────────────────────────────────────────
+
+  Unfinished work, kept on the server so it survives closing the laptop and so
+  the rest of the team can see it. Every one of these needs a login — the only
+  route in this area that does not is the preview itself, which is reached by
+  its token and is fetched in lib/preview.js rather than here, because it is
+  not an authenticated call and should not sit among ones that are.
+*/
+export const listDrafts = () => call("/drafts");
+export const readDraft = (kind, ref) =>
+  call(`/drafts/${kind}/${encodeURIComponent(ref)}`);
+export const saveDraft = (kind, ref, data) =>
+  call(`/drafts/${kind}/${encodeURIComponent(ref)}`, { method: "PUT", body: { data } });
+export const discardDraft = (kind, ref) =>
+  call(`/drafts/${kind}/${encodeURIComponent(ref)}`, { method: "DELETE" });
+export const publishDraft = (kind, ref) =>
+  call(`/drafts/${kind}/${encodeURIComponent(ref)}/publish`, { method: "POST" });

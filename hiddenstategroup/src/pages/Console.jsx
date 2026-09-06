@@ -16,6 +16,7 @@ import { useArtists, useRecords } from "../lib/data";
 */
 import { Demos, Bookings, Waitlist, SetTimes, Kits, After, ReleaseLinks } from "./ConsoleExtra";
 import { LiquidBar, PoolDesk, PollDesk } from "./ConsoleDesks";
+import Studio from "./Studio";
 
 /*
   The console.
@@ -46,6 +47,7 @@ const TABS = [
   { id: "waiting",  label: "WAITING",   need: "seeList",     group: "door" },
   { id: "sets",     label: "SET TIMES", need: "issuePasses", group: "door" },
   { id: "stats",    label: "THE NIGHT", need: "seeList",     group: "door" },
+  { id: "studio",   label: "STUDIO",    need: "issuePasses", group: "content" },
   { id: "events",   label: "EVENTS",    need: "issuePasses", group: "content" },
   { id: "posts",    label: "POSTS",     need: "issuePasses", group: "content" },
   { id: "artists",  label: "ARTISTS",   need: "issuePasses", group: "content" },
@@ -3552,6 +3554,7 @@ function ConsoleScreen({ role }) {
         {tab === "records" && role.can.issuePasses && <ReleaseLinks records={catalogue} />}
         {tab === "pool" && role.can.issuePasses && <PoolDesk parties={parties} />}
         {tab === "polls" && role.can.issuePasses && <PollDesk />}
+        {tab === "studio" && role.can.issuePasses && <Studio />}
         {tab === "bar" && role.can.manageTeam && <LiquidBar />}
         {tab === "settings" && role.can.manageTeam && <Settings parties={parties} />}
           </div>

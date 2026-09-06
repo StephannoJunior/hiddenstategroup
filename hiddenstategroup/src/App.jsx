@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import GlassBar from "./components/GlassBar";
+import { usePreview, isPreviewing, previewNotice } from "./lib/preview";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Mark from "./components/Mark";
 import { LangProvider } from "./lib/lang";
@@ -192,6 +193,30 @@ function PageFallback() {
   return <div style={{ background: theme.bg, minHeight: "100vh" }} />;
 }
 
+/*
+  ── SAYING SO ──────────────────────────────────────────────────────────────
+
+  A previewed page is the real page with somebody's unfinished work in it, and
+  without this it is INDISTINGUISHABLE from the live site. Somebody sent a link
+  would reasonably believe the change had already gone out — and might
+  screenshot it, forward it, or tell a promoter the date is confirmed.
+
+  So it says what it is, at the top, in the accent, on every page, for as long
+  as the token is in the address. It cannot be clicked away because there is no
+  circumstance in which not knowing is better.
+*/
+function PreviewBanner() {
+  const draft = usePreview();
+  if (!isPreviewing()) return null;
+  return (
+    <div style={previewNotice()} aria-live="polite">
+      {draft
+        ? `PREVIEW — UNPUBLISHED ${String(draft.kind || "").toUpperCase()}. NOT LIVE.`
+        : "PREVIEW — LOADING AN UNPUBLISHED DRAFT."}
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -205,6 +230,7 @@ export default function App() {
           <Reveals />
           <Folio />
           <GlassBar />
+          <PreviewBanner />
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/" element={<Home />} />

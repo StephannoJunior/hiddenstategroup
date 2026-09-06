@@ -2,6 +2,7 @@
 // Everything below re-exports under the original names.
 import { useEffect, useState } from "react";
 import * as api from "./api";
+import { usePreview, applyDraft } from "./preview";
 import ARTISTS_JSON from "../content/artists.json";
 import RECORDS_JSON from "../content/records.json";
 import EVENTS_JSON from "../content/events.json";
@@ -102,8 +103,22 @@ export const ARTICLES = [
   never blank while waiting and still work with no connection. The database
   wins as soon as it answers.
 */
+/*
+  The key each kind is identified by, which applyDraft needs to know where a
+  draft belongs in the list. It matches the worker's CONTENT map — if a kind is
+  ever added there it belongs here too, and a preview that silently does
+  nothing is the symptom of having forgotten.
+*/
+const CONTENT_KEY = { artists: "id", records: "slug", mixes: "slug" };
+
 export function useContent(kind, fallback) {
   const [items, setItems] = useState(fallback);
+  /*
+    A draft laid over the live list, when the address carries a preview token.
+    This is the ONLY place it happens, so every page reading through this hook
+    previews without knowing that previews exist.
+  */
+  const draft = usePreview();
 
   useEffect(() => {
     let alive = true;
@@ -122,7 +137,7 @@ export function useContent(kind, fallback) {
     return () => { alive = false; };
   }, [kind]);
 
-  return items;
+  return applyDraft(items, kind, draft, CONTENT_KEY[kind] || "id");
 }
 
 export const useArtists = () => useContent("artists", ARTISTS_JSON);

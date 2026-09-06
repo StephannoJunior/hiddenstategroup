@@ -9,7 +9,7 @@
   route that does not exist. None of it throws. It just quietly does nothing,
   and you find out weeks later when you wonder why a switch has no effect.
 
-  Seven checks:
+  Eight checks:
     1. every declared setting is published, controllable and actually read
     2. the settings index matches the sections that exist
     3. every site.<setting> read is a real setting
@@ -17,6 +17,7 @@
     5. every /api path called is answered by a route
     6. no name is both imported and declared in the same file
     7. every name a file reads is declared somewhere
+    8. every write consults a session, or is named as deliberately public
 
   Exits non-zero on any finding, so it can gate a deploy.
 */
@@ -46,6 +47,7 @@ const CONSOLE_FILES = [
   "src/pages/Console.jsx",
   "src/pages/ConsoleExtra.jsx",
   "src/pages/ConsoleDesks.jsx",
+  "src/pages/Studio.jsx",
   "src/pages/KitEditor.jsx",
 ];
 const consoleSrc = read("src/pages/Console.jsx");
@@ -311,6 +313,83 @@ console.log("\n7. every name used is declared somewhere");
       });
     }
     if (problems === before) good(`${n} files, every name resolves`);
+  }
+}
+
+/*
+  ── 8 · EVERY WRITE CONSULTS A SESSION, OR IS ON THE LIST ──────────────────
+
+  A route that changes something and never asks who is asking is the most
+  expensive kind of mistake in this file, and it is invisible: it does not
+  throw, it fails no test, and the site works perfectly until somebody finds
+  it. It is also the easiest to make, because the way you make it is by adding
+  a route in a hurry and not thinking about it at all.
+
+  So the ones that genuinely are public are named below, and anything else that
+  writes without reading a session is reported. Adding a public write becomes a
+  deliberate act — you have to come here and say so — which is the same shape
+  as PUBLIC_SETTINGS, and for the same reason.
+
+  WHAT THIS DOES NOT PROVE. It checks that a session is CONSULTED, not that one
+  is required: /polls/:id/vote reads a session to decide whether a team-only
+  poll is reachable, and is public otherwise. That is correct, and this check
+  cannot tell it apart from a route that reads a session and then ignores it.
+  It is a smoke alarm rather than a lock — it catches the route where nobody
+  thought about it at all, which is the one that actually happens.
+*/
+console.log("\n8. every write consults a session, or is deliberately public");
+{
+  const before = problems;
+  const PUBLIC_WRITES = new Set([
+    "/login",       // signing in is how you get a session
+    "/logout",      // and out
+    "/resend",      // a guest asking for their own pass again
+    "/hit",         // counting a page view
+    "/oops",        // a visitor's browser reporting that something broke
+    "/demos",       // the public submission forms
+    "/bookings",
+    "/requests",
+    "/songs/vote",  // the pool's ballot, one vote per browser
+  ]);
+
+  let parser8 = null, traverse8 = null;
+  try {
+    parser8 = await import("@babel/parser");
+    const t = await import("@babel/traverse");
+    traverse8 = t.default?.default || t.default || t;
+  } catch {
+    console.log("  - skipped: no parser installed (npm i to restore it)");
+  }
+
+  if (parser8 && typeof traverse8 === "function") {
+    const ast = parser8.parse(worker, { sourceType: "module" });
+    const at = (n) => worker.slice(n.start, n.end);
+    const MUT = /method === "(POST|PATCH|PUT|DELETE)"/;
+    let seen = 0;
+
+    traverse8(ast, {
+      IfStatement(path) {
+        const test = at(path.node.test);
+        if (!MUT.test(test)) return;
+        seen++;
+
+        // Guarded here, or by the route block enclosing this one — the content
+        // and drafts routes check once for every method they answer.
+        let guarded = at(path.node).includes("readSession");
+        for (let p = path.parentPath; p && !guarded; p = p.parentPath) {
+          if (p.isIfStatement()) guarded = at(p.node.consequent).includes("readSession");
+        }
+        if (guarded) return;
+
+        const named = [...test.matchAll(/"([^"]+)"/g)].map((m) => m[1])
+          .find((v) => v.startsWith("/"));
+        if (named && PUBLIC_WRITES.has(named)) return;
+
+        const line = worker.slice(0, path.node.start).split("\n").length;
+        bad(`worker/index.js:${line} writes without reading a session - ${test.replace(/\s+/g, " ").slice(0, 70)}`);
+      },
+    });
+    if (problems === before) good(`${seen} mutating routes, ${PUBLIC_WRITES.size} public on purpose`);
   }
 }
 

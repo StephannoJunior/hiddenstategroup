@@ -61,6 +61,35 @@ function safeEqual(a, b) {
   return diff === 0;
 }
 
+/*
+  ARTISTS, RECORDS AND MIXES — the shape of all three, at module scope.
+
+  It lived inside the fetch handler, which was fine while one route used it.
+  The drafts route publishes into these same tables and needs the same column
+  list, the same JSON columns and the same key; declaring it out here is what
+  stops that being a second copy that drifts the first time a column is added.
+*/
+const CONTENT = {
+  artists: {
+    table: "artists", key: "id",
+    cols: ["id","name","alias","type","genres","country","location","descr","bio",
+           "photo","poster","instagram","sort_order","published"],
+    json: ["genres"],
+  },
+  records: {
+    table: "records", key: "slug",
+    cols: ["slug","title","artist","kind","tagline","catalog","release_date","cover",
+           "playlist","note","tracks","sort_order","published"],
+    json: ["tracks"],
+  },
+  mixes: {
+    table: "mixes", key: "slug",
+    cols: ["slug","artist_id","name","alias","photo","genres","intro","coming_soon",
+           "coming_soon_note","sections","sort_order","published"],
+    json: ["genres","sections"],
+  },
+};
+
 const randomHex = (bytes = 32) =>
   [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -1996,26 +2025,219 @@ async function handleApi(request, env, url, ctx) {
     Reading is public — the site uses it. Writing needs the same permission as
     posts.
   */
-  const CONTENT = {
-    artists: {
-      table: "artists", key: "id",
-      cols: ["id","name","alias","type","genres","country","location","descr","bio",
-             "photo","poster","instagram","sort_order","published"],
-      json: ["genres"],
-    },
-    records: {
-      table: "records", key: "slug",
-      cols: ["slug","title","artist","kind","tagline","catalog","release_date","cover",
-             "playlist","note","tracks","sort_order","published"],
-      json: ["tracks"],
-    },
-    mixes: {
-      table: "mixes", key: "slug",
-      cols: ["slug","artist_id","name","alias","photo","genres","intro","coming_soon",
-             "coming_soon_note","sections","sort_order","published"],
-      json: ["genres","sections"],
-    },
+
+  /*
+    ── ONE WRITE PATH, TWO DOORS ───────────────────────────────────────────
+
+    These were the bodies of the POST and PATCH branches below. They are
+    functions now because the STUDIO publishes a draft through exactly this
+    code — and the alternative was a second copy of the column mapping, the
+    JSON encoding and the boolean coercion, living somewhere else and drifting
+    the first time a column is added. A publish that writes a record slightly
+    differently from a save is a bug that only appears on the records you
+    published, which is the worst possible distribution.
+  */
+  const contentInsert = async (def, source) => {
+    const fields = [], marks = [], values = [];
+    for (const col of def.cols) {
+      // Accept either the column name or its camelCase form.
+      const camel = col.replace(/_(\w)/g, (m, c) => c.toUpperCase());
+      let v = source[col] !== undefined ? source[col] : source[camel];
+      if (v === undefined) continue;
+      if (def.json.includes(col)) v = JSON.stringify(v);
+      if (typeof v === "boolean") v = v ? 1 : 0;
+      fields.push(col); marks.push("?"); values.push(v);
+    }
+    if (!fields.length) return { ok: false, error: "Nothing to save." };
+    await env.DB.prepare(
+      `INSERT INTO ${def.table} (${fields.join(", ")}, updated_at) VALUES (${marks.join(", ")}, ?)`
+    ).bind(...values, now()).run();
+    return { ok: true };
   };
+
+  const contentUpdate = async (def, id, source) => {
+    const sets = [], values = [];
+    for (const col of def.cols) {
+      if (col === def.key) continue;   // the key itself is never rewritten
+      const camel = col.replace(/_(\w)/g, (m, c) => c.toUpperCase());
+      let v = source[col] !== undefined ? source[col] : source[camel];
+      if (v === undefined) continue;
+      if (def.json.includes(col)) v = JSON.stringify(v);
+      if (typeof v === "boolean") v = v ? 1 : 0;
+      sets.push(`${col} = ?`); values.push(v);
+    }
+    if (!sets.length) return { ok: false, error: "Nothing to change." };
+    await env.DB.prepare(
+      `UPDATE ${def.table} SET ${sets.join(", ")}, updated_at = ? WHERE ${def.key} = ?`
+    ).bind(...values, now(), id).run();
+    return { ok: true };
+  };
+
+
+  /*
+    ══ DRAFTS, AND THE PREVIEW ═══════════════════════════════════════════════
+
+    A draft is a set of edits that have not been applied to the real record
+    yet. It is NOT the same thing as `published = 0`, and keeping the two
+    apart is the point:
+
+      published = 0   the record exists and is hidden. A finished thing,
+                      waiting for a date.
+      a draft         the record may not exist at all, or may exist and be
+                      live, and these are the changes somebody is part-way
+                      through making to it. Applying them is a separate act.
+
+    Conflating them is how a CMS ends up publishing half a sentence: you edit
+    the live record directly, and every keystroke is on the site.
+
+    ── THE PREVIEW TOKEN ────────────────────────────────────────────────────
+
+    Each draft carries 32 random hex characters that serve it, and ONLY it, to
+    the site. That is what makes a preview link sendable to a photographer or
+    a promoter who has no login and should never get one.
+
+    Which also means the token IS the permission, so:
+
+      · it is from crypto.getRandomValues, never Math.random;
+      · the route returns ONE draft — never a list, never a neighbouring
+        record, never anything about who wrote it;
+      · it is noindex and no-store, so an unpublished page cannot be found in
+        a search engine because somebody forwarded a link;
+      · and it dies with the draft. Publishing or discarding removes the row,
+        and the link stops working the moment the work is finished, which is
+        the moment it should.
+  */
+
+  if (path === "/drafts" && method === "GET") {
+    const whoD = await readSession(env, request);
+    if (!whoD || !can(whoD, "issuePasses")) return fail("Not allowed.", 403);
+    const rows = await env.DB.prepare(
+      "SELECT kind, ref, token, updated_at, updated_by FROM drafts ORDER BY updated_at DESC LIMIT 200"
+    ).all();
+    return json({ ok: true, drafts: rows.results || [] });
+  }
+
+  const draftMatch = path.match(/^\/drafts\/(\w+)\/([^/]+)(\/publish)?$/);
+  if (draftMatch) {
+    const whoD = await readSession(env, request);
+    if (!whoD || !can(whoD, "issuePasses")) return fail("Not allowed.", 403);
+
+    const kind = draftMatch[1];
+    const ref = decodeURIComponent(draftMatch[2]);
+    const publishing = !!draftMatch[3];
+
+    if (method === "GET" && !publishing) {
+      const row = await env.DB.prepare(
+        "SELECT * FROM drafts WHERE kind = ? AND ref = ?"
+      ).bind(kind, ref).first();
+      if (!row) return json({ ok: true, draft: null });
+      let data = {};
+      try { data = JSON.parse(row.data); } catch { data = {}; }
+      return json({ ok: true, draft: { kind, ref, data, token: row.token, updated_at: row.updated_at } });
+    }
+
+    if (method === "PUT" && !publishing) {
+      /*
+        Upserted, and the TOKEN IS KEPT. Re-rolling it on every autosave would
+        break a preview link the moment its author typed another character —
+        which is exactly when somebody else is looking at it.
+      */
+      const had = await env.DB.prepare(
+        "SELECT token FROM drafts WHERE kind = ? AND ref = ?"
+      ).bind(kind, ref).first();
+      const token = had?.token || randomHex(16);
+      const data = JSON.stringify(body.data ?? {});
+
+      if (had) {
+        await env.DB.prepare(
+          "UPDATE drafts SET data = ?, updated_at = ?, updated_by = ? WHERE kind = ? AND ref = ?"
+        ).bind(data, now(), whoD.username || null, kind, ref).run();
+      } else {
+        await env.DB.prepare(
+          "INSERT INTO drafts (kind, ref, data, token, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?)"
+        ).bind(kind, ref, data, token, now(), whoD.username || null).run();
+      }
+      return json({ ok: true, token });
+    }
+
+    if (method === "DELETE" && !publishing) {
+      await env.DB.prepare("DELETE FROM drafts WHERE kind = ? AND ref = ?").bind(kind, ref).run();
+      return json({ ok: true });
+    }
+
+    /*
+      ── PUBLISHING ────────────────────────────────────────────────────────
+
+      Down the SAME write path an ordinary save uses — contentInsert and
+      contentUpdate above — rather than a second implementation. A publish
+      that wrote a record even slightly differently from a save would produce
+      a bug visible only on published records, which is the worst place for
+      one to hide.
+
+      The draft is removed only after the write has succeeded. Removing it
+      first would mean a failed write loses the work, and the work is the
+      thing the person came here with.
+    */
+    if (method === "POST" && publishing) {
+      const def = CONTENT[kind];
+      if (!def) return fail("That cannot be published from here.", 400);
+
+      const row = await env.DB.prepare(
+        "SELECT data FROM drafts WHERE kind = ? AND ref = ?"
+      ).bind(kind, ref).first();
+      if (!row) return fail("There is no draft to publish.", 404);
+
+      let data = {};
+      try { data = JSON.parse(row.data); } catch { return fail("That draft is unreadable."); }
+
+      const key = String(data[def.key] ?? "").trim();
+      if (!key) return fail(`This needs a ${def.key} before it can go out.`);
+
+      const exists = await env.DB.prepare(
+        `SELECT ${def.key} AS k FROM ${def.table} WHERE ${def.key} = ?`
+      ).bind(key).first();
+
+      const done = exists
+        ? await contentUpdate(def, key, data)
+        : await contentInsert(def, data);
+      if (!done.ok) return fail(done.error);
+
+      await env.DB.prepare("DELETE FROM drafts WHERE kind = ? AND ref = ?").bind(kind, ref).run();
+      return json({ ok: true, key, created: !exists });
+    }
+
+    return fail("Unknown request.", 400);
+  }
+
+  /*
+    The token's own route. No session, by design — that is the whole feature.
+
+    NOTE WHAT IS NOT RETURNED: no username, no timestamp, no id, no hint that
+    any other draft exists. Somebody holding one link learns about one piece of
+    work and nothing else about the operation.
+  */
+  if (path.startsWith("/preview/") && method === "GET") {
+    const token = decodeURIComponent(path.slice("/preview/".length));
+    if (!token || token.length < 24) return fail("No such preview.", 404);
+
+    const row = await env.DB.prepare(
+      "SELECT kind, ref, data FROM drafts WHERE token = ?"
+    ).bind(token).first();
+    if (!row) return fail("That preview has expired.", 404);
+
+    let data = {};
+    try { data = JSON.parse(row.data); } catch { data = {}; }
+    return new Response(JSON.stringify({ ok: true, kind: row.kind, ref: row.ref, data }), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        // Unfinished work must never be findable, and must never be held in
+        // a shared cache after the draft it describes has gone.
+        "cache-control": "private, no-store",
+        "x-robots-tag": "noindex, nofollow",
+        "access-control-allow-origin": "*",
+      },
+    });
+  }
 
   const contentMatch = path.match(/^\/content\/(\w+)(?:\/(.+))?$/);
   if (contentMatch) {
@@ -2046,42 +2268,13 @@ async function handleApi(request, env, url, ctx) {
     if (!who || !can(who, "issuePasses")) return fail("Not allowed.", 403);
 
     if (method === "POST") {
-      const fields = [];
-      const marks = [];
-      const values = [];
-      for (const col of def.cols) {
-        // Accept either the column name or its camelCase form.
-        const camel = col.replace(/_(\w)/g, (m, c) => c.toUpperCase());
-        let v = body[col] !== undefined ? body[col] : body[camel];
-        if (v === undefined) continue;
-        if (def.json.includes(col)) v = JSON.stringify(v);
-        if (typeof v === "boolean") v = v ? 1 : 0;
-        fields.push(col); marks.push("?"); values.push(v);
-      }
-      if (!fields.length) return fail("Nothing to save.");
-      await env.DB.prepare(
-        `INSERT INTO ${def.table} (${fields.join(", ")}, updated_at) VALUES (${marks.join(", ")}, ?)`
-      ).bind(...values, now()).run();
-      return json({ ok: true });
+      const made = await contentInsert(def, body);
+      return made.ok ? json({ ok: true }) : fail(made.error);
     }
 
     if (method === "PATCH" && id) {
-      const sets = [];
-      const values = [];
-      for (const col of def.cols) {
-        if (col === def.key) continue;   // the key itself is never rewritten
-        const camel = col.replace(/_(\w)/g, (m, c) => c.toUpperCase());
-        let v = body[col] !== undefined ? body[col] : body[camel];
-        if (v === undefined) continue;
-        if (def.json.includes(col)) v = JSON.stringify(v);
-        if (typeof v === "boolean") v = v ? 1 : 0;
-        sets.push(`${col} = ?`); values.push(v);
-      }
-      if (!sets.length) return fail("Nothing to change.");
-      await env.DB.prepare(
-        `UPDATE ${def.table} SET ${sets.join(", ")}, updated_at = ? WHERE ${def.key} = ?`
-      ).bind(...values, now(), decodeURIComponent(id)).run();
-      return json({ ok: true });
+      const done = await contentUpdate(def, decodeURIComponent(id), body);
+      return done.ok ? json({ ok: true }) : fail(done.error);
     }
 
     if (method === "DELETE" && id) {
