@@ -1,5 +1,5 @@
 import { usePageMeta } from "../lib/seo";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Nav, Footer, useGoogleFonts, Field, inputStyle,
@@ -2471,6 +2471,39 @@ function ConsoleScreen({ role }) {
 
   const allowed = TABS.filter((t) => role.can[t.need]);
 
+  /*
+    ── PRESSING A TAB TAKES YOU TO THE TAB ────────────────────────────────────
+
+    On a laptop the tabs are a rail beside the work and this does nothing.
+
+    On a phone they are a grid ABOVE it — twenty-six tiles, three across, so
+    around nine rows before the panel even begins. Choosing SETTINGS put the
+    right thing on screen and then left you looking at the tiles you had just
+    finished with, with the settings themselves somewhere below the fold. The
+    only way to reach them was to scroll past the whole grid, every single
+    time, for every tab.
+
+    So changing tab scrolls the panel to the top of the screen. Not a jump —
+    the scroll is smooth unless the phone has been asked for less motion, in
+    which case it arrives.
+
+    It runs on a CHANGE of tab rather than on mount, because arriving at
+    /console should show you the console: the tiles are the thing to look at
+    when you have not chosen anything yet.
+  */
+  const panelRef = useRef(null);
+  const firstTab = useRef(true);
+  useEffect(() => {
+    if (firstTab.current) { firstTab.current = false; return; }
+    const node = panelRef.current;
+    if (!node || typeof window === "undefined") return;
+    // The rail is beside the work above this width, so there is nothing to
+    // scroll past and moving the page would be an unasked-for jolt.
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    node.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+  }, [tab]);
+
   return (
     <div data-page style={{ background: theme.bg, minHeight: "100vh" }}>
       <Nav />
@@ -2638,7 +2671,14 @@ function ConsoleScreen({ role }) {
 
           </div>
 
-          <div className="min-w-0">
+          <div className="min-w-0" ref={panelRef}
+               /*
+                 The masthead is fixed, so a plain scroll-into-view puts the
+                 top of this underneath it. scroll-margin-top is the amount to
+                 stop short by, and it matches what the settings anchors
+                 already use — one number, two behaviours, both correct.
+               */
+               style={{ scrollMarginTop: "88px" }}>
         <Notice message={msg} />
 
         {tab === "passes" && (

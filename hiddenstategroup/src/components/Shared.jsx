@@ -824,21 +824,18 @@ export function BookingDrawer({ open, onClose, artist }) {
   }, [submitted]);
 
   /*
-    THE PAGE BEHIND STAYS PUT while the drawer is open. Without this, a scroll
-    that reaches the end of the drawer carries on into the page underneath, so
-    closing it leaves you somewhere you never chose to be — and on a phone the
-    two surfaces fight over every flick.
+    ── WHAT IS DELIBERATELY NOT HERE: A BODY SCROLL LOCK ─────────────────────
 
-    overflow is restored to whatever it was rather than to "", because
-    something else may have set it and this must not be the thing that
-    silently un-sets it.
+    There was one, briefly. Setting overflow:hidden on the body while a fixed
+    overlay is open is the standard trick and it is a bad idea on iOS: the
+    document's height collapses to the viewport at the moment the overlay
+    appears, and a page that had been scrolled can jump — taking the fixed
+    element's frame of reference with it. It was added to stop scroll chaining
+    and it was not what stopped scroll chaining; overscroll-behavior on the
+    panel below does that, without touching the page underneath at all.
+
+    It went in as a guess and it came out when the phone said so.
   */
-  useEffect(() => {
-    if (!open) return undefined;
-    const was = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = was; };
-  }, [open]);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -873,7 +870,28 @@ export function BookingDrawer({ open, onClose, artist }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[70]" style={{ pointerEvents: open ? "auto" : "none" }}>
+    /*
+      ── HEIGHT IS 100dvh, NOT 100% OF A FIXED inset-0 ─────────────────────
+
+      On a phone `inset-0` is the LAYOUT viewport, which is not what you can
+      see. Two things make them differ, and both happen while filling in this
+      form: the address bar collapses as you scroll, and — far worse — the
+      keyboard opens the moment you touch a field. The layout viewport does
+      not change, so a panel sized to it keeps its top somewhere above the
+      visible area, with its own scroller already at zero. There is nothing
+      left to scroll: the top of the drawer is off-screen and unreachable,
+      which is exactly what "I cannot even scroll to the top" describes.
+
+      dvh is the dynamic viewport height — what is actually visible right now,
+      keyboard and address bar included. The panel is always exactly the part
+      of the screen you can see, so its top is always reachable and its own
+      overflow handles the rest.
+
+      100vh is kept as the fallback line for anything too old to know dvh; it
+      is what this did before, so nothing gets worse.
+    */
+    <div className="fixed inset-x-0 top-0 z-[70]"
+         style={{ pointerEvents: open ? "auto" : "none", height: "100vh", maxHeight: "100dvh" }}>
       <div
         onClick={onClose}
         className="absolute inset-0 transition-opacity duration-300"
