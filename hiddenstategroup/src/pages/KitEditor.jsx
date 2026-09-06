@@ -327,7 +327,8 @@ function FileDrop({ label, help, accept, folder, sealed, value, onChange, one })
               <span style={{ ...fontUtility, fontSize: "8px", letterSpacing: "0.1em", color: theme.ink2 }}>
                 {f.bytes ? `${Math.max(1, Math.round(f.bytes / 1024))}KB` : ""}
               </span>
-              <Btn danger onClick={() => onChange(one ? null : items.filter((_, j) => j !== i))}>×</Btn>
+              <Btn danger aria-label="Remove"
+                   onClick={() => onChange(one ? null : items.filter((_, j) => j !== i))}>×</Btn>
             </div>
           ))}
         </div>

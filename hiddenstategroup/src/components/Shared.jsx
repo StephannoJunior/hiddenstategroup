@@ -847,7 +847,7 @@ export function BookingDrawer({ open, onClose, artist }) {
               {BOOKING_EMAIL}
             </a>
           </div>
-          <button onClick={onClose} style={{ color: theme.ink }}><X size={22} strokeWidth={1.5} /></button>
+          <button onClick={onClose} aria-label="Close" style={{ color: theme.ink }}><X size={22} strokeWidth={1.5} /></button>
         </div>
 
         {submitted ? (

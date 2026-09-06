@@ -114,6 +114,15 @@ export default function ImagePicker({ label, value, onChange, folder = "posts" }
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(74px, 1fr))", gap: "6px" }}>
             {options.map((path) => (
               <button key={path} type="button"
+                      /*
+                        The picture IS the label here, and its alt is empty on
+                        purpose — repeating the filename beside a thumbnail
+                        helps nobody. So the name goes on the control instead,
+                        and it says what pressing it does rather than what the
+                        picture is.
+                      */
+                      aria-label={`Use ${String(path).split("/").pop()}`}
+                      aria-pressed={value === path}
                       onClick={() => { onChange(path); setOpen(false); }}
                       style={{ padding: 0, border: value === path ? `2px solid ${theme.ink}` : `1px solid ${theme.rule}`,
                                background: "transparent", cursor: "pointer", aspectRatio: "1", overflow: "hidden" }}>
