@@ -3709,6 +3709,50 @@ export default {
           rows.push({ loc, priority, lastmod: today });
         }
 
+        /*
+          ── EVERY PAGE THAT HAS AN ADDRESS, NOT JUST THE SECTIONS ───────────
+
+          The built file listed forty-five URLs — every artist, every night,
+          every article, every session — because scripts/sitemap.mjs walks the
+          bundled JSON. A first version of this route listed thirteen, and
+          swapping it in would have QUIETLY DROPPED THIRTY-TWO REAL PAGES from
+          everything Google knows about.
+
+          That is the whole hazard of replacing a generated file with a live
+          route: the file was doing more than it looked like it was doing. So
+          this reads the same four kinds out of the database, where they are
+          now more current than the bundle anyway.
+
+          Records are deliberately absent, as they were before: releases live
+          on /records rather than at their own address, and listing a URL that
+          redirects is worse than not listing it.
+        */
+        const detail = await Promise.all([
+          env.DB.prepare("SELECT id AS slug, updated_at FROM artists WHERE published = 1")
+            .all().catch(() => ({ results: [] })),
+          env.DB.prepare("SELECT id AS slug, doors_close_at AS updated_at FROM parties WHERE archived = 0")
+            .all().catch(() => ({ results: [] })),
+          env.DB.prepare("SELECT slug, IFNULL(updated_at, sort_date) AS updated_at FROM posts WHERE published = 1")
+            .all().catch(() => ({ results: [] })),
+          env.DB.prepare("SELECT slug, updated_at FROM mixes WHERE published = 1")
+            .all().catch(() => ({ results: [] })),
+        ]);
+        const KINDS = [["/artists", "0.7"], ["/events", "0.7"], ["/news", "0.7"], ["/mixes", "0.6"]];
+        detail.forEach((set, i) => {
+          const [base, priority] = KINDS[i];
+          for (const r of set.results || []) {
+            if (!r.slug && r.slug !== 0) continue;
+            rows.push({
+              loc: `${base}/${r.slug}`,
+              priority,
+              // A real date where there is one. Claiming everything changed
+              // today is the fastest way to be ignored.
+              lastmod: /^\d{4}-\d{2}-\d{2}/.test(String(r.updated_at || ""))
+                ? String(r.updated_at).slice(0, 10) : today,
+            });
+          }
+        });
+
         const built = await env.DB.prepare(
           "SELECT slug, updated_at FROM pages WHERE published = 1 ORDER BY sort_order, slug"
         ).all().catch(() => ({ results: [] }));
@@ -3719,6 +3763,13 @@ export default {
             lastmod: String(pg.updated_at || today).slice(0, 10),
           });
         }
+
+        /*
+          IF THIS SOMEHOW PRODUCES LESS THAN THE SECTIONS ALONE, something is
+          wrong with the database and the built file is better than what this
+          would emit. Falling through to it is the safer answer.
+        */
+        if (rows.length < SECTIONS.length) throw new Error("sitemap came back too short");
 
         const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
           `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +

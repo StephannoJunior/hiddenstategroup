@@ -29,7 +29,18 @@
       run_worker_first sends these paths to the Worker before assets are
       considered.
     */
-    "run_worker_first": ["/api/*"]
+    /*
+      THE SITEMAP HAS TO BE HERE TOO, and finding out why cost a deploy.
+
+      The asset layer answers before the Worker for anything not listed. A
+      file called dist/sitemap.xml exists, so it was served every time and the
+      Worker's route — the one that knows about pages built in the console —
+      never ran at all. It was dead code that looked live.
+
+      Listed here, the Worker answers, and the built file becomes what it was
+      described as: the fallback, served by the catch when the live one fails.
+    */
+    "run_worker_first": ["/api/*", "/sitemap.xml"]
   },
 
   /*
