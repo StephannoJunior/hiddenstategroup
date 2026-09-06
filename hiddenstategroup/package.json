@@ -20,7 +20,9 @@
     "test:polls": "node scripts/poll-test.mjs",
     "test:pages": "node scripts/pages-test.mjs",
     "test:a11y": "node scripts/a11y.mjs",
-    "test:console": "node scripts/console-test.mjs"
+    "test:console": "node scripts/console-test.mjs",
+    "test": "npm run check && npm run test:door && npm run test:polls && npm run test:pages && npm run test:a11y && npm run test:console -- --dry",
+    "verify": "npm run test && npm run build && npm run smoke && npm run test:console"
   },
   "dependencies": {
     "jsqr": "^1.4.0",
