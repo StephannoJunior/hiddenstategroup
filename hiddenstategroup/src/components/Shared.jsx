@@ -785,13 +785,60 @@ export function BookingDrawer({ open, onClose, artist }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
+  /*
+    ── THE DRAWER OPENS WHERE IT WAS LEFT, WHICH IS NOT WHERE IT SHOULD ──────
+
+    This panel is ALWAYS MOUNTED and hidden by sliding it off the side, rather
+    than being unmounted when closed — which is what makes it slide rather
+    than appear. The cost is that everything about it survives closing,
+    including the scroll position of its own overflow-y-auto.
+
+    So: open it, scroll down to the send button, close it, open it again on
+    another artist, and it is still scrolled to the bottom. The artist's name,
+    the booking address and the whole top of the form are above you, and there
+    is nothing to say they are there. It looks like a form with no heading.
+
+    The state above is already reset on open for the same reason. The scroll
+    position is simply the piece of state that is kept by the browser rather
+    than by React, so it was the one nobody thought to clear.
+  */
+  const panel = useRef(null);
+
   useEffect(() => {
     if (open) {
       setForm((f) => ({ ...initialForm, artist: artist ? artist.name : "" }));
       setSubmitted(false);
       setError("");
+      if (panel.current) panel.current.scrollTop = 0;
     }
   }, [open, artist]);
+
+  /*
+    Sending puts a short confirmation where a long form was. Left where it
+    was, the panel is scrolled past the end of its own new contents and shows
+    nothing at all — a blank drawer, at the moment somebody most wants to be
+    told it worked.
+  */
+  useEffect(() => {
+    if (submitted && panel.current) panel.current.scrollTop = 0;
+  }, [submitted]);
+
+  /*
+    THE PAGE BEHIND STAYS PUT while the drawer is open. Without this, a scroll
+    that reaches the end of the drawer carries on into the page underneath, so
+    closing it leaves you somewhere you never chose to be — and on a phone the
+    two surfaces fight over every flick.
+
+    overflow is restored to whatever it was rather than to "", because
+    something else may have set it and this must not be the thing that
+    silently un-sets it.
+  */
+  useEffect(() => {
+    if (!open) return undefined;
+    const was = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = was; };
+  }, [open]);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -833,8 +880,17 @@ export function BookingDrawer({ open, onClose, artist }) {
         style={{ background: "rgba(10,10,9,0.7)", opacity: open ? 1 : 0 }}
       />
       <div
+        ref={panel}
         className="absolute top-0 right-0 h-full w-full md:w-[520px] overflow-y-auto transition-transform duration-[400ms]"
-        style={{ background: theme.bg, borderLeft: "1px solid " + theme.ink, transform: open ? "translateX(0)" : "translateX(100%)" }}
+        style={{
+          background: theme.bg,
+          borderLeft: "1px solid " + theme.ink,
+          transform: open ? "translateX(0)" : "translateX(100%)",
+          // A flick that reaches the end of this must not continue into the
+          // page behind it.
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+        }}
       >
         <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: theme.ink }}>
           <div>
