@@ -97,6 +97,14 @@
   "env": {
     "preview": {
       "name": "hiddenstategroup1-preview",
+
+      /*
+        The ONLY thing that lets the restore drill run. It empties the database
+        before replaying a backup into it, so it refuses unless it can see this
+        exact value — and production does not set it, which means a missing
+        variable is a refusal rather than a default.
+      */
+      "vars": { "ENVIRONMENT": "preview" },
       "d1_databases": [
         {
           "binding": "DB",

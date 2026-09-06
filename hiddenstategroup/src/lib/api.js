@@ -394,6 +394,14 @@ export const readership = (days = 30) => call(`/views?days=${days}`);
 
 // ── backups ─────────────────────────────────────────────────────────────────
 export const listBackups = () => call("/backups");
+
+/*
+  Empties the database and replays a backup into it. Refused outright unless
+  the worker answering is the preview one — see the route, which explains why
+  that is an environment check rather than a permission check.
+*/
+export const runRestoreDrill = (key) =>
+  call("/restore/drill", { method: "POST", body: key ? { key } : {} });
 export const makeBackup = () => call("/backups", { method: "POST" });
 // Not a plain link: the file is behind the session, so the token has to travel
 // with the request and the download is built from what comes back.

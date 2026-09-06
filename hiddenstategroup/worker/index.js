@@ -3537,6 +3537,133 @@ async function handleApi(request, env, url, ctx) {
     });
   }
 
+  /*
+    ══ THE RESTORE DRILL, ON REAL DATA ═══════════════════════════════════════
+
+    A backup nobody has restored is a belief, not a backup. There was already a
+    drill — twelve checks — but it validated the SHAPE of a dump. Nothing had
+    ever taken a real backup and rebuilt a working database out of it, and the
+    night you find out is the night you needed it.
+
+    This does the real thing: reads the newest backup out of R2, empties the
+    database, replays every row, and reports what it put back against what the
+    file said it should.
+
+    ── WHY THIS CANNOT RUN IN PRODUCTION, AND HOW THAT IS ENFORCED ──────────
+
+    It begins by deleting everything. Run against the live database it would be
+    the single most destructive route in this file — worse than any of the
+    delete endpoints, because it is all of them at once.
+
+    So it refuses unless env.ENVIRONMENT is exactly "preview", which is set as
+    a variable ONLY in the preview environment in wrangler.jsonc. Production
+    has no such variable, so the check fails closed: a missing value is a
+    refusal, not a default. The R2 bucket is shared between the two, which is
+    what lets the preview worker read a backup production wrote.
+
+    That is deliberately not a permission check. Being the boss should not be
+    enough to empty the live database by pressing a button in a console; being
+    in the right environment has to be.
+  */
+  if (path === "/restore/drill" && method === "POST") {
+    const whoDrill = await readSession(env, request);
+    if (!whoDrill || !can(whoDrill, "manageTeam")) return fail("Not allowed.", 403);
+
+    if (env.ENVIRONMENT !== "preview") {
+      return fail(
+        "The drill only runs on the preview deploy, which has its own database. " +
+        "Run it from the preview URL rather than from the live site.", 400
+      );
+    }
+    if (!env.MEDIA) return fail("No bucket is connected.", 400);
+
+    // The newest backup, whatever it is called.
+    const listed = await env.MEDIA.list({ prefix: PRIVATE_PREFIX });
+    const files = (listed.objects || [])
+      .filter((o) => o.key.endsWith(".json"))
+      .sort((a, b) => String(b.key).localeCompare(String(a.key)));
+    if (!files.length) return fail("There are no backups to restore.", 404);
+
+    const chosen = String(body.key || files[0].key);
+    if (!chosen.startsWith(PRIVATE_PREFIX)) return fail("That is not a backup.", 400);
+
+    const object = await env.MEDIA.get(chosen);
+    if (!object) return fail("That backup is gone.", 404);
+
+    let dump;
+    try { dump = JSON.parse(await object.text()); }
+    catch { return fail("That backup will not parse. This is what a drill is for."); }
+    if (!dump || !dump.tables) return fail("That backup has no tables in it.");
+
+    /*
+      The order matters on the way in and on the way out. Parties before
+      passes, passes before scans — and the reverse when emptying, so nothing
+      is ever orphaned mid-flight. Anything not named here goes last, in
+      whatever order the file lists it, which is fine for tables nothing points
+      at.
+    */
+    const FIRST = ["parties", "team", "artists", "records", "mixes", "posts",
+                   "pages", "settings"];
+    const names = Object.keys(dump.tables);
+    const order = [...FIRST.filter((t) => names.includes(t)),
+                   ...names.filter((t) => !FIRST.includes(t))];
+
+    for (const table of [...order].reverse()) {
+      await env.DB.prepare(`DELETE FROM "${table}"`).run().catch(() => {});
+    }
+
+    const report = [];
+    let restored = 0, failed = 0;
+
+    for (const table of order) {
+      const rows = dump.tables[table] || [];
+      let wrote = 0;
+      for (const row of rows) {
+        const cols = Object.keys(row);
+        if (!cols.length) continue;
+        const marks = cols.map(() => "?").join(", ");
+        const quoted = cols.map((c) => `"${c}"`).join(", ");
+        try {
+          await env.DB.prepare(
+            `INSERT OR REPLACE INTO "${table}" (${quoted}) VALUES (${marks})`
+          ).bind(...cols.map((c) => row[c])).run();
+          wrote++;
+        } catch (err) {
+          // Recorded rather than thrown: one bad row must not hide the state
+          // of the other thirty tables, and knowing WHICH table refused is
+          // the entire value of running this.
+          failed++;
+          if (report.length < 400) {
+            report.push({ table, error: String(err && err.message).slice(0, 160) });
+          }
+        }
+      }
+      restored += wrote;
+
+      const back = await env.DB.prepare(`SELECT COUNT(*) AS n FROM "${table}"`)
+        .first().catch(() => ({ n: -1 }));
+      report.push({
+        table,
+        inTheFile: rows.length,
+        nowInTheDatabase: back ? back.n : -1,
+        ok: back && back.n === rows.length,
+      });
+    }
+
+    const bad = report.filter((r) => r.ok === false);
+    return json({
+      ok: true,
+      from: chosen,
+      taken: dump.taken || null,
+      truncated: dump.truncated || [],
+      tables: order.length,
+      restored,
+      failed,
+      matched: bad.length === 0,
+      report,
+    });
+  }
+
   if (path === "/backups" && method === "GET") {
     const who = await readSession(env, request);
     if (!who || !can(who, "manageTeam")) return fail("Not allowed.", 403);

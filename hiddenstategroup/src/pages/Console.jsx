@@ -485,6 +485,115 @@ function Readership() {
   mis-tap away from, and it is rare enough to be worth doing deliberately with
   the file in front of you. What this gives you is the file.
 */
+/*
+  ── PROVING THE BACKUP, RATHER THAN BELIEVING IT ────────────────────────────
+
+  There has been a backup every Monday and a drill that checked the SHAPE of
+  one. Nothing had ever taken a real backup and rebuilt a working database out
+  of it, which means the honest description of the position was: we have twelve
+  files we have never opened.
+
+  This opens one. It empties the preview database, replays every row, and
+  reports what went back against what the file said should. It is refused on
+  the live site — see the route, which explains why that has to be an
+  environment check rather than a permission one.
+*/
+function RestoreDrill() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [arming, setArming] = useState(false);
+
+  useEffect(() => {
+    if (!arming) return undefined;
+    const t = setTimeout(() => setArming(false), 5000);
+    return () => clearTimeout(t);
+  }, [arming]);
+
+  const run = async () => {
+    setBusy(true); setMsg(""); setResult(null);
+    const res = await api.runRestoreDrill();
+    setBusy(false);
+    if (res.ok) setResult(res);
+    else setMsg(res.error || "The drill would not run.");
+  };
+
+  return (
+    <div className="mt-7 p-4" style={{ border: `1px solid ${theme.rule}`, background: theme.sunk }}>
+      <p className="m-0" style={{ ...fontUtility, fontSize: "8.5px",
+            letterSpacing: "0.2em", color: theme.brass }}>
+        HAS ANY OF THIS EVER BEEN RESTORED
+      </p>
+      <p className="m-0 mt-2" style={{ ...fontText, fontSize: "15.5px",
+            lineHeight: 1.55, color: theme.ink2 }}>
+        A backup nobody has restored is a belief. This takes the newest one,
+        empties the <strong>preview</strong> database and replays it, then
+        reports what came back. It cannot run here on the live site &mdash; open
+        the preview deploy and press it there.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center" style={{ gap: "6px" }}>
+        <button onClick={() => { if (arming) { setArming(false); run(); } else setArming(true); }}
+                disabled={busy}
+                style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
+                         padding: "10px 16px", cursor: busy ? "default" : "pointer",
+                         color: arming ? theme.onInk : theme.ink,
+                         background: arming ? theme.bad : "transparent",
+                         border: `1px solid ${arming ? theme.bad : theme.rule}`,
+                         opacity: busy ? 0.5 : 1 }}>
+          {busy ? "RESTORING…"
+            : arming ? "PRESS AGAIN — THE PREVIEW DATABASE IS EMPTIED"
+            : "RUN THE DRILL"}
+        </button>
+      </div>
+
+      <Notice message={msg} tone="bad" />
+
+      {result && (
+        <div className="mt-4">
+          <p className="m-0" style={{ ...fontUtility, fontSize: "9px", letterSpacing: "0.16em",
+                color: result.matched ? theme.good : theme.bad }}>
+            {result.matched
+              ? `RESTORED ${result.restored} ROWS ACROSS ${result.tables} TABLES — EVERY COUNT MATCHES`
+              : `${result.failed} ROWS WOULD NOT GO BACK — SEE BELOW`}
+          </p>
+          <p className="m-0 mt-1" style={{ ...fontUtility, fontSize: "8px",
+                letterSpacing: "0.14em", color: theme.ink2 }}>
+            FROM {String(result.from || "").split("/").pop()}
+            {result.taken ? ` · TAKEN ${String(result.taken).slice(0, 10)}` : ""}
+          </p>
+
+          {(result.truncated || []).length > 0 && (
+            <p className="m-0 mt-2" style={{ ...fontText, fontSize: "14.5px",
+                  lineHeight: 1.5, color: theme.warn }}>
+              These tables were too big to fit in the backup and were cut short,
+              so this drill can only prove the part that fits:{" "}
+              {result.truncated.join(", ")}.
+            </p>
+          )}
+
+          <div className="mt-3">
+            {(result.report || []).filter((r) => r.inTheFile !== undefined).map((r) => (
+              <div key={r.table} className="flex items-baseline gap-3 py-1.5"
+                   style={{ borderBottom: `1px solid ${theme.rule}` }}>
+                <span className="flex-1" style={{ ...fontUtility, fontSize: "8.5px",
+                      letterSpacing: "0.14em", color: theme.ink }}>
+                  {r.table.toUpperCase()}
+                </span>
+                <span style={{ ...fontUtility, fontSize: "9px",
+                      color: r.ok ? theme.ink2 : theme.bad,
+                      fontVariantNumeric: "tabular-nums" }}>
+                  {r.nowInTheDatabase} / {r.inTheFile}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Backups() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -538,6 +647,8 @@ function Backups() {
       </button>
 
       <Notice message={msg} tone={msg.startsWith("Taken") ? "good" : "bad"} />
+
+      <RestoreDrill />
 
       <div className="mt-7" style={{ borderTop: `1px solid ${theme.ink}` }}>
         {loading ? (

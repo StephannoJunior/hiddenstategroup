@@ -156,10 +156,18 @@ console.log("\n5. every /api path called is answered");
   for (const m of decomment(apiSrc).matchAll(/call\(\s*[`"']\/([\w-]+)/g)) paths.add(m[1]);
   for (const m of decomment(apiSrc).matchAll(/fetch\(\s*[`"']\/api\/([\w-]+)/g)) paths.add(m[1]);
   for (const p of [...paths].sort()) {
-    // Routes are matched three ways in the worker: an exact path, a prefix,
-    // or a regex for the ones that carry an id. All three count.
+    /*
+      Routes are matched four ways in the worker: an exact path, an exact path
+      with further segments, a prefix, or a regex for the ones carrying an id.
+
+      The second of those was missing, which had it both ways round: a call to
+      /restore/drill was reported as unanswered even though the route exists,
+      AND a call to /anything/else would have passed merely because /anything
+      did. A check that is wrong in both directions at once is not a check.
+    */
     const answered =
       new RegExp(`path === "/${p}"`).test(clean) ||
+      new RegExp(`path === "/${p}/`).test(clean) ||
       new RegExp(`path\\.startsWith\\("/${p}`).test(clean) ||
       new RegExp(`path\\.match\\(/\\^\\\\?/${p}\\b`).test(clean);
     if (!answered) bad(`api.js calls /${p} — no worker route answers it`);
