@@ -2355,6 +2355,7 @@ const SETTING_SECTIONS = [
   "MOVEMENT",
   "THE SONG POOL",
   "THE SITE",
+  "THE CONTENT SECURITY POLICY",
   "THE GUEST LIST",
   "THE WAITING LIST",
   "PRESS KITS",
@@ -3114,6 +3115,32 @@ function Settings({ parties }) {
           <input value={values.emailSignoff} onChange={(e) => set("emailSignoff", e.target.value)}
                  style={{ ...inputStyle, width: "100%" }} />
         </div>
+      </Section>
+
+      <Section title="THE CONTENT SECURITY POLICY" {...saver("THE CONTENT SECURITY POLICY")}>
+        <p className="m-0 mb-3" style={{ ...fontText, fontSize: "15px", lineHeight: 1.55, color: theme.ink2 }}>
+          The policy names exactly where the site may load things from — its own
+          scripts and styles, Google&rsquo;s fonts, images from anywhere, and
+          players from precisely four hosts. It is the layer that limits the
+          damage of a mistake nobody has made yet.
+        </p>
+
+        <label className="flex items-start gap-3 py-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={!!values.cspEnforce} style={{ marginTop: "4px" }}
+                 onChange={(e) => set("cspEnforce", e.target.checked)} />
+          <span>
+            <span className="block" style={{ ...fontText, fontSize: "16px", color: theme.ink }}>
+              Block, rather than only report
+            </span>
+            <span className="block mt-1" style={{ ...fontText, fontSize: "14px", lineHeight: 1.5, color: theme.ink2 }}>
+              Off, anything the policy disagrees with is filed in FAULTS and
+              still loads. On, it stops loading. Leave this off until FAULTS has
+              been quiet for a week &mdash; a policy that turns out to be wrong
+              does not degrade gracefully, it blanks the site, and you would
+              hear about it from a person rather than from a log.
+            </span>
+          </span>
+        </label>
       </Section>
 
       <Section title="TAKING THE SITE DOWN">

@@ -136,6 +136,90 @@ const RESERVED_SLUGS = new Set([
   "guestlist", "doorlist", "admin", "console", "admins-staff-boss", "p", "preview",
 ]);
 
+/*
+  ── HEADERS EVERY RESPONSE CARRIES ──────────────────────────────────────────
+
+  The site shipped without a single one of these. Four of them are free and
+  have no failure mode, so they are simply on:
+
+    X-Content-Type-Options   stops a browser second-guessing a content type and
+                             deciding an uploaded file is really a script.
+    Referrer-Policy          stops the full address of a private page — a kit
+                             link, a preview token — being sent to whatever a
+                             visitor clicks through to. This one matters here
+                             more than on most sites, because several of this
+                             site's addresses ARE the permission.
+    Permissions-Policy       nothing on this site needs a camera, a microphone
+                             or a location, so nothing may ask.
+    X-Frame-Options          another site cannot put this one in a frame and
+                             collect clicks meant for it.
+
+  Strict-Transport-Security is set for two years. It is the one header here
+  that is hard to undo — a browser that has seen it will refuse plain HTTP for
+  that long — which is the point of it and also the reason to say so out loud.
+*/
+const SAFE_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  "x-frame-options": "SAMEORIGIN",
+  "strict-transport-security": "max-age=63072000; includeSubDomains",
+};
+
+/*
+  ── THE CONTENT SECURITY POLICY ─────────────────────────────────────────────
+
+  WHY frame-ancestors IS 'self' AND NOT 'none'. The Studio previews a draft by
+  loading the real page in a frame beside the form. 'none' would break that,
+  and the failure would look like the preview being broken rather than like a
+  header being wrong — so this is a deliberate 'self' rather than a weakened
+  'none'.
+
+  WHY img-src ALLOWS ANY https: HOST. Artist photographs, record covers and
+  every image block in the page builder take a URL somebody types. Restricting
+  this to 'self' would mean the only usable images were ones uploaded here,
+  which is not how the console works. The exposure is that a page can load a
+  picture from elsewhere, which is what a picture from elsewhere does.
+
+  WHY script-src ALLOWS 'unsafe-inline'. Honestly: because this policy has not
+  been proved against a real build yet, and a strict script-src that turns out
+  to be wrong takes the whole site down rather than degrading. See below.
+*/
+const CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' https:",
+  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "script-src 'self' 'unsafe-inline'",
+  "connect-src 'self'",
+  // exactly the four hosts an embed block may point at
+  "frame-src https://open.spotify.com https://w.soundcloud.com " +
+    "https://www.youtube-nocookie.com https://player.vimeo.com",
+  "report-uri /api/csp",
+].join("; ");
+
+/*
+  REPORT-ONLY UNTIL YOU SAY OTHERWISE, and that is not timidity — it is the
+  only honest way to ship a policy that has never been run against the real
+  build. An enforcing CSP that is subtly wrong does not degrade: it blanks the
+  site for everyone at once, and you find out from a person rather than from a
+  log.
+
+  So it reports first. Violations arrive at /api/csp and are filed exactly
+  where a JavaScript error is filed, which means they show up in FAULTS in the
+  console. Watch it for a week; when nothing is arriving, turn on cspEnforce in
+  settings and the same policy starts blocking instead of reporting.
+*/
+const securityHeaders = (enforce) => ({
+  ...SAFE_HEADERS,
+  [enforce ? "content-security-policy" : "content-security-policy-report-only"]: CSP,
+});
+
 const randomHex = (bytes = 32) =>
   [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -1045,6 +1129,16 @@ const DEFAULT_SETTINGS = {
   */
   pollsPerHour: 6,
 
+  /*
+    Turns the content security policy from REPORTING into BLOCKING.
+
+    Leave it off until FAULTS has been quiet for a week. On, the policy stops
+    anything it disagrees with; off, it only files a report. The difference
+    between the two is the difference between finding out from a log and
+    finding out from a person.
+  */
+  cspEnforce: false,
+
   // Closes the whole site to visitors, leaving the door tools working. For a
   // rebuild, or if something needs taking down quickly.
   siteClosed: false,
@@ -1687,7 +1781,36 @@ async function handleApi(request, env, url, ctx) {
     const all = await getSettings(env);
     const out = {};
     for (const key of PUBLIC_SETTINGS) out[key] = all[key];
-    return json({ ok: true, settings: out });
+
+    /*
+      ── THE BAR'S EXTRA TABS COME FREE WITH THIS ────────────────────────────
+
+      The floating bar is this site's navigation, so it has to know whether any
+      built page has asked for a tab. It used to find out by asking
+      /content/pages — on EVERY page load, for a list that is usually empty,
+      one extra round trip on the critical path before the bar could finish
+      drawing itself.
+
+      This response is already fetched once when the application boots. Four
+      columns of at most four rows cost nothing to add to it, and the request
+      that used to pay for them disappears entirely.
+
+      It is NOT a setting: it is derived from the pages table, and check 3 in
+      scripts/check.mjs knows that by name.
+    */
+    const nav = await env.DB.prepare(
+      "SELECT slug, title, nav_label FROM pages WHERE published = 1 AND in_nav = 1 " +
+      "ORDER BY sort_order, slug LIMIT 4"
+    ).all().catch(() => ({ results: [] }));
+
+    return json({
+      ok: true,
+      settings: out,
+      navPages: (nav.results || []).map((r) => ({
+        slug: r.slug,
+        label: r.nav_label || r.title || r.slug,
+      })),
+    });
   }
 
   // Public: the soonest event still open. The guest list form reads its age
@@ -2153,6 +2276,33 @@ async function handleApi(request, env, url, ctx) {
         and the link stops working the moment the work is finished, which is
         the moment it should.
   */
+
+  /*
+    Where a blocked — or, for now, merely noticed — resource is reported.
+
+    Filed into the same table as a JavaScript error, so it appears in FAULTS
+    rather than in a place nobody has a reason to look. A report that goes
+    somewhere nobody reads is the same as no report.
+
+    Browsers send this as a fire-and-forget beacon with an odd content type and
+    they do not read the answer, so it always says yes.
+  */
+  if (path === "/csp" && method === "POST") {
+    try {
+      const r = (body && (body["csp-report"] || body)) || {};
+      const blocked = String(r["blocked-uri"] || r.blockedURL || "?").slice(0, 200);
+      const directive = String(r["violated-directive"] || r.effectiveDirective || "?").slice(0, 80);
+      const where = String(r["document-uri"] || r.documentURL || "?").slice(0, 200);
+      await env.DB.prepare(
+        "INSERT INTO oops (at, message, where_at, path, agent, n) VALUES (?, ?, ?, ?, ?, 1) " +
+        "ON CONFLICT(message, path) DO UPDATE SET n = n + 1, at = excluded.at"
+      ).bind(now(), `CSP: ${directive} blocked ${blocked}`, "content-security-policy",
+             where, String(request.headers.get("user-agent") || "").slice(0, 160)).run();
+    } catch {
+      /* A malformed report is not worth an error. */
+    }
+    return json({ ok: true });
+  }
 
   if (path === "/drafts" && method === "GET") {
     const whoD = await readSession(env, request);
@@ -6008,7 +6158,42 @@ export default {
     ctx.waitUntil(sendReminders(env));
   },
 
+  /*
+    ── ONE PLACE THE HEADERS GO ON ─────────────────────────────────────────
+
+    Wrapping the handler rather than editing every `return new Response(...)`
+    in this file — there are dozens, and a header applied in dozens of places
+    is a header missing from one of them. The one that gets missed is never
+    the one you would have guessed.
+
+    The body is streamed through untouched; only the headers are rebuilt.
+  */
   async fetch(request, env, ctx) {
+    const response = await this.route(request, env, ctx);
+
+    let enforce = false;
+    try {
+      const cfg = await getSettings(env);
+      enforce = !!cfg.cspEnforce;
+    } catch {
+      // A settings read that fails must never cost the page. Report-only is
+      // the safe answer to not knowing.
+    }
+
+    const headers = new Headers(response.headers);
+    for (const [k, v] of Object.entries(securityHeaders(enforce))) {
+      // Never overwrite something a route set on purpose — the preview route
+      // sets its own x-robots-tag and the media route its own cache-control.
+      if (!headers.has(k)) headers.set(k, v);
+    }
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  },
+
+  async route(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/api/")) {
@@ -6060,6 +6245,71 @@ export default {
       headers.set("etag", object.httpEtag);
       headers.set("cache-control", "public, max-age=31536000, immutable");
       return new Response(object.body, { headers });
+    }
+
+    /*
+      ── THE SITEMAP, BUILT WHEN IT IS ASKED FOR ─────────────────────────────
+
+      It used to be a file generated at build time from a hardcoded list. That
+      was fine until the console could create pages: a page published on
+      Tuesday was never in a file written on Monday, and there was no deploy in
+      between to notice. The failure was silent in the worst way — no error, no
+      missing page, just a page search engines were never told about.
+
+      Now it is assembled from that same list PLUS whatever is published, at
+      the moment a crawler asks. The static file stays in dist as the fallback
+      for the case where this route fails; it can only ever be out of date, and
+      being out of date beats being absent.
+
+      Deliberately absent, still: /wall/… and /kit/… and anything reached by a
+      token. Those are private because their address is unguessable, and a
+      sitemap is a list of addresses.
+    */
+    if (url.pathname === "/sitemap.xml") {
+      try {
+        const SECTIONS = [
+          ["/", "1.0"], ["/news", "0.9"], ["/artists", "0.9"], ["/events", "0.9"],
+          ["/agency", "0.8"], ["/records", "0.8"], ["/mixes", "0.7"],
+          ["/about", "0.6"], ["/contact", "0.6"], ["/pool", "0.5"], ["/polls", "0.5"],
+          ["/demos", "0.6"], ["/bookings", "0.7"],
+        ];
+        const today = new Date().toISOString().slice(0, 10);
+        const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+        const rows = [];
+        for (const [loc, priority] of SECTIONS) {
+          rows.push({ loc, priority, lastmod: today });
+        }
+
+        const built = await env.DB.prepare(
+          "SELECT slug, updated_at FROM pages WHERE published = 1 ORDER BY sort_order, slug"
+        ).all().catch(() => ({ results: [] }));
+        for (const pg of built.results || []) {
+          rows.push({
+            loc: `/${pg.slug}`,
+            priority: "0.6",
+            lastmod: String(pg.updated_at || today).slice(0, 10),
+          });
+        }
+
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
+          `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+          rows.map((r) =>
+            `  <url><loc>https://hiddenstategroup.com${esc(r.loc)}</loc>` +
+            `<lastmod>${esc(r.lastmod)}</lastmod>` +
+            `<priority>${esc(r.priority)}</priority></url>`
+          ).join("\n") + `\n</urlset>\n`;
+
+        return new Response(xml, {
+          headers: {
+            "content-type": "application/xml; charset=utf-8",
+            "cache-control": "public, max-age=3600",
+            ...SAFE_HEADERS,
+          },
+        });
+      } catch (err) {
+        console.log("sitemap failed, falling back to the built file:", err && err.message);
+        // The file in dist is stale rather than wrong. Better than nothing.
+      }
     }
 
     // Everything else is the website itself.

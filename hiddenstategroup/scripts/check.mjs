@@ -117,11 +117,18 @@ console.log("\n2. the settings index matches the sections rendered");
 console.log("\n3. every site.<setting> read is a real setting");
 {
   const before = problems;
+  /*
+    Values the /site response adds that are NOT settings — derived from a
+    table at the moment they are asked for. Named here for the same reason
+    PUBLIC_SETTINGS is a list: so that adding one is a decision somebody made
+    rather than a thing that happened.
+  */
+  const DERIVED = new Set(["navPages"]);
   let n = 0;
   for (const f of files) {
     for (const m of decomment(read(f)).matchAll(/\bsite\.([A-Za-z][\w]*)/g)) {
       n++;
-      if (!KEYSET.has(m[1])) bad(`${f} reads site.${m[1]} — no such setting`);
+      if (!KEYSET.has(m[1]) && !DERIVED.has(m[1])) bad(`${f} reads site.${m[1]} — no such setting`);
     }
   }
   if (problems === before) good(`${n} reads, all real`);
@@ -350,6 +357,7 @@ console.log("\n8. every write consults a session, or is deliberately public");
     "/bookings",
     "/requests",
     "/songs/vote",  // the pool's ballot, one vote per browser
+    "/csp",         // a browser reporting a blocked resource, sent uncredentialed
   ]);
 
   let parser8 = null, traverse8 = null;

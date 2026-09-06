@@ -320,7 +320,15 @@ export const deletePost = (slug) =>
 // values every visitor sees anyway.
 export async function fetchSiteSettings() {
   const res = await call("/site", { auth: false });
-  return res.ok ? res.settings : null;
+  if (!res.ok) return null;
+  /*
+    navPages rides along with the settings rather than arriving in its own
+    request. It is not a setting — it is derived from the pages table — but it
+    is needed by the floating bar on every single page, and this response was
+    already being fetched. Carrying it here is what makes the bar's extra tabs
+    cost nothing at all.
+  */
+  return { ...res.settings, navPages: res.navPages || [] };
 }
 
 export const fetchSettings = () => call("/settings");

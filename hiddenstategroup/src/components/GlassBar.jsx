@@ -7,7 +7,6 @@ import { fontUtility, theme } from "./Shared";
 import { useLang } from "../lib/lang";
 import * as api from "../lib/api";
 import { useSite } from "../lib/site";
-import { usePages } from "../lib/pages";
 import { Spring, springSet, driveSprings, glassStyle, lipStyle, specStyle,
          lozengeStyle, resolveFinish } from "../lib/liquid";
 
@@ -233,15 +232,12 @@ export default function GlassBar() {
     somebody choose an icon means a bar where two tabs are the same picture,
     and the icon is what a thumb aims at.
   */
-  const built = usePages()
-    .filter((p) => p.published && p.in_nav && p.slug)
-    .slice(0, 4)
-    .map((p) => ({
-      href: `/${p.slug}`,
-      key: `page:${p.slug}`,
-      label: p.nav_label || p.title || p.slug,
-      Icon: FileText,
-    }));
+  const built = (site.navPages || []).slice(0, 4).map((p) => ({
+    href: `/${p.slug}`,
+    key: `page:${p.slug}`,
+    label: p.label,
+    Icon: FileText,
+  }));
 
   const allTabs = role && onSystemPage
     ? [{ href: "/", key: "site", Icon: Globe }, ...extraTabs]

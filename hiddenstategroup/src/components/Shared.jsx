@@ -506,15 +506,6 @@ export function PressStrip() {
   );
 }
 
-export const NAV_ITEMS = [
-  { label: "NEWS", href: "/news", desc: "Music & Culture" },
-  { label: "RECORDS", href: "/records", desc: "Releases & Label" },
-  { label: "AGENCY", href: "/agency", desc: "Booking & Representation" },
-  { label: "ARTISTS", href: "/artists", desc: "Artist Roster" },
-  { label: "EVENTS", href: "/events", desc: "Events & Experiences" },
-  { label: "MIXES", href: "/mixes", desc: "Sessions & Radio" },
-  { label: "ABOUT", href: "/about", desc: "The Ecosystem" },
-];
 
 /*
   ── THE WAY IN ───────────────────────────────────────────────────────────
