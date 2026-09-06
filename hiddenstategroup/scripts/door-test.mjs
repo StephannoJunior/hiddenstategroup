@@ -137,5 +137,70 @@ door.dequeue(first);
 check("a batch of 200 leaves the rest", door.getQueue().length, 250);
 check("the remainder starts where the batch ended", door.getQueue()[0].code, "C200");
 
+/*
+  ── WHAT THE SERVER DOES WITH THE QUEUE ────────────────────────────────────
+
+  /sync used to ask the database two questions per entry and write one answer
+  per entry — fifteen hundred sequential round trips at the 500 cap, arriving
+  exactly when the door has come back online at a busy event with a queue in
+  front of it. It fetches everything once now and batches the writes.
+
+  THE ACCOUNTING BELOW IS THE PART THAT WAS EASY TO BREAK. The old loop re-read
+  the scan counts every iteration, so a second queued admission for the SAME
+  pass saw the first already recorded and counted against the pass's places.
+  Reading once loses that for free: four queued entries for a pass admitting
+  one would all look like the first, and the door would let four people in on
+  a single ticket.
+
+  So this is the worker's accounting, lifted, and asserted against the case
+  that would have broken.
+*/
+function settle(entries, scans, admits) {
+  const seenBy = new Map(Object.entries(scans));
+  const extra = new Map();
+  let recorded = 0;
+  const conflicts = [];
+
+  for (const e of entries) {
+    const seen = seenBy.get(`${e.code}:${e.party}`) || {};
+    const mine = extra.get(e.code) || { n: 0, at: null };
+    const allowed = Math.max(1, Number(admits[e.code]) || 1);
+    const held = Math.max(0, Number(seen.ins || 0) - Number(seen.outs || 0)) + mine.n;
+    const lastIn = mine.at || seen.last_in;
+
+    if (held >= allowed && lastIn) { conflicts.push(e.code); continue; }
+    extra.set(e.code, { n: mine.n + 1, at: e.at });
+    recorded++;
+  }
+  return { recorded, conflicts };
+}
+
+const three = [
+  { code: "D1", party: "p", at: "2026-01-01T00:00:00Z" },
+  { code: "D1", party: "p", at: "2026-01-01T00:00:01Z" },
+  { code: "D1", party: "p", at: "2026-01-01T00:00:02Z" },
+];
+
+let r = settle(three, {}, { D1: 2 });
+check("a pass admitting two, queued three times, records two", r.recorded, 2);
+check("and reports the third as a conflict", r.conflicts.length, 1);
+
+r = settle(three, {}, { D1: 1 });
+check("a pass admitting one, queued three times, records one", r.recorded, 1);
+check("and refuses the other two", r.conflicts.length, 2);
+
+r = settle(three, {}, { D1: 4 });
+check("a pass admitting four takes all three", r.recorded, 3);
+check("with nothing refused", r.conflicts.length, 0);
+
+// Somebody already through the door before the queue was sent.
+r = settle(three, { "D1:p": { ins: 1, outs: 0, last_in: "2025-12-31T23:00:00Z" } }, { D1: 2 });
+check("one already in leaves room for one more", r.recorded, 1);
+check("and the rest are conflicts", r.conflicts.length, 2);
+
+// An exit frees the place again.
+r = settle(three, { "D1:p": { ins: 2, outs: 1, last_in: "2025-12-31T23:00:00Z" } }, { D1: 2 });
+check("an exit frees a place", r.recorded, 1);
+
 console.log(failed ? `\n${failed} failed` : "\nthe door queue is sound");
 process.exit(failed ? 1 : 0);

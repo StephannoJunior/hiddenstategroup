@@ -1567,6 +1567,63 @@ async function backupDatabase(env) {
   It only writes when something is WRONG, and only once per fault, because an
   email every hour saying everything is fine is an email nobody reads.
 */
+/*
+  ══ TAKING OUT THE BINS ═════════════════════════════════════════════════════
+
+  Four tables grew without limit and nothing ever removed a row from any of
+  them:
+
+    sessions        every sign-in ever, including the expired ones. They have
+                    an expires_at and an index on it and were never once
+                    deleted — readSession simply refuses them and moves on, so
+                    the table only ever got longer.
+    login_attempts  every attempt, right and wrong, since the site opened. It
+                    exists to rate-limit an address over the last few minutes;
+                    a row from March cannot affect that answer and is only
+                    making the index bigger.
+    share_opens     a row per opening of a shared kit, and the console only
+                    ever shows the recent ones.
+    views           a row per page per day, forever.
+
+  None of it was urgent and none of it was ever going to announce itself. A
+  database that quietly grows is a database that is fine, fine, fine, and then
+  slow at the exact moment somebody is standing at a door with a phone.
+
+  ── WHAT IS DELIBERATELY NOT SWEPT ────────────────────────────────────────
+
+  scans and poll_votes and passes and requests. Those are the RECORD — who
+  came in, what was asked for, what was decided. A record that deletes itself
+  after a while is not a record, and the honest way to shrink it is an archive
+  somebody chooses, not a timer nobody sees.
+*/
+async function pruneOldRows(env) {
+  const ago = (days) => new Date(Date.now() - days * 86400000).toISOString();
+  const swept = {};
+
+  const jobs = [
+    // An expired session is refused anyway. Kept a day past expiry so that a
+    // clock skew between here and a browser cannot make a live one vanish.
+    ["sessions", "DELETE FROM sessions WHERE expires_at < ?", ago(1)],
+    // The rate limit looks at minutes. A month is already generous.
+    ["login_attempts", "DELETE FROM login_attempts WHERE at < ?", ago(30)],
+    // Openings are shown as "recently"; half a year is well past that.
+    ["share_opens", "DELETE FROM share_opens WHERE at < ?", ago(180)],
+    // Readership is compared year on year, so a little over a year stays.
+    ["views", "DELETE FROM views WHERE day < ?", ago(400).slice(0, 10)],
+  ];
+
+  for (const [table, sql, cutoff] of jobs) {
+    try {
+      const r = await env.DB.prepare(sql).bind(cutoff).run();
+      swept[table] = r?.meta?.changes ?? 0;
+    } catch (err) {
+      // A sweep that fails must never stop the backup that follows it.
+      swept[table] = `failed: ${String(err && err.message).slice(0, 80)}`;
+    }
+  }
+  return swept;
+}
+
 async function healthSweep(env) {
   const bad = [];
 
@@ -2790,29 +2847,76 @@ async function handleApi(request, env, url, ctx) {
     const handled = [];
     const rejected = [];
 
+    /*
+      ── THREE QUERIES, NOT THREE PER ENTRY ──────────────────────────────────
+
+      This loop used to ask the database two questions and write one answer for
+      EVERY entry. At the 500-entry cap that is fifteen hundred sequential
+      round trips inside a single request — and the moment it happens is the
+      worst possible one: the door has just come back online at a busy event,
+      there is a queue, and the phone is waiting on this to know what it may
+      forget.
+
+      Everything the loop needs is now fetched once for all the codes at once,
+      and the writes go down as one batch.
+
+      ── THE SUBTLE PART, WHICH IS EASY TO BREAK ────────────────────────────
+
+      The old loop re-read the scan counts on every iteration, so a second
+      queued admission for the SAME pass saw the first one already recorded and
+      counted against the pass's places. Pre-fetching loses that for free: read
+      the counts once and four queued entries for a pass admitting one all look
+      like the first.
+
+      So admissions granted during THIS request are tracked in `extra` and
+      added to what the database already knew. The behaviour is identical; the
+      bookkeeping is now explicit rather than a side effect of asking again.
+    */
+    const usable = entries.filter((e) => e.code && e.party);
     for (const e of entries) {
-      if (!e.code || !e.party) { rejected.push(e.code || null); continue; }
+      if (!e.code || !e.party) rejected.push(e.code || null);
+    }
+
+    const codes = [...new Set(usable.map((e) => e.code))];
+    const seenBy = new Map();
+    const admitsBy = new Map();
+
+    if (codes.length) {
+      const marks = codes.map(() => "?").join(",");
+      const [counts, rooms] = await Promise.all([
+        env.DB.prepare(
+          "SELECT code, party_id, " +
+          "  SUM(CASE WHEN result = 'ADMITTED' THEN 1 ELSE 0 END) AS ins, " +
+          "  SUM(CASE WHEN result = 'EXIT' THEN 1 ELSE 0 END) AS outs, " +
+          "  MAX(CASE WHEN result = 'ADMITTED' THEN scanned_at END) AS last_in " +
+          `FROM scans WHERE code IN (${marks}) GROUP BY code, party_id`
+        ).bind(...codes).all(),
+        env.DB.prepare(
+          `SELECT code, admits FROM passes WHERE code IN (${marks})`
+        ).bind(...codes).all(),
+      ]);
+      for (const r of counts.results || []) seenBy.set(`${r.code}:${r.party_id}`, r);
+      for (const r of rooms.results || []) admitsBy.set(r.code, r.admits);
+    }
+
+    // Admissions this request has granted but not yet written.
+    const extra = new Map();
+    const writes = [];
+
+    for (const e of usable) {
       /*
         A QUEUED ADMISSION IS ONLY A CONFLICT ONCE THE PLACES ARE FULL.
 
-        This used to reject any offline admission for a code that had been
-        admitted before — which, on a pass that admits four, threw away the
-        second, third and fourth people the moment the door went offline.
-        They were let in at the door and then vanished from the record.
+        A pass admitting four must not have its second, third and fourth
+        people thrown away because the door went offline — they were let in at
+        the door and would otherwise vanish from the record.
       */
-      const seen = await env.DB.prepare(
-        "SELECT " +
-        "  SUM(CASE WHEN result = 'ADMITTED' THEN 1 ELSE 0 END) AS ins, " +
-        "  SUM(CASE WHEN result = 'EXIT' THEN 1 ELSE 0 END) AS outs, " +
-        "  MAX(CASE WHEN result = 'ADMITTED' THEN scanned_at END) AS last_in " +
-        "FROM scans WHERE code = ? AND party_id = ?"
-      ).bind(e.code, e.party).first();
-      const room = await env.DB.prepare(
-        "SELECT admits FROM passes WHERE code = ?"
-      ).bind(e.code).first();
-      const allowed = Math.max(1, Number(room?.admits) || 1);
-      const held = Math.max(0, Number(seen?.ins || 0) - Number(seen?.outs || 0));
-      const already = held >= allowed && seen?.last_in ? { scanned_at: seen.last_in } : null;
+      const seen = seenBy.get(`${e.code}:${e.party}`) || {};
+      const mine = extra.get(e.code) || { n: 0, at: null };
+      const allowed = Math.max(1, Number(admitsBy.get(e.code)) || 1);
+      const held = Math.max(0, Number(seen.ins || 0) - Number(seen.outs || 0)) + mine.n;
+      const lastIn = mine.at || seen.last_in;
+      const already = held >= allowed && lastIn ? { scanned_at: lastIn } : null;
 
       if (already) {
         // Someone was admitted twice — once offline, once elsewhere. Worth
@@ -2822,12 +2926,28 @@ async function handleApi(request, env, url, ctx) {
         handled.push(e.code);
         continue;
       }
-      await env.DB.prepare(
-        "INSERT INTO scans (code, party_id, result, reason, scanned_by, scanned_at) " +
-        "VALUES (?, ?, 'ADMITTED', 'offline', ?, ?)"
-      ).bind(e.code, e.party, who.username, e.at || now()).run();
+
+      const at = e.at || now();
+      writes.push(
+        env.DB.prepare(
+          "INSERT INTO scans (code, party_id, result, reason, scanned_by, scanned_at) " +
+          "VALUES (?, ?, 'ADMITTED', 'offline', ?, ?)"
+        ).bind(e.code, e.party, who.username, at)
+      );
+      extra.set(e.code, { n: mine.n + 1, at });
       handled.push(e.code);
       recorded += 1;
+    }
+
+    /*
+      D1 caps a batch, so this goes down in chunks rather than as one
+      statement list. Still two orders of magnitude fewer round trips than
+      before, and a chunk that fails leaves the earlier ones written — which
+      is correct here: an admission recorded is a fact, and the door keeps
+      whatever this response does not say it handled.
+    */
+    for (let i = 0; i < writes.length; i += 50) {
+      await env.DB.batch(writes.slice(i, i + 50));
     }
 
     return json({ ok: true, recorded, conflicts, handled, rejected });
@@ -6062,6 +6182,17 @@ async function sendReminders(env) {
   ).bind(dayStart.toISOString(), dayEnd.toISOString()).all();
 
   let sent = 0;
+  /*
+    ONE AT A TIME, ON PURPOSE — and the database write stays inside the loop.
+
+    It looks like the other places a query sat in a loop and it is not one.
+    The email is the slow part, batching the UPDATE would save almost nothing,
+    and marking each pass IMMEDIATELY after its own email is what makes this
+    safe to interrupt: if the cron runs out of time halfway through, everybody
+    already written to is already marked, and tomorrow's run does not email
+    them a second time. Collecting the updates and writing them at the end
+    would trade that for nothing worth having.
+  */
   for (const r of rows.results) {
     const res = await sendPassEmail(env, {
       to: r.email, name: r.name, code: r.code,
@@ -6275,11 +6406,23 @@ export default {
       return;
     }
     if (event.cron === "0 4 * * 1") {
-      ctx.waitUntil(
-        backupDatabase(env).then((r) =>
-          console.log(r.ok ? `Backup: ${r.rows} rows in ${r.tables} tables → ${r.key}` : `Backup failed: ${r.error}`)
-        )
-      );
+      ctx.waitUntil((async () => {
+        /*
+          THE BACKUP GOES FIRST, and the sweep after it. That order is the
+          whole point: whatever the sweep removes this morning is still in
+          the copy taken a moment earlier, so a week of expired sessions is
+          recoverable for three months even though it is gone from the
+          database.
+        */
+        const b = await backupDatabase(env);
+        console.log(b.ok
+          ? `Backup: ${b.rows} rows in ${b.tables} tables → ${b.key}`
+          : `Backup failed: ${b.error}`);
+
+        const swept = await pruneOldRows(env);
+        console.log("Swept: " + Object.entries(swept)
+          .map(([t, n]) => `${t} ${n}`).join(", "));
+      })());
       return;
     }
     ctx.waitUntil(sendReminders(env));
