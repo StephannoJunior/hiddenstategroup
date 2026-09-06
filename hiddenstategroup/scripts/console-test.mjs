@@ -67,14 +67,29 @@ function serveDist() {
   everything — the point is to reach every screen, not to test permissions,
   which the worker decides anyway and this could only pretend to.
 */
+/*
+  THE SHAPE MATTERS, AND GETTING IT WRONG COST THE WHOLE TEST ITS MEANING.
+
+  DoorGate does `setRole(res.user)`. The first version of this fixture put the
+  fields at the top level, so `user` was undefined, `role` was undefined, and
+  every single tab rendered THE LOGIN SCREEN — which has more than twenty
+  characters on it and logs no errors, so all twenty-six of them passed. The
+  only thing that failed was the one assertion specific enough to notice: a
+  click on a button that was never there.
+
+  A test that passes against the login page is not a test of the console. See
+  the assertions below, which now refuse it explicitly.
+*/
 const ME = {
   ok: true,
-  username: "test",
-  role: "BOSS",
-  display_name: "Test",
-  can: {
-    scan: true, seeList: true, seeReasons: true, reset: true,
-    issuePasses: true, revokePasses: true, manageTeam: true, seeContacts: true,
+  user: {
+    username: "test",
+    role: "BOSS",
+    display_name: "Test",
+    can: {
+      scan: true, seeList: true, seeReasons: true, reset: true,
+      issuePasses: true, revokePasses: true, manageTeam: true, seeContacts: true,
+    },
   },
 };
 
@@ -95,11 +110,23 @@ const SETTINGS = {
   maxPeoplePerRequest: 6,
 };
 
+/*
+  ── THE KEYS ARE NOT A GUESS ───────────────────────────────────────────────
+
+  Every property below is the one the calling component actually reads. That
+  sounds obvious and it is exactly what went wrong: /api/me was written with
+  the fields at the top level when DoorGate reads res.user, and the whole test
+  quietly became a test of the login page. /api/team wanted `team` and had
+  `members`; /api/oops wanted `errors` and had `faults`.
+
+  A fixture with the wrong key does not fail — it renders an empty screen,
+  which looks exactly like a working screen with nothing in it.
+*/
 const FIXTURES = {
   "/api/me": ME,
   "/api/site": { ok: true, settings: SETTINGS, navPages: [] },
   "/api/settings": { ok: true, settings: SETTINGS, defaults: SETTINGS },
-  "/api/parties": { ok: true, parties: [PARTY] },
+  "/api/parties": { ok: true, parties: [PARTY], codesLeft: 500 },
   "/api/public-parties": { ok: true, parties: [PARTY] },
   "/api/passes": { ok: true, passes: [] },
   "/api/requests": { ok: true, requests: [] },
@@ -108,7 +135,7 @@ const FIXTURES = {
   "/api/stats": { ok: true, stats: {}, totals: {} },
   "/api/activity": { ok: true, feed: [] },
   "/api/afters": { ok: true, sent: [], letters: [] },
-  "/api/oops": { ok: true, faults: [], list: [] },
+  "/api/oops": { ok: true, errors: [] },
   "/api/views": { ok: true, total: 0, pages: [], days: [] },
   "/api/backups": { ok: true, backups: [] },
   "/api/epk": { ok: true, kit: null, kits: [], artists: [] },
@@ -120,7 +147,7 @@ const FIXTURES = {
   "/api/sync": { ok: true },
   "/api/resolve": { ok: true },
   "/api/restore": { ok: true },
-  "/api/team": { ok: true, members: [ME] },
+  "/api/team": { ok: true, team: [ME.user] },
   "/api/posts": { ok: true, posts: [] },
   "/api/content/artists": { ok: true, items: [] },
   "/api/content/records": { ok: true, items: [] },
@@ -246,6 +273,22 @@ async function main() {
       const text = await page.evaluate(() => document.body.innerText);
       if (!text || text.trim().length < 20) {
         fail(`${label} — the page rendered almost nothing`);
+        continue;
+      }
+      /*
+        THE ASSERTION THAT MAKES THE REST MEAN ANYTHING. The login screen is a
+        perfectly valid page: it has text, it logs nothing, and it is not the
+        console. Without this, a broken fixture turns every check below into a
+        check that the login form renders.
+      */
+      if (/DOOR STAFF AND MANAGEMENT/i.test(text)) {
+        fail(`${label} — this is the LOGIN screen, not the console`);
+        continue;
+      }
+      // The tab strip is only drawn once somebody is signed in, and every tab
+      // is named in it. A screen that does not contain its own name is not it.
+      if (!text.toUpperCase().includes(label)) {
+        fail(`${label} — the console rendered, but this tab is not on it`);
         continue;
       }
       if (/Something went wrong|Cannot read|undefined is not/i.test(text)) {
